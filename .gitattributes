@@ -1,0 +1,8 @@
+# Never touch line endings or diff evidence fixtures: byte-exact integrity matters.
+test_evidence/** binary
+*.db binary
+*.sqlite binary
+*.dd binary
+*.zip binary
+*.db-wal binary
+*.db-shm binary
