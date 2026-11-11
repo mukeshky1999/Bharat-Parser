@@ -1,3 +1,5 @@
+> **HISTORICAL DOCUMENT (archived 2026-11-11).** Written during the merge. Its paths refer to sub-folders that are now archived, and its status/completeness claims were not verified against the merged root. For current status see `README.md` and `docs/REVIEW_BRIEF.md`.
+
 # TEST_INFRA.md — 4-Tier Forensic E2E Testing Infrastructure
 
 **Bharat Forensic Suite: Unified Android & iOS Post-Extraction Forensic Suite**  

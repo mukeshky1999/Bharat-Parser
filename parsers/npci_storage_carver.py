@@ -161,9 +161,13 @@ def carve_non_sqlite_store(file_path: str, app_label: str = '') -> Tuple[pd.Data
 
     # 3. Decode Protobuf Streams (Jetpack DataStore .preferences_pb & MMKV varint streams)
     if file_path.lower().endswith(('.preferences_pb', '.pb')) or 'mmkv' in file_path.lower():
-        pb_decoded = decode_protobuf_stream(raw_bytes[:262144], max_depth=3)
+        # Scan entire buffer up to 32MB file read limit
+        pb_decoded = decode_protobuf_stream(raw_bytes, max_depth=4)
         if pb_decoded:
-            fin = extract_financials_from_protobuf(pb_decoded)
+            try:
+                fin = extract_financials_from_protobuf(pb_decoded)
+            except Exception as e:
+                fin = {}
             pb_amt = None
             if fin.get('Amount') is not None:
                 try:

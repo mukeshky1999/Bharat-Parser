@@ -1,3 +1,5 @@
+> **HISTORICAL DOCUMENT (archived 2026-11-11).** Written during the merge. Its paths refer to sub-folders that are now archived, and its status/completeness claims were not verified against the merged root. For current status see `README.md` and `docs/REVIEW_BRIEF.md`.
+
 # TEST_READY — Unified E2E Test Suite Specification & Verification Ledger
 
 **Project**: Unified Android & iOS Post-Extraction Mobile Forensic Suite (`Bharat Forensic Suite`)  

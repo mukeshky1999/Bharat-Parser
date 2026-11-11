@@ -34,7 +34,7 @@ from src.nonsqlite.leveldb import LevelDBDecoder, infer_leveldb_value_type, LEVE
 
 import importlib.util
 # Load vpa_harvester into sys.modules to satisfy freelist_carver runtime dependency
-_vh_path = _root / "bharat-pa-forensics" / "parsers" / "vpa_harvester.py"
+_vh_path = _root / "parsers" / "vpa_harvester.py"
 if _vh_path.exists():
     _vh_spec = importlib.util.spec_from_file_location("parsers.vpa_harvester", str(_vh_path))
     _vh_mod = importlib.util.module_from_spec(_vh_spec)

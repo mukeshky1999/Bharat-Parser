@@ -62,9 +62,6 @@ function findPythonExecutable() {
   const venvPython = path.join(PROJECT_ROOT, '.venv', 'Scripts', 'python.exe');
   if (fs.existsSync(venvPython)) return venvPython;
 
-  const bharatVenv = path.join(PROJECT_ROOT, 'bharat-pa-forensics', '.venv', 'Scripts', 'python.exe');
-  if (fs.existsSync(bharatVenv)) return bharatVenv;
-
   const parentVenv = path.join(PROJECT_ROOT, '..', '.venv', 'Scripts', 'python.exe');
   if (fs.existsSync(parentVenv)) return parentVenv;
 
@@ -230,7 +227,6 @@ async function loadAppUrl() {
   const candidateDistPaths = [
     path.join(__dirname, '..', 'dist', 'index.html'),
     path.join(PROJECT_ROOT, 'dist', 'index.html'),
-    path.join(PROJECT_ROOT, 'bharat-pa-forensics', 'dist', 'index.html'),
   ];
   const foundDistPath = candidateDistPaths.find((p) => fs.existsSync(p));
 

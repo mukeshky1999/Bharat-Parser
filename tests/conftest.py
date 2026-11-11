@@ -48,9 +48,4 @@ zipfile.ZipFile._write_end_record = patched_zip_write_end
 @pytest.fixture(scope="session")
 def test_evidence_dir():
     """Returns path to authentic test evidence directory."""
-    evidence_dir = ROOT_DIR / "test_evidence"
-    if not evidence_dir.exists():
-        fallback = ROOT_DIR / "bharat-pa-forensics" / "test_evidence"
-        if fallback.exists():
-            return fallback
-    return evidence_dir
+    return ROOT_DIR / "test_evidence"
