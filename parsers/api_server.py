@@ -23,6 +23,9 @@ import shutil
 import sqlite3
 import sys
 import tempfile
+import threading
+import time
+import uuid
 import zipfile
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -313,10 +316,150 @@ class OcrAnalyzeRequest(BaseModel):
 
 
 # ------------------------------------------------------------------------------
+# Ingestion progress (5B.3): what the pipeline is really doing, readable while it runs
+# ------------------------------------------------------------------------------
+
+class IngestProgress:
+    """Progress of the ingest that is running (or ran last). Every value comes from the pipeline:
+
+    - ``stage`` / ``stage_index`` / ``stage_count``: the step the pipeline is in, out of the fixed list below.
+    - ``units_done`` / ``units_total`` / ``unit``: work counted inside that step (bytes hashed, files read, tables
+      written). ``fraction`` is set only when the total is known; otherwise it is None, never a made-up percentage.
+    - ``stage_eta_s`` is a straight-line estimate for the current step alone, given once 5 percent is done.
+    There is deliberately no overall percentage: the steps differ in cost and the pipeline cannot know by how much.
+    """
+
+    STAGES = [
+        ("hash_evidence", "Hashing the evidence"),
+        ("extract", "Reading the container"),
+        ("keys", "Looking for keys"),
+        ("parse", "Reading databases"),
+        ("reconcile", "Reconciling across apps"),
+        ("owner", "Building the owner profile"),
+        ("align", "Aligning fiat and crypto records"),
+        ("link", "Link analysis"),
+        ("store", "Writing the case store"),
+        ("verify", "Re-hashing the evidence"),
+        ("save", "Saving the case"),
+    ]
+    MAX_EVENTS = 500
+
+    def __init__(self, case_id: str = "", evidence_item: str = "", evidence: str = "", mode: str = "") -> None:
+        self._lock = threading.Lock()
+        self.job_id = uuid.uuid4().hex[:12]
+        self.case_id, self.evidence_item, self.evidence, self.mode = case_id, evidence_item, evidence, mode
+        self.state = "running"
+        self.current_stage = ""
+        self.units_done = 0
+        self.units_total: Optional[int] = None
+        self.unit = ""
+        self.detail = ""
+        self.message = ""
+        self._seq = 0
+        self._events: List[Dict[str, Any]] = []
+        self._log: Optional[List[Dict[str, Any]]] = None
+        self._t0 = time.monotonic()
+        self._stage_t0 = self._t0
+        self.started_utc = datetime.now(timezone.utc).isoformat()
+        self.updated_utc = self.started_utc
+
+    # -- writers (called by the pipeline) -----------------------------------------------------------
+    def _event(self, kind: str, **kw: Any) -> None:
+        self._seq += 1
+        self._events.append({"seq": self._seq, "t": datetime.now(timezone.utc).isoformat(), "kind": kind, **kw})
+        if len(self._events) > self.MAX_EVENTS:
+            del self._events[: len(self._events) - self.MAX_EVENTS]
+        self.updated_utc = self._events[-1]["t"]
+
+    def attach_log(self, processing_log: List[Dict[str, Any]]) -> None:
+        self._log = processing_log
+
+    def stage(self, key: str, total: Optional[int] = None, unit: str = "") -> None:
+        with self._lock:
+            self.current_stage, self.units_done, self.units_total, self.unit, self.detail = key, 0, total, unit, ""
+            self._stage_t0 = time.monotonic()
+            self._event("stage", stage=key, label=dict(self.STAGES).get(key, key), units_total=total, unit=unit)
+
+    def progress(self, done: int, total: Optional[int] = None, detail: str = "") -> None:
+        with self._lock:
+            self.units_done = int(done)
+            if total is not None:
+                self.units_total = int(total)
+            if detail:
+                self.detail = detail
+            self.updated_utc = datetime.now(timezone.utc).isoformat()
+
+    def add(self, n: int) -> None:
+        with self._lock:
+            self.units_done += int(n)
+
+    def note(self, detail: str) -> None:
+        with self._lock:
+            self.detail = detail
+            self.updated_utc = datetime.now(timezone.utc).isoformat()
+
+    def succeed(self, message: str = "") -> None:
+        with self._lock:
+            self.state, self.message = "succeeded", message
+            self._event("done", message=message)
+
+    def fail(self, message: str) -> None:
+        with self._lock:
+            if self.state != "running":
+                return
+            self.state, self.message = "failed", message
+            self._event("failed", stage=self.current_stage, message=message)
+
+    # -- reader (the endpoint) ------------------------------------------------------------------------
+    def snapshot(self, since: int = 0) -> Dict[str, Any]:
+        with self._lock:
+            keys = [k for k, _ in self.STAGES]
+            idx = keys.index(self.current_stage) + 1 if self.current_stage in keys else 0
+            fraction = None
+            eta = None
+            if self.units_total:
+                fraction = max(0.0, min(1.0, self.units_done / self.units_total))
+                if fraction >= 0.05 and self.state == "running":
+                    eta = round((time.monotonic() - self._stage_t0) * (1 - fraction) / fraction, 1)
+            log = list(self._log) if self._log is not None else []
+            return {
+                "job_id": self.job_id, "state": self.state, "case_id": self.case_id,
+                "evidence_item": self.evidence_item, "evidence": os.path.basename(self.evidence), "mode": self.mode,
+                "stage": self.current_stage, "stage_label": dict(self.STAGES).get(self.current_stage, ""),
+                "stage_index": idx, "stage_count": len(self.STAGES),
+                "units_done": self.units_done, "units_total": self.units_total, "unit": self.unit,
+                "fraction": fraction, "stage_eta_s": eta, "detail": self.detail, "message": self.message,
+                "started_utc": self.started_utc, "updated_utc": self.updated_utc,
+                "elapsed_s": round(time.monotonic() - self._t0, 1),
+                "seq": self._seq,
+                "events": [e for e in self._events if e["seq"] > since],
+                "processing_log_count": len(log), "processing_log_tail": log[-20:],
+            }
+
+
+_ingest_progress: IngestProgress = IngestProgress()
+_ingest_progress.state = "idle"
+
+
+def _evidence_size(path: str) -> int:
+    """Bytes the hashing step will read: the file, or every file under a folder."""
+    if os.path.isfile(path):
+        return os.path.getsize(path)
+    total = 0
+    for root, _, files in os.walk(path):
+        for name in files:
+            try:
+                total += os.path.getsize(os.path.join(root, name))
+            except OSError:
+                pass
+    return total
+
+
+# ------------------------------------------------------------------------------
 # Hashing & File Utilities
 # ------------------------------------------------------------------------------
 
-def _hash_stream(path: str, md5_h, sha_h) -> int:
+def _hash_stream(path: str, md5_h, sha_h, on_bytes=None) -> int:
     total = 0
     with open(path, "rb") as f:
         while True:
@@ -326,10 +469,12 @@ def _hash_stream(path: str, md5_h, sha_h) -> int:
             total += len(chunk)
             md5_h.update(chunk)
             sha_h.update(chunk)
+            if on_bytes:
+                on_bytes(len(chunk))
     return total
 
 
-def compute_hashes_streaming(file_path: str) -> Dict[str, Any]:
+def compute_hashes_streaming(file_path: str, on_bytes=None) -> Dict[str, Any]:
     """
     Computes SHA-256 and MD5 in read-only 8 MB streaming chunks.
 
@@ -347,7 +492,7 @@ def compute_hashes_streaming(file_path: str) -> Dict[str, Any]:
     file_count = 1
 
     if os.path.isfile(file_path):
-        total_bytes = _hash_stream(file_path, md5_hasher, sha256_hasher)
+        total_bytes = _hash_stream(file_path, md5_hasher, sha256_hasher, on_bytes)
     else:
         entries: List[Tuple[str, str, int]] = []
         for root, dirs, files in os.walk(file_path):
@@ -357,7 +502,7 @@ def compute_hashes_streaming(file_path: str) -> Dict[str, Any]:
                 rel = os.path.relpath(full_p, file_path).replace("\\", "/")
                 f_sha = hashlib.sha256()
                 f_md5 = hashlib.md5()
-                size = _hash_stream(full_p, f_md5, f_sha)
+                size = _hash_stream(full_p, f_md5, f_sha, on_bytes)
                 total_bytes += size
                 entries.append((rel, f_sha.hexdigest(), size))
         entries.sort()
@@ -621,7 +766,10 @@ def _execute_ingestion_pipeline(
     os.makedirs(extracted_dbs_dir, exist_ok=True)
 
     # 1. Compute Pre-Ingestion SHA-256 and MD5
-    hashes = compute_hashes_streaming(abs_evidence)
+    global _ingest_progress
+    prog = _ingest_progress = IngestProgress(case_id, item_id, abs_evidence, mode)
+    prog.stage("hash_evidence", total=_evidence_size(abs_evidence), unit="bytes")
+    hashes = compute_hashes_streaming(abs_evidence, on_bytes=prog.add)
 
     # 2. Extract or Index Forensic DBs
     p_low = abs_evidence.lower()
@@ -634,6 +782,7 @@ def _execute_ingestion_pipeline(
     catalog_entries: List[Dict[str, Any]] = []
     working_copy_dir: Optional[str] = None
     processing_log: List[Dict[str, str]] = []
+    prog.attach_log(processing_log)
 
     def _log_failure(stage: str, path: str, exc: BaseException) -> None:
         processing_log.append({
@@ -650,10 +799,12 @@ def _execute_ingestion_pipeline(
                    "extraction. Nothing was ingested.",
         )
 
+    prog.stage("extract", unit="entries")
     if is_archive:
         container_engine = TerabyteForensicContainerEngine(abs_evidence, item_dir)
         try:
-            container_engine.index_and_materialize_targets()
+            container_engine.index_and_materialize_targets(
+                progress_cb=lambda done, total, path: prog.progress(done, total or None, os.path.basename(str(path))))
         except UnsupportedContainer as exc:
             raise HTTPException(status_code=422, detail=str(exc))
         for vpath in container_engine.rejected_entries:
@@ -751,6 +902,7 @@ def _execute_ingestion_pipeline(
         "osType": _detect_os_type(discovered_files),
     }
 
+    prog.stage("keys")
     # Keys for encrypted databases: what the examiner supplied plus what the evidence itself holds (key stores and
     # preference files). Nothing is generated or guessed.
     carved_keys: Dict[str, Any] = {}
@@ -770,7 +922,9 @@ def _execute_ingestion_pipeline(
         }))
 
     # Iterate over discovered files
-    for file_path in discovered_files:
+    prog.stage("parse", total=len(discovered_files), unit="files")
+    for _file_no, file_path in enumerate(discovered_files):
+        prog.progress(_file_no, len(discovered_files), os.path.basename(file_path))
         f_low = file_path.lower()
         original_file_path = file_path  # the path in the evidence; a decrypted copy lives elsewhere
 
@@ -916,7 +1070,9 @@ def _execute_ingestion_pipeline(
             except Exception as exc:
                 _log_failure("crypto_p2p", file_path, exc)
 
+    prog.progress(len(discovered_files), len(discovered_files))
     # 4. Reconciliation and Cross-App Enrichment
+    prog.stage("reconcile")
     try:
         app_artifacts, reconciled_profiles = reconcile_and_enrich_artifacts(
             app_artifacts=app_artifacts,
@@ -933,6 +1089,7 @@ def _execute_ingestion_pipeline(
         print(f"[!] Warning during counterparty healing: {e}", file=sys.stderr)
 
     # 5. Master Owner Dossier
+    prog.stage("owner")
     try:
         master_owner_dossier = build_unified_owner_dossier(
             profiles=profiles,
@@ -959,6 +1116,7 @@ def _execute_ingestion_pipeline(
         }
 
     # 6. Fiat-to-Crypto & Bank-to-Custodial Alignment
+    prog.stage("align")
     combined_txs_df = pd.concat(all_txs_list, ignore_index=True) if all_txs_list else pd.DataFrame()
     combined_crypto_df = pd.concat(crypto_p2p_records, ignore_index=True) if crypto_p2p_records else pd.DataFrame()
 
@@ -987,12 +1145,14 @@ def _execute_ingestion_pipeline(
             pass
 
     # 7. Graph Intelligence: Syndicate Roles & Mule Behavior
+    prog.stage("link")
     g = build_transaction_graph(combined_txs_df)
     roles_df = classify_syndicate_roles(g, combined_txs_df)
     mule_alerts = detect_mule_behavior(g, combined_txs_df)
     pyvis_html = generate_pyvis_network_html(g, mule_alerts, roles_df)
 
     # 8. Commit All Data to SQLite+FTS5 Case Store
+    prog.stage("store", unit="tables")
     # Opening the same case id again must not add the records a second time: start from an empty store.
     # (The findings file is separate and is kept.)
     if mode == "replace":
@@ -1008,35 +1168,44 @@ def _execute_ingestion_pipeline(
 
     if all_chats_list:
         combined_chats = pd.concat(all_chats_list, ignore_index=True)
+        prog.note("writing chats")
         ingested["chats"] = store.ingest_dataframe_chunked("chats", combined_chats, evidence_item=item_id)
 
     if not combined_txs_df.empty:
+        prog.note("writing transactions")
         ingested["transactions"] = store.ingest_dataframe_chunked("transactions", combined_txs_df, evidence_item=item_id)
 
     if all_contacts_list:
         combined_contacts = pd.concat(all_contacts_list, ignore_index=True)
+        prog.note("writing contacts")
         ingested["contacts"] = store.ingest_dataframe_chunked("contacts", combined_contacts, evidence_item=item_id)
 
     if all_calls_list:
         combined_calls = pd.concat(all_calls_list, ignore_index=True)
+        prog.note("writing calls")
         ingested["calls"] = store.ingest_dataframe_chunked("calls", combined_calls, evidence_item=item_id)
 
     if all_locations_list:
         combined_locations = pd.concat(all_locations_list, ignore_index=True)
+        prog.note("writing locations")
         ingested["locations"] = store.ingest_dataframe_chunked("locations", combined_locations, evidence_item=item_id)
 
     if all_spillover_list:
         combined_spillover = pd.concat(all_spillover_list, ignore_index=True)
+        prog.note("writing os_spillover")
         ingested["os_spillover"] = store.ingest_dataframe_chunked("os_spillover", combined_spillover, evidence_item=item_id)
 
     if not combined_crypto_df.empty:
+        prog.note("writing p2p_orders")
         ingested["p2p_orders"] = store.ingest_dataframe_chunked("p2p_orders", combined_crypto_df, evidence_item=item_id)
 
     if not aligned_fiat_crypto_df.empty:
+        prog.note("writing fiat_crypto_bridge")
         ingested["fiat_crypto_bridge"] = store.ingest_dataframe_chunked("fiat_crypto_bridge", aligned_fiat_crypto_df, evidence_item=item_id)
 
     if catalog_entries:
         catalog_df = pd.DataFrame(catalog_entries)
+        prog.note("writing vfs_files")
         ingested["vfs_files"] = store.ingest_dataframe_chunked("vfs_files", catalog_df, evidence_item=item_id)
 
     for tbl, cols in store.last_dropped_columns.items():
@@ -1047,7 +1216,8 @@ def _execute_ingestion_pipeline(
             })
 
     # Post-ingestion integrity check: re-hash the original evidence and compare.
-    post_hashes = compute_hashes_streaming(abs_evidence)
+    prog.stage("verify", total=_evidence_size(abs_evidence), unit="bytes")
+    post_hashes = compute_hashes_streaming(abs_evidence, on_bytes=prog.add)
     hashes["postIngestionSha256"] = post_hashes["sha256"]
     hashes["postIngestionMd5"] = post_hashes["md5"]
     hashes["integrityMatch"] = (
@@ -1060,6 +1230,7 @@ def _execute_ingestion_pipeline(
         })
 
     # Update active store and state
+    prog.stage("save")
     _active_store = store
     counts = _active_store.get_project_tree_counts()
 
@@ -1129,6 +1300,7 @@ def _execute_ingestion_pipeline(
     })
     for action, payload in key_events:
         _audit_event(action, payload)
+    prog.succeed(f"{item_id} ingested")
     return {
         "success": True,
         "case_id": case_id,
@@ -1412,10 +1584,19 @@ async def ingest_evidence_case(req: IngestCaseRequest):
                 req.keys or None,
             )
             return result
-    except HTTPException:
+    except HTTPException as exc:
+        _ingest_progress.fail(str(exc.detail))
         raise
     except Exception as e:
+        _ingest_progress.fail(f"{type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+
+
+@app.get("/api/case/ingest/progress")
+def get_ingest_progress(since: int = Query(0, ge=0, description="Only events with a higher sequence number")):
+    """What the ingest is doing now (or did last): the step, the work counted inside it, the events so far and the tail
+    of the processing log. Poll this while ``POST /api/case/ingest`` is running."""
+    return _ingest_progress.snapshot(since)
 
 
 @app.get("/api/case/tree-counts")

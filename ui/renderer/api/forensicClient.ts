@@ -128,6 +128,50 @@ export interface RecentCase {
   evidence_items: Array<{ item_id: string; label: string; source_path: string; integrity_match: boolean | null }>;
 }
 
+/** One step the ingest reports. The pipeline sends these as it works; nothing is estimated by the client. */
+export interface IngestProgressEvent {
+  seq: number;
+  t: string;
+  kind: 'stage' | 'done' | 'failed';
+  stage?: string;
+  label?: string;
+  units_total?: number | null;
+  unit?: string;
+  message?: string;
+}
+
+/**
+ * What the ingest is doing now, or did last. `fraction` and `units_total` are null when the pipeline cannot count the
+ * work in the current step (show "working", not a percentage). There is no overall percentage on purpose: show
+ * "Step stage_index of stage_count" and the step's own fraction.
+ */
+export interface IngestProgress {
+  job_id: string;
+  state: 'idle' | 'running' | 'succeeded' | 'failed';
+  case_id: string;
+  evidence_item: string;
+  evidence: string;
+  mode: string;
+  stage: string;
+  stage_label: string;
+  stage_index: number;
+  stage_count: number;
+  units_done: number;
+  units_total: number | null;
+  unit: string;
+  fraction: number | null;
+  stage_eta_s: number | null;
+  detail: string;
+  message: string;
+  started_utc: string;
+  updated_utc: string;
+  elapsed_s: number;
+  seq: number;
+  events: IngestProgressEvent[];
+  processing_log_count: number;
+  processing_log_tail: Array<{ stage: string; file: string; status: string; error: string }>;
+}
+
 export interface IngestOptions {
   /** "replace" starts the case again from this evidence; "add" puts another device into the existing case. */
   mode?: 'replace' | 'add';
@@ -564,6 +608,19 @@ class ForensicClient {
       return res.data?.cases ?? [];
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * Progress of the ingest that is running, or of the last one. Poll while `ingestCase` is pending. Pass the `seq`
+   * of the last response as `since` to receive only newer events. Returns null if the server cannot be reached.
+   */
+  public async getIngestProgress(since = 0, signal?: AbortSignal): Promise<IngestProgress | null> {
+    try {
+      const res = await this.fetchApi<IngestProgress>(`/api/case/ingest/progress?since=${encodeURIComponent(String(since))}`, { signal });
+      return res.data ?? null;
+    } catch {
+      return null;
     }
   }
 

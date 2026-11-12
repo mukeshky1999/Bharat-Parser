@@ -233,6 +233,24 @@ async function runForensicClientTests() {
     globalThis.fetch = async (): Promise<Response> => new Response('{}', { status: 500 });
     assert((await forensicClient.getRecentCases()).length === 0, 'A failing server gives an empty list, not a crash');
 
+    // =========================================================================
+    // TEST CASE 4: ingest progress is read as the server sends it, and a failure gives null
+    // =========================================================================
+    console.log('\n--- Test Suite 4: Ingest progress ---');
+    let askedUrl = '';
+    globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
+      askedUrl = String(input);
+      return new Response(JSON.stringify({
+        job_id: 'j1', state: 'running', stage: 'parse', stage_label: 'Reading databases', stage_index: 4, stage_count: 11,
+        units_done: 3, units_total: 12, unit: 'files', fraction: 0.25, stage_eta_s: null, detail: 'msgstore.db', seq: 7, events: []
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    const prog = await forensicClient.getIngestProgress(5);
+    assert(askedUrl.endsWith('/api/case/ingest/progress?since=5'), 'Client asks only for events after the last one seen');
+    assert(prog !== null && prog.stage_index === 4 && prog.fraction === 0.25 && prog.detail === 'msgstore.db', 'Client returns the server values unchanged');
+    globalThis.fetch = async (): Promise<Response> => new Response('{}', { status: 500 });
+    assert((await forensicClient.getIngestProgress()) === null, 'A failing server gives null, not an invented progress');
+
     console.log(`=== RESULTS: ALL ${passedTests}/${totalTests} FORENSIC CLIENT TESTS PASSED (100% SUCCESS) ===\n`);
   } finally {
     // Restore original fetch
