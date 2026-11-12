@@ -623,6 +623,33 @@ class CaseUIPaginatorStore:
         finally:
             conn.close()
 
+    def clear_evidence_records(self, same_source_item: Optional[str] = None, new_item: str = "EV-001") -> Dict[str, int]:
+        """Replace mode: removes every evidence record of every device. Tags are set aside (detached, with their snapshot),
+        not deleted, and so are hash lists, saved filters and reviewer marks, which are not evidence records. A device
+        that is processed again from the same source takes over the set-aside tags of its earlier label, so they can be
+        placed on the new records by provenance. Tags of any other device stay detached under their old label."""
+        removed: Dict[str, int] = {}
+        conn = self._get_connection()
+        try:
+            conn.execute("UPDATE tags SET Record_Id = NULL, Detached = 1 WHERE Detached = 0")
+            if same_source_item and same_source_item != new_item:
+                conn.execute("UPDATE tags SET Evidence_Item = ? WHERE Evidence_Item = ? AND Detached = 1",
+                             (new_item, same_source_item))
+            existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            for tbl in sorted(ALLOWED_TABLES):
+                if tbl not in existing:
+                    continue
+                removed[tbl] = conn.execute(f"DELETE FROM {tbl}").rowcount
+                if removed[tbl] and f"{tbl}_fts" in existing:
+                    conn.execute(f"INSERT INTO {tbl}_fts({tbl}_fts) VALUES('rebuild')")
+            conn.execute("DELETE FROM coverage")
+            if "media_items" in existing:
+                conn.execute("DELETE FROM media_items")
+            conn.commit()
+        finally:
+            conn.close()
+        return removed
+
     def delete_evidence_item(self, item_id: str) -> Dict[str, int]:
         """Removes every record of one evidence item (used when that item is processed again). Other items are untouched."""
         removed: Dict[str, int] = {}

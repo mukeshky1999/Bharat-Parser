@@ -794,7 +794,69 @@ def non_database_coverage(path: str, f_low: str) -> Tuple[str, str, str]:
     return "NOT_DECODED", "Not opened: the tool has no decoder for this file type.", "File"
 
 
+_STALE_DIRS = ("items", "working_copy", "extracted_dbs")
+_state_lock = threading.RLock()
+_ingest_worker_lock = threading.Lock()   # held by the worker thread itself, so a dropped request cannot release it
+
+
 def _execute_ingestion_pipeline(
+    evidence_path: str,
+    case_id: str,
+    case_name: str,
+    examiner_name: str,
+    agency_name: str,
+    mode: str = "replace",
+    label: str = "",
+    keys: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """Runs the ingest. In replace mode the earlier working folders are set aside first and only deleted once the new
+    ingest has succeeded; if it is refused or fails they are put back, so a failed attempt never leaves a case whose
+    files are gone."""
+    if not _ingest_worker_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="An evidence ingest is already running.")
+    try:
+        return _execute_ingestion_guarded(evidence_path, case_id, case_name, examiner_name, agency_name, mode, label, keys)
+    finally:
+        _ingest_worker_lock.release()
+
+
+def _execute_ingestion_guarded(evidence_path, case_id, case_name, examiner_name, agency_name, mode, label, keys):
+    abs_evidence = os.path.abspath(evidence_path)
+    if not os.path.exists(abs_evidence):
+        raise HTTPException(status_code=404, detail=f"Evidence path not found: {abs_evidence}")
+    mode = "add" if mode == "add" else "replace"
+    workspace_dir = os.path.abspath(resolve_case_dir(DEFAULT_WORKSPACE_ROOT, case_id))
+    if os.path.isfile(os.path.join(workspace_dir, CASE_FILE_NAME)):
+        recorded_id = CaseFile(workspace_dir).info().get("case_id")
+        if recorded_id and recorded_id != case_id:
+            raise HTTPException(status_code=409, detail=f"This folder belongs to case {recorded_id}, not {case_id}. Nothing was changed.")
+    aside = os.path.join(workspace_dir, ".replaced")
+    moved: List[str] = []
+    if mode == "replace":
+        shutil.rmtree(aside, ignore_errors=True)
+        os.makedirs(aside, exist_ok=True)
+        for name in _STALE_DIRS:
+            src = os.path.join(workspace_dir, name)
+            if os.path.isdir(src):
+                os.replace(src, os.path.join(aside, name))
+                moved.append(name)
+    try:
+        result = _execute_ingestion_pipeline_inner(evidence_path, case_id, case_name, examiner_name, agency_name,
+                                                   mode, label, keys)
+    except BaseException:
+        if mode == "replace":
+            for name in _STALE_DIRS:
+                shutil.rmtree(os.path.join(workspace_dir, name), ignore_errors=True)
+            for name in moved:
+                os.replace(os.path.join(aside, name), os.path.join(workspace_dir, name))
+            shutil.rmtree(aside, ignore_errors=True)
+        raise
+    if mode == "replace":
+        shutil.rmtree(aside, ignore_errors=True)
+    return result
+
+
+def _execute_ingestion_pipeline_inner(
     evidence_path: str,
     case_id: str,
     case_name: str,
@@ -820,9 +882,9 @@ def _execute_ingestion_pipeline(
     if mode == "replace":
         # The case starts again from this one item. Folders of earlier items (and the pre-5B.2 layout) go.
         item_id, reprocess = "EV-001", False
-        for stale_dir in ("items", "working_copy", "extracted_dbs"):
-            shutil.rmtree(os.path.join(workspace_dir, stale_dir), ignore_errors=True)
+        prior_item = cfile.item_for_source(abs_evidence)   # the earlier folders were set aside by the wrapper and are gone from here
     else:
+        prior_item = None
         # Another device for the same case. The same source again replaces only that item.
         existing = cfile.item_for_source(abs_evidence)
         item_id, reprocess = (existing["item_id"], True) if existing else (cfile.next_item_id(), False)
@@ -1277,13 +1339,13 @@ def _execute_ingestion_pipeline(
     prog.stage("store", unit="tables")
     # Opening the same case id again must not add the records a second time: start from an empty store.
     # (The findings file is separate and is kept.)
-    if mode == "replace":
-        for suffix in ("", "-wal", "-shm"):
-            stale = os.path.join(workspace_dir, "bharat_case_store.db" + suffix)
-            if os.path.isfile(stale):
-                os.remove(stale)
-        cfile.remove_all_items()
     store = CaseUIPaginatorStore(workspace_dir, db_name="bharat_case_store.db")
+    if mode == "replace":
+        # The evidence records go; what the examiner decided stays (tags, hash lists, saved filters, reviewer marks).
+        # Tags are set aside and put back by provenance, but only if this is the same source as a device the case
+        # already held: another phone can have a record with the same provenance text.
+        store.clear_evidence_records(same_source_item=(prior_item or {}).get("item_id"), new_item=item_id)
+        cfile.remove_all_items()
     if mode == "add" and reprocess:
         store.delete_evidence_item(item_id)       # the examiner's tags on this item are set aside, not deleted
     ingested: Dict[str, int] = {}
@@ -1353,8 +1415,6 @@ def _execute_ingestion_pipeline(
                                "error": "Seen, but the tool has no decoder for them; they are listed in the coverage report"})
     store.add_coverage(item_id, coverage)
     retag = store.reattach_tags(item_id)
-    if retag["reattached"] or retag["detached"]:
-        _audit_event("tags_reattached", {"evidence_item": item_id, **retag})
     if retag["detached"]:
         processing_log.append({"stage": "tags", "file": item_id, "status": "WARNING",
                                "error": f"{retag['detached']} tag(s) could not be placed on a record after processing again "
@@ -1376,8 +1436,7 @@ def _execute_ingestion_pipeline(
 
     # Update active store and state
     prog.stage("save")
-    _active_store = store
-    counts = _active_store.get_project_tree_counts()
+    counts = store.get_project_tree_counts()
 
     # Clean serializable dossier
     serializable_dossier = {
@@ -1433,8 +1492,13 @@ def _execute_ingestion_pipeline(
             "pyvis_html": pyvis_html,
         },
     )
-    _case_state = _case_state_from_file(workspace_dir, cfile, item_id)
-    _case_state["counts"] = counts
+    new_state = _case_state_from_file(workspace_dir, cfile, item_id)
+    new_state["counts"] = counts
+    with _state_lock:                       # the store and the case it belongs to change together or not at all
+        _active_store = store
+        _case_state = new_state
+    if retag["reattached"] or retag["detached"]:
+        _audit_event("tags_reattached", {"evidence_item": item_id, **retag})
 
     _audit_event("evidence_ingested", {
         "evidence_item": item_id, "mode": mode,
@@ -1683,6 +1747,7 @@ async def pick_evidence_folder():
 
 @app.post("/api/case/ingest")
 async def ingest_evidence_case(req: IngestCaseRequest):
+    global _ingest_progress
     """
     Ingests forensic evidence container / folder:
     - Calculates pre-ingestion SHA-256 and MD5 in 8 MB chunks
@@ -1716,6 +1781,8 @@ async def ingest_evidence_case(req: IngestCaseRequest):
     loop = asyncio.get_running_loop()
     try:
         async with _ingest_lock:
+            if not _ingest_worker_lock.locked():       # a fresh record, so an early refusal is reported against this attempt
+                _ingest_progress = IngestProgress(case_id, "", os.path.abspath(req.evidence_path), mode)
             result = await loop.run_in_executor(
                 _thread_pool,
                 _execute_ingestion_pipeline,
