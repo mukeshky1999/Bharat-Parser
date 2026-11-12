@@ -19,13 +19,13 @@ export const Toasts: React.FC = () => {
         const tone = TONE[t.type] ?? TONE.info;
         const Icon = tone.icon;
         return (
-          <div key={t.id} role={t.type === 'error' ? 'alert' : 'status'} className={`p-3 rounded-lg border shadow-xl flex items-start gap-3 ${tone.box}`}>
+          <div key={t.id} role={t.type === 'error' ? 'alert' : 'status'} className={`p-3 rounded-ctl-panel border shadow-float flex items-start gap-3 ${tone.box}`}>
             <Icon className={`w-5 h-5 shrink-0 mt-0.5 ${tone.ic}`} aria-hidden="true" />
             <div className="flex-1 min-w-0">
               {t.title && <div className="font-semibold mb-0.5">{t.title}</div>}
               <div className="break-words">{t.message}</div>
             </div>
-            <button onClick={() => dismiss(t.id)} className="p-0.5 rounded text-slate-300 hover:text-slate-50" aria-label="Dismiss message">
+            <button onClick={() => dismiss(t.id)} className="p-0.5 rounded-ctl text-slate-300 hover:text-slate-50" aria-label="Dismiss message">
               <X className="w-4 h-4" />
             </button>
           </div>

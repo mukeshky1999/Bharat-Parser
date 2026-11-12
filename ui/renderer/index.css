@@ -73,3 +73,10 @@ html {
 
 /* Data tables: row height follows the density setting */
 .rec-row { height: var(--row-h); }
+
+/* Visual system tokens: classes rounded-ctl, rounded-panel and shadow-float come from these. */
+@theme {
+  --radius-ctl: 4px;
+  --radius-panel: 6px;
+  --shadow-float: 0 8px 24px rgb(0 0 0 / 0.35), 0 0 0 1px rgb(0 0 0 / 0.2);
+}

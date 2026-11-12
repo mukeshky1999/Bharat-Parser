@@ -1,8 +1,9 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Download, Search } from 'lucide-react';
+import { Download, Search } from 'lucide-react';
 import { useWorkbenchStore } from '../state/workbenchStore';
 import { usePreferences } from '../state/preferencesStore';
 import { csvCell, downloadCsv } from '../utils/csv';
+import { Pager } from '../components/Pager';
 import { useTagIndex } from './useTagIndex';
 import { TagPills } from '../inspectors/TagControls';
 import { caseRecordOf } from '../utils/caseRecord';
@@ -189,7 +190,7 @@ export const RecordTable: React.FC<RecordTableProps> = ({ title, category }) => 
         <label className="relative">
           <span className="sr-only">Filter {title}</span>
           <Search className="w-4 h-4 text-slate-400 absolute left-2.5 top-2" aria-hidden="true" />
-          <input value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder="Filter" className="h-8 w-64 pl-8 pr-2 rounded bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500" />
+          <input value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} placeholder="Filter" className="h-8 w-64 pl-8 pr-2 rounded-ctl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500" />
         </label>
         <label className="flex items-center gap-2 text-slate-300">
           <input type="checkbox" checked={onlyRecovered} onChange={(e) => { setOnlyRecovered(e.target.checked); setPage(1); }} />
@@ -197,8 +198,8 @@ export const RecordTable: React.FC<RecordTableProps> = ({ title, category }) => 
         </label>
         <span className="text-slate-400">{filtered.length.toLocaleString()} of {rows.length.toLocaleString()}</span>
         <details className="relative">
-          <summary className="h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 cursor-pointer inline-flex items-center list-none">Columns</summary>
-          <div className="absolute z-20 mt-1 w-56 rounded border border-slate-700 bg-slate-900 p-2 shadow-xl">
+          <summary className="h-8 px-3 rounded-ctl border border-slate-700 text-slate-200 hover:bg-slate-800 cursor-pointer inline-flex items-center list-none">Columns</summary>
+          <div className="absolute z-20 mt-1 w-56 rounded-ctl border border-slate-700 bg-slate-900 p-2 shadow-float">
             {allCols.map((c) => (
               <label key={c.key} className="flex items-center gap-2 py-0.5 text-slate-200">
                 <input type="checkbox" checked={!hiddenCols.includes(c.key)} disabled={!hiddenCols.includes(c.key) && cols.length === 1}
@@ -209,7 +210,7 @@ export const RecordTable: React.FC<RecordTableProps> = ({ title, category }) => 
             <p className="mt-1 text-[0.6875rem] text-slate-400">Hiding a column only changes what is shown. Export keeps every column.</p>
           </div>
         </details>
-        <button onClick={exportCsv} disabled={filtered.length === 0} className="ml-auto flex items-center gap-2 h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40">
+        <button onClick={exportCsv} disabled={filtered.length === 0} className="ml-auto flex items-center gap-2 h-8 px-3 rounded-ctl border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40">
           <Download className="w-4 h-4" /> Export CSV
         </button>
       </div>
@@ -218,7 +219,7 @@ export const RecordTable: React.FC<RecordTableProps> = ({ title, category }) => 
         <figure className="shrink-0 px-4 pt-3 pb-2 border-b border-slate-800" aria-label="Number of calls over time">
           <div className="flex items-end gap-px h-14">
             {buckets.slice(-120).map((b) => (
-              <div key={b.label} className="flex-1 min-w-[3px] bg-cyan-500/70 rounded-t-sm" style={{ height: `${Math.max(6, (b.n / peak) * 100)}%` }} title={`${b.label}: ${b.n}`} />
+              <div key={b.label} className="flex-1 min-w-[3px] bg-cyan-500/70 rounded-ctl-t-sm" style={{ height: `${Math.max(6, (b.n / peak) * 100)}%` }} title={`${b.label}: ${b.n}`} />
             ))}
           </div>
           <figcaption className="mt-1 flex justify-between text-slate-400 text-[0.75rem]">
@@ -267,13 +268,7 @@ export const RecordTable: React.FC<RecordTableProps> = ({ title, category }) => 
         </div>
       </div>
 
-      {pages > 1 && (
-        <div className="shrink-0 flex items-center justify-center gap-3 h-10 border-t border-slate-800 bg-slate-900 text-slate-300">
-          <button onClick={() => setPage(Math.max(1, safePage - 1))} disabled={safePage === 1} className="p-1 rounded hover:bg-slate-800 disabled:opacity-40" aria-label="Previous page"><ChevronLeft className="w-4 h-4" /></button>
-          <span>Page {safePage} of {pages}</span>
-          <button onClick={() => setPage(Math.min(pages, safePage + 1))} disabled={safePage === pages} className="p-1 rounded hover:bg-slate-800 disabled:opacity-40" aria-label="Next page"><ChevronRight className="w-4 h-4" /></button>
-        </div>
-      )}
+      <Pager page={safePage} pages={pages} onPage={setPage} />
     </div>
   );
 };

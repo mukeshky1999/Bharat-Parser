@@ -63,6 +63,9 @@ const banned: Array<[RegExp, string]> = [
   [/animate-(?:pulse|ping|bounce)/, 'blinking or pulsing animation'],
   [/\(WIPED\)|Pre-Transaction \(Lure\)|High-Risk \/ Structuring|Mule Intermediary|Critical Mule|Syndicate Link|Charge Sheet Chain/, 'a verdict worded as fact or a default label that names a role the evidence did not give'],
   [/BIT-FOR-BIT SEAL PASS|Air-Gapped PASS|SHA-256 Verified|Verified Both|Bit-Verified/, 'a status label that claims more than was checked'],
+  [/bg-gradient|backdrop-blur|rounded-(?:xl|2xl|3xl)|font-(?:extrabold|black)|tracking-(?:wider|widest)|(?:group-)?hover:(?:scale|translate)/, 'decorative styling the visual system does not use (see docs/UI_DESIGN.md, Visual system)'],
+  [/(?:text|bg|border|ring|from|to|via|fill|stroke)-(?:purple|pink|indigo|fuchsia|violet|teal|lime|yellow|orange|sky)-\d/, 'decorative hue: colour is the cyan accent or a status (emerald, amber, rose) only'],
+  [/\bshadow-(?:lg|xl|2xl)\b|shadow-\[/, 'shadow on a surface: only floating layers use shadow-float'],
 ];
 for (const f of files) {
   if (f.endsWith('theme.css')) continue;

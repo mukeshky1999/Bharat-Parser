@@ -61,7 +61,7 @@ export const StageNavigator: React.FC = () => {
                   isCurrent ? 'border-cyan-400 bg-slate-800 text-slate-50' : 'border-transparent text-slate-300 hover:bg-slate-800/60'
                 }`}
               >
-                <span className={`shrink-0 w-6 h-6 grid place-items-center rounded-full text-[0.75rem] font-semibold border ${isCurrent ? 'border-cyan-400 text-cyan-300' : 'border-slate-600 text-slate-300'}`}>{st.no}</span>
+                <span className={`shrink-0 w-6 h-6 grid place-items-center rounded-ctl-full text-[0.75rem] font-semibold border ${isCurrent ? 'border-cyan-400 text-cyan-300' : 'border-slate-600 text-slate-300'}`}>{st.no}</span>
                 {!collapsed && (
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
@@ -88,7 +88,7 @@ export const StageNavigator: React.FC = () => {
                           aria-current={activeTab === v.tab ? 'page' : undefined}
                           aria-disabled={v.unavailable ? true : undefined}
                           title={v.unavailable ? 'Not available yet: needs testing on real data' : undefined}
-                          className={`w-full flex items-center justify-between gap-2 pl-3 pr-2 py-1 text-left rounded-r ${
+                          className={`w-full flex items-center justify-between gap-2 pl-3 pr-2 py-1 text-left rounded-ctl-r ${
                             v.unavailable ? 'text-slate-500 cursor-not-allowed' :
                             activeTab === v.tab ? 'bg-slate-800 text-cyan-300 font-medium' : 'text-slate-300 hover:bg-slate-800/60'
                           }`}
