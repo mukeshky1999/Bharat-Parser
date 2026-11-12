@@ -253,7 +253,7 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
   activeFilter: 'ALL',
   recoveryPillFilter: 'ALL',
   ephemeralFilter: 'ALL',
-  chatViewMode: 'GRID',
+  chatViewMode: 'BUBBLE',
   searchQuery: '',
 
   currentPage: 1,

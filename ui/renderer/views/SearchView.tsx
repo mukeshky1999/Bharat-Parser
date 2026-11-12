@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 import { forensicClient, SearchMode, SearchResult } from '../api/forensicClient';
 import { useWorkbenchStore } from '../state/workbenchStore';
 import { RecordDetail, RecordRef } from '../inspectors/RecordDetail';
+import { BulkTagBar } from '../inspectors/BulkTagBar';
 
 const MODES: Array<{ id: SearchMode; label: string; help: string }> = [
   { id: 'keyword', label: 'Words', help: 'Every word must appear, in any order. Indic scripts work.' },
@@ -26,6 +27,7 @@ export const SearchView: React.FC = () => {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<RecordRef | null>(null);
+  const [picked, setPicked] = useState<Record<string, RecordRef>>({});
 
   const run = useCallback(async (q: string, m: SearchMode, a: string, off: number) => {
     if (!q.trim()) { setResult(null); return; }
@@ -78,11 +80,23 @@ export const SearchView: React.FC = () => {
                 </p>
               );
             })()}
+            <BulkTagBar
+              picked={Object.values(picked)}
+              pageRecords={result.hits.map((h) => ({ table: h.table, id: h.id }))}
+              onPick={(recs, on) => setPicked((cur) => {
+                const next = { ...cur };
+                for (const r of recs) { if (on) next[`${r.table}-${r.id}`] = r; else delete next[`${r.table}-${r.id}`]; }
+                return next;
+              })}
+              onDone={() => void run(text, mode, app, offset)}
+            />
             <ul className="space-y-2">
               {result.hits.map((h) => (
-                <li key={`${h.table}-${h.id}`}>
+                <li key={`${h.table}-${h.id}`} className="flex items-start gap-2">
+                  <input type="checkbox" className="mt-3" aria-label={`Select ${h.table} ${h.id}`} checked={!!picked[`${h.table}-${h.id}`]}
+                    onChange={(e) => setPicked((cur) => { const n = { ...cur }; if (e.target.checked) n[`${h.table}-${h.id}`] = { table: h.table, id: h.id }; else delete n[`${h.table}-${h.id}`]; return n; })} />
                   <button onClick={() => setOpen({ table: h.table, id: h.id })}
-                    className={`w-full text-left rounded border p-2 hover:bg-slate-800 ${open?.table === h.table && open.id === h.id ? 'border-cyan-600 bg-slate-800' : 'border-slate-800 bg-slate-900'}`}>
+                    className={`flex-1 min-w-0 text-left rounded border p-2 hover:bg-slate-800 ${open?.table === h.table && open.id === h.id ? 'border-cyan-600 bg-slate-800' : 'border-slate-800 bg-slate-900'}`}>
                     <div className="flex flex-wrap items-center gap-x-3 text-[0.75rem] text-slate-400">
                       <span className="text-slate-200">{h.table} #{h.id}</span>
                       <span>{h.application || 'app not recorded'}</span>

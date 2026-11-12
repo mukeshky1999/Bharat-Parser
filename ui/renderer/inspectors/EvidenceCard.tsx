@@ -4,6 +4,8 @@ import { useWorkbenchStore, SelectedArtifactState } from '../state/workbenchStor
 import { useFindings } from '../state/findingsStore';
 import { usePreferences } from '../state/preferencesStore';
 import { SyncedHexViewer } from './SyncedHexViewer';
+import { TagControls } from './TagControls';
+import { caseRecordOf } from '../utils/caseRecord';
 import type { ForensicProvenance, TimestampTriplet } from '../../shared/forensic-types';
 
 type CardTab = 'DETAILS' | 'BYTES' | 'LINKS';
@@ -256,6 +258,12 @@ export const EvidenceCard: React.FC = () => {
                 <Row k="Time" v={NOT_RECORDED} />
               )}
             </Section>
+            {caseRecordOf(artifact.id, artifact.itemType) && (
+              <section className="mb-4">
+                <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-slate-400 mb-1">Tags</h3>
+                <TagControls key={artifact.id} record={caseRecordOf(artifact.id, artifact.itemType)!} />
+              </section>
+            )}
             <Section title="Where it came from">
               {prov ? (
                 <>

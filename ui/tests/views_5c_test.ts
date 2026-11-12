@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { STAGES } from '../renderer/workspace/stages';
 import { shownValue, NOT_RECORDED } from '../renderer/utils/recordText';
+import { caseRecordOf } from '../renderer/utils/caseRecord';
 
 let failures = 0;
 function ok(cond: boolean, msg: string) {
@@ -19,6 +20,16 @@ ok(shownValue(null) === NOT_RECORDED && shownValue(undefined) === NOT_RECORDED &
 ok(shownValue(0) === '0' && shownValue(false) === 'false', 'zero and false are shown as values');
 ok(shownValue({ a: 1 }) === '{"a":1}', 'objects are shown as JSON');
 
+// which case-store row a selected item is
+const eq = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+ok(eq(caseRecordOf('TX_7'), { table: 'transactions', id: 7 }), 'TX_ id is a transactions row');
+ok(eq(caseRecordOf('CNT_3'), { table: 'contacts', id: 3 }) && eq(caseRecordOf('CALL_9'), { table: 'calls', id: 9 }), 'contacts and calls rows');
+ok(eq(caseRecordOf('MSG50#12', 'CHAT_MESSAGE'), { table: 'chats', id: 12 }), 'chat message id ends in its row');
+ok(eq(caseRecordOf('100000000011#4', 'Financial Transaction'), { table: 'transactions', id: 4 }), 'transaction id ends in its row');
+ok(caseRecordOf('file#table#5') === null && caseRecordOf('x#0', 'CHAT_MESSAGE') === null && caseRecordOf(undefined) === null && caseRecordOf('TX_0') === null,
+  'anything that is not a case row is not tagged from the card');
+ok(/not found/.test(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'inspectors', 'BulkTagBar.tsx'), 'utf8')), 'bulk tagging reports records that were not found');
+
 const view = (name: string) => fs.readFileSync(path.join(__dirname, '..', 'renderer', 'views', name), 'utf8');
 const insp = (name: string) => fs.readFileSync(path.join(__dirname, '..', 'renderer', 'inspectors', name), 'utf8');
 
@@ -34,7 +45,7 @@ ok(/ships no list/.test(media), 'the hash list panel says the tool ships no list
 const search = view('SearchView.tsx');
 ok(/may be incomplete/.test(search) && /were not searched/.test(search), 'search says when it stopped early or skipped a table');
 // tags are the examiner's decisions
-ok(/the tool applies none/.test(insp('RecordDetail.tsx')), 'record panel says the tool applies no tags');
+ok(/the tool applies none/.test(insp('TagControls.tsx')), 'record panel says the tool applies no tags');
 // progress: no invented percentage
 const prog = view('IngestProgressPanel.tsx');
 ok(/cannot say how much is left/.test(prog) && /fraction === null/.test(prog), 'progress shows "working" when the step cannot be counted');
@@ -42,7 +53,7 @@ ok(/cannot say how much is left/.test(prog) && /fraction === null/.test(prog), '
 for (const f of ['SearchView.tsx', 'TimelineView.tsx', 'TagsView.tsx', 'MediaLibraryView.tsx', 'IngestProgressPanel.tsx']) {
   ok(!/localStorage|sessionStorage|indexedDB/.test(view(f)), `${f} does not use browser storage`);
 }
-ok(!/localStorage|sessionStorage|indexedDB/.test(insp('RecordDetail.tsx')), 'RecordDetail does not use browser storage');
+ok(!/localStorage|sessionStorage|indexedDB/.test(insp('RecordDetail.tsx') + insp('TagControls.tsx') + insp('BulkTagBar.tsx')), 'RecordDetail does not use browser storage');
 
 if (failures > 0) { console.error(`${failures} failure(s)`); process.exit(1); }
 console.log('views_5c_test: all checks pass');
