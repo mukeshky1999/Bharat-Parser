@@ -1241,7 +1241,7 @@ def _execute_ingestion_pipeline(
         cfile.remove_all_items()
     store = CaseUIPaginatorStore(workspace_dir, db_name="bharat_case_store.db")
     if mode == "add" and reprocess:
-        store.delete_evidence_item(item_id)
+        store.delete_evidence_item(item_id)       # the examiner's tags on this item are set aside, not deleted
     ingested: Dict[str, int] = {}
 
     if all_chats_list:
@@ -1304,6 +1304,13 @@ def _execute_ingestion_pipeline(
         processing_log.append({"stage": "coverage", "file": f"{n_other} file(s)", "status": "WARNING",
                                "error": "Seen, but the tool has no decoder for them; they are listed in the coverage report"})
     store.add_coverage(item_id, coverage)
+    retag = store.reattach_tags(item_id)
+    if retag["reattached"] or retag["detached"]:
+        _audit_event("tags_reattached", {"evidence_item": item_id, **retag})
+    if retag["detached"]:
+        processing_log.append({"stage": "tags", "file": item_id, "status": "WARNING",
+                               "error": f"{retag['detached']} tag(s) could not be placed on a record after processing again "
+                                        f"(no single record with the same source location). They are kept, marked detached."})
 
     # Post-ingestion integrity check: re-hash the original evidence and compare.
     prog.stage("verify", total=_evidence_size(abs_evidence), unit="bytes")
@@ -1725,6 +1732,7 @@ def case_search(
     tables: Optional[str] = Query(None, description="Comma separated table names; default all"),
     evidence_item: Optional[str] = Query(None),
     application: Optional[str] = Query(None),
+    tag: Optional[str] = Query(None, description="Only records carrying this tag"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
@@ -1735,8 +1743,100 @@ def case_search(
     try:
         return _active_store.search(
             q, mode=mode, tables=[t for t in (tables or "").split(",") if t.strip()] or None,
-            evidence_item=evidence_item, application=application, limit=limit, offset=offset)
+            evidence_item=evidence_item, application=application, tag=tag, limit=limit, offset=offset)
     except SearchError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.get("/api/case/timeline")
+def case_timeline(
+    group: str = Query("fixed", description="fixed (placed by a recorded instant), clock_only (zone not recorded) or no_time"),
+    tables: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None, alias="from", description="IST, 2026-02-01 or 2026-02-01 09:30:00"),
+    to: Optional[str] = Query(None),
+    evidence_item: Optional[str] = Query(None),
+    application: Optional[str] = Query(None),
+    tag: Optional[str] = Query(None),
+    bucket: Optional[str] = Query(None, description="day or hour: also return counts per bucket"),
+    descending: bool = Query(False),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """One timeline over messages, payments, calls, locations, device traces, notifications and P2P orders."""
+    from parsers.case_timeline import TimelineError
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=412, detail="No case is loaded.")
+    try:
+        return _active_store.timeline(
+            tables=[t for t in (tables or "").split(",") if t.strip()] or None, group=group, frm=date_from, to=to,
+            evidence_item=evidence_item, application=application, tag=tag, bucket=bucket,
+            limit=limit, offset=offset, descending=descending)
+    except TimelineError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Tags (5B.6): the examiner's decisions about records, kept in the case file.
+# ---------------------------------------------------------------------------
+class TagRecordRef(BaseModel):
+    table: str
+    id: int
+
+
+class TagRequest(BaseModel):
+    tag: str
+    records: List[TagRecordRef]
+    note: str = ""
+
+
+@app.get("/api/case/tags")
+def case_tags_list(evidence_item: Optional[str] = Query(None)):
+    """Every tag with how many records carry it (the built-in ones are always listed, even at 0)."""
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=412, detail="No case is loaded.")
+    return _active_store.list_tags(evidence_item)
+
+
+@app.post("/api/case/tags")
+def case_tags_apply(body: TagRequest):
+    from parsers.case_tags import TagError
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=412, detail="No case is loaded.")
+    try:
+        res = _active_store.tag_records(body.tag, [(r.table, r.id) for r in body.records], body.note)
+    except TagError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if res["applied"]:
+        _audit_event("records_tagged", {"tag": res["tag"], "count": res["applied"],
+                                        "tables": sorted({r.table.lower() for r in body.records})})
+    return res
+
+
+@app.post("/api/case/tags/remove")
+def case_tags_remove(body: TagRequest):
+    from parsers.case_tags import TagError
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=412, detail="No case is loaded.")
+    try:
+        res = _active_store.untag_records(body.tag, [(r.table, r.id) for r in body.records])
+    except TagError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if res["removed"]:
+        _audit_event("records_untagged", {"tag": res["tag"], "count": res["removed"]})
+    return res
+
+
+@app.get("/api/case/tags/records")
+def case_tags_records(tag: str = Query(...), tables: Optional[str] = Query(None), evidence_item: Optional[str] = Query(None),
+                      limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):
+    """The records carrying a tag, with the snapshot kept when they were tagged. Detached ones are flagged."""
+    from parsers.case_tags import TagError
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=412, detail="No case is loaded.")
+    try:
+        return _active_store.tagged_records(tag, tables=[t for t in (tables or "").split(",") if t.strip()] or None,
+                                            evidence_item=evidence_item, limit=limit, offset=offset)
+    except TagError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
 

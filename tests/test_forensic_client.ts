@@ -276,6 +276,28 @@ async function runForensicClientTests() {
     await forensicClient.getCoverage('EV-001');
     assert(askedUrl.endsWith('/api/case/coverage?evidence_item=EV-001'), 'Coverage can be asked for one device');
 
+    // =========================================================================
+    // TEST CASE 6: tags and timeline calls
+    // =========================================================================
+    console.log('\n--- Test Suite 6: Tags and timeline ---');
+    let sentTags = '';
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      askedUrl = String(input);
+      sentTags = String(init?.body ?? '');
+      return new Response(JSON.stringify({ tag: 'relied_upon', applied: 1, already_tagged: 0, missing: [], counts: {}, events: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    await forensicClient.tagRecords('relied_upon', [{ table: 'chats', id: 3 }], 'note');
+    assert(askedUrl.endsWith('/api/case/tags') && JSON.parse(sentTags).records[0].id === 3 && JSON.parse(sentTags).tag === 'relied_upon', 'Tagging sends the tag and the record references');
+    await forensicClient.untagRecords('relied_upon', [{ table: 'chats', id: 3 }]);
+    assert(askedUrl.endsWith('/api/case/tags/remove'), 'Removing a tag uses its own call');
+    await forensicClient.getTimeline({ group: 'clock_only', from: '2026-02-01', tables: ['chats', 'calls'], bucket: 'day', descending: true });
+    const tl = new URL(askedUrl, 'http://x');
+    assert(tl.pathname === '/api/case/timeline' && tl.searchParams.get('group') === 'clock_only' && tl.searchParams.get('from') === '2026-02-01'
+      && tl.searchParams.get('tables') === 'chats,calls' && tl.searchParams.get('bucket') === 'day' && tl.searchParams.get('descending') === 'true', 'Timeline sends the group, range and filters');
+    globalThis.fetch = async (): Promise<Response> => new Response(JSON.stringify({ detail: 'Not a table with a time: contacts.' }), { status: 422, headers: { 'Content-Type': 'application/json' } });
+    const badTl = await forensicClient.getTimeline({ tables: ['contacts'] });
+    assert(badTl.data === null && (badTl.error ?? '').includes('Not a table'), 'A refused timeline gives the reason');
+
     console.log(`=== RESULTS: ALL ${passedTests}/${totalTests} FORENSIC CLIENT TESTS PASSED (100% SUCCESS) ===\n`);
   } finally {
     // Restore original fetch

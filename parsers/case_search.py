@@ -154,6 +154,7 @@ def search_case(
     tables: Optional[Iterable[str]] = None,
     evidence_item: Optional[str] = None,
     application: Optional[str] = None,
+    tag: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
     time_budget_s: float = DEFAULT_TIME_BUDGET_S,
@@ -183,6 +184,14 @@ def search_case(
             raise SearchError(f"Not a searchable table here: {', '.join(unknown)}.")
         wanted = [t for t in wanted if t in asked]
 
+    tag_name = ""
+    if tag:
+        from parsers.case_tags import normalise_tag, TagError
+        try:
+            tag_name = normalise_tag(tag)
+        except TagError as exc:
+            raise SearchError(str(exc))
+
     hits: List[Dict[str, Any]] = []
     per_table: Dict[str, Dict[str, Any]] = {}
     complete = True
@@ -200,6 +209,9 @@ def search_case(
         if application and "Application" in names:
             where.append("t.Application = ?")
             params.append(application)
+        if tag:
+            where.append("t.id IN (SELECT Record_Id FROM tags WHERE Tbl = ? AND Tag = ? AND Detached = 0)")
+            params += [t, tag_name]
         extra = (" AND " + " AND ".join(where)) if where else ""
 
         fts_cols = _fts_columns(conn, t)
@@ -259,6 +271,13 @@ def search_case(
 
     total = sum(i["count"] for i in per_table.values())
     page = hits[offset: offset + limit]
+    if page and "tags" in present:
+        from parsers.case_tags import tags_for
+        for tb in {h["table"] for h in page}:
+            found = tags_for(conn, tb, [h["id"] for h in page if h["table"] == tb])
+            for h in page:
+                if h["table"] == tb:
+                    h["tags"] = found.get(h["id"], [])
     return {
         "query": query,
         "mode": mode,

@@ -465,6 +465,8 @@ class CaseUIPaginatorStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_coverage_item ON coverage(Evidence_Item, Outcome);
             """)
+            from parsers.case_tags import SCHEMA as _TAGS_SCHEMA      # Phase 5B.6
+            cur.executescript(_TAGS_SCHEMA)
             conn.commit()
         finally:
             conn.close()
@@ -529,6 +531,56 @@ class CaseUIPaginatorStore:
         finally:
             conn.close()
 
+    def timeline(self, **kw: Any) -> Dict[str, Any]:
+        """Phase 5B.7: events of every table that has a time (see parsers.case_timeline). Read-only."""
+        from parsers.case_timeline import timeline
+        conn = self._get_connection()
+        try:
+            return timeline(conn, **kw)
+        finally:
+            conn.close()
+
+    # Phase 5B.6: tags
+    def tag_records(self, tag: str, records: List[Any], note: str = "") -> Dict[str, Any]:
+        from parsers import case_tags
+        conn = self._get_connection()
+        try:
+            return case_tags.apply_tag(conn, tag, [(t, i) for t, i in records], ALLOWED_TABLES, note)
+        finally:
+            conn.close()
+
+    def untag_records(self, tag: str, records: List[Any]) -> Dict[str, Any]:
+        from parsers import case_tags
+        conn = self._get_connection()
+        try:
+            return case_tags.remove_tag(conn, tag, [(t, i) for t, i in records])
+        finally:
+            conn.close()
+
+    def list_tags(self, evidence_item: Optional[str] = None) -> Dict[str, Any]:
+        from parsers import case_tags
+        conn = self._get_connection()
+        try:
+            return case_tags.list_tags(conn, evidence_item)
+        finally:
+            conn.close()
+
+    def tagged_records(self, tag: str, **kw: Any) -> Dict[str, Any]:
+        from parsers import case_tags
+        conn = self._get_connection()
+        try:
+            return case_tags.tagged_records(conn, tag, ALLOWED_TABLES, **kw)
+        finally:
+            conn.close()
+
+    def reattach_tags(self, item_id: str) -> Dict[str, int]:
+        from parsers import case_tags
+        conn = self._get_connection()
+        try:
+            return case_tags.reattach(conn, item_id, ALLOWED_TABLES)
+        finally:
+            conn.close()
+
     def get_record(self, table: str, record_id: int) -> Optional[Dict[str, Any]]:
         """One whole record as stored. Missing values stay None."""
         tbl = table.lower().strip()
@@ -546,6 +598,8 @@ class CaseUIPaginatorStore:
         removed: Dict[str, int] = {}
         conn = self._get_connection()
         try:
+            from parsers import case_tags
+            case_tags.snapshot_item(conn, item_id)       # tags are kept; reattach_tags places them again afterwards
             existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             for tbl in sorted(ALLOWED_TABLES):
                 cur = conn.execute(f"DELETE FROM {tbl} WHERE Evidence_Item = ?", (item_id,))

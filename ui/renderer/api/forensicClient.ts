@@ -235,6 +235,75 @@ export interface CoverageReport {
   files: CoverageFile[];
 }
 
+export interface TagSummary {
+  tag: string;
+  builtin: boolean;
+  meaning: string | null;
+  count: number;
+  /** Tags whose record could not be found again after the evidence was processed a second time. */
+  detached: number;
+  by_table: Record<string, number>;
+}
+
+export interface TagRecordRef { table: string; id: number }
+
+export interface TaggedRecord {
+  table: string;
+  id: number | null;
+  evidence_item: string | null;
+  summary: string;
+  provenance: string | null;
+  note: string | null;
+  tagged_at_utc: string;
+  detached: boolean;
+}
+
+export type TimelineGroup = 'fixed' | 'clock_only' | 'no_time';
+
+export interface TimelineEvent {
+  tbl: string;
+  id: number;
+  evidence_item: string | null;
+  application: string | null;
+  kind: string;
+  summary: string;
+  utc: string | null;
+  ist: string | null;
+  /** The local clock reading when the source gave no zone; such events are not placed in time. */
+  local_clock: string | null;
+  time_basis: string;
+  provenance: string | null;
+  decoded_by: string | null;
+  tags?: string[];
+}
+
+export interface TimelineResult {
+  group: TimelineGroup;
+  counts: Record<TimelineGroup, number>;
+  total: number;
+  offset: number;
+  limit: number;
+  ordering: string;
+  note: string;
+  events: TimelineEvent[];
+  time_basis: Record<string, number>;
+  buckets: { size: 'day' | 'hour'; truncated: boolean; items: Array<{ start: string; count: number }> } | null;
+}
+
+export interface TimelineQuery {
+  group?: TimelineGroup;
+  tables?: string[];
+  from?: string;
+  to?: string;
+  evidenceItem?: string;
+  application?: string;
+  tag?: string;
+  bucket?: 'day' | 'hour';
+  descending?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
 export interface IngestOptions {
   /** "replace" starts the case again from this evidence; "add" puts another device into the existing case. */
   mode?: 'replace' | 'add';
@@ -685,6 +754,39 @@ class ForensicClient {
     if (opts.application) p.set('application', opts.application);
     const res = await this.fetchApi<SearchResult>(`/api/case/search?${p.toString()}`);
     return { data: res.data, error: res.error };
+  }
+
+  /** Tags with the number of records carrying each. */
+  public async getTags(evidenceItem?: string): Promise<{ data: { tags: TagSummary[]; detached_total: number } | null; error: string | null }> {
+    const q = evidenceItem ? `?evidence_item=${encodeURIComponent(evidenceItem)}` : '';
+    return this.fetchApi(`/api/case/tags${q}`);
+  }
+
+  /** Tag records (a label of your own is allowed). A refused request comes back as `error`. */
+  public async tagRecords(tag: string, records: TagRecordRef[], note = ''): Promise<{ data: { tag: string; applied: number; already_tagged: number; missing: TagRecordRef[] } | null; error: string | null }> {
+    return this.fetchApi('/api/case/tags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag, records, note }) });
+  }
+
+  public async untagRecords(tag: string, records: TagRecordRef[]): Promise<{ data: { tag: string; removed: number } | null; error: string | null }> {
+    return this.fetchApi('/api/case/tags/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tag, records }) });
+  }
+
+  public async getTaggedRecords(tag: string, opts: { tables?: string[]; evidenceItem?: string; limit?: number; offset?: number } = {}): Promise<{ data: { tag: string; total: number; records: TaggedRecord[] } | null; error: string | null }> {
+    const p = new URLSearchParams({ tag, limit: String(opts.limit ?? 100), offset: String(opts.offset ?? 0) });
+    if (opts.tables && opts.tables.length) p.set('tables', opts.tables.join(','));
+    if (opts.evidenceItem) p.set('evidence_item', opts.evidenceItem);
+    return this.fetchApi(`/api/case/tags/records?${p.toString()}`);
+  }
+
+  /** Events of every table that has a time. Events with no fixed instant are counted apart, not placed. */
+  public async getTimeline(opts: TimelineQuery = {}): Promise<{ data: TimelineResult | null; error: string | null }> {
+    const p = new URLSearchParams({ group: opts.group ?? 'fixed', limit: String(opts.limit ?? 100), offset: String(opts.offset ?? 0) });
+    if (opts.tables && opts.tables.length) p.set('tables', opts.tables.join(','));
+    for (const [k, v] of [['from', opts.from], ['to', opts.to], ['evidence_item', opts.evidenceItem], ['application', opts.application], ['tag', opts.tag], ['bucket', opts.bucket]] as const) {
+      if (v) p.set(k, v);
+    }
+    if (opts.descending) p.set('descending', 'true');
+    return this.fetchApi(`/api/case/timeline?${p.toString()}`);
   }
 
   /** One record exactly as stored; a value that was not recorded is null. */

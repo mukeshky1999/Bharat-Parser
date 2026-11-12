@@ -213,3 +213,16 @@ Python 594 passed (587 before; 7 new in `tests/test_ingest_progress.py`, which r
 - Not done: date-range filter and saved filters (5C.4), transliteration between scripts, stemming. A search never changes the case file (tested).
 - Client: `searchCase`, `getRecord`, `getCoverage` and their types. No search or coverage screen yet (5C).
 Python 610 passed (594 before; 16 new in `tests/test_coverage_and_search.py`); `npm run test:ts` 26/26; `tsc` clean.
+
+### Phase 5B.6: tags (2026-11-12)
+- Five built-in tags (`relied_upon`, `of_interest`, `complainant`, `privileged`, `excluded`) with their meaning, plus labels of the examiner's own (up to 40 characters). The tool never applies a tag by itself. Stored in the case store (`tags` table), so they travel with the case file.
+- `GET /api/case/tags` (counts, per table, detached), `POST /api/case/tags` (up to 5000 records; a bad table refuses the whole request before anything is written), `POST /api/case/tags/remove`, `GET /api/case/tags/records` (snapshot of what each record was when tagged). Search takes `tag=` and each hit lists its tags. Tagging and untagging go to the audit log (tag name, count, tables; not record content).
+- **Processing an evidence item again**: record numbers change, so its tags are set aside, then placed on the one new record with the same provenance line. If none or more than one matches, the tag is kept as `detached` (with its snapshot) and a warning goes to the processing log. Nothing is guessed.
+- Not done: the report, annexure and package do not yet read tags (the "accounts of interest" sheet and the privileged/complainant exclusions still need wiring), and there is no tag UI (5C.5).
+
+### Phase 5B.7: timeline (2026-11-12)
+- `GET /api/case/timeline` over chats, payments, calls, locations, device traces, notifications and P2P orders, ordered by the recorded Indian-time instant; filters: tables, from/to (IST; a day covers the whole day), device, application, tag; paging; `bucket=day|hour` gives counts per bucket.
+- Records are in one of three groups, and the response counts all three: `fixed` (placed), `clock_only` (a local clock reading whose zone was not recorded; **not placed among the others**, listed on request), `no_time`. Each event shows its `time_basis`. A device clock that was wrong is not corrected.
+- Only tables whose Timestamp_IST column is filled by the source are placed. For tables without a recorded basis column (device traces, notifications, P2P orders) the basis reads `RECORDED_IST`; the tool does not know more.
+- Client: `getTags`, `tagRecords`, `untagRecords`, `getTaggedRecords`, `getTimeline`. No timeline screen yet (5C.6).
+Python 624 passed (610 before; 14 new in `tests/test_tags_and_timeline.py`); `npm run test:ts` 30/30; `tsc` clean.
