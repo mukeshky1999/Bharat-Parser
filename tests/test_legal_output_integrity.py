@@ -177,3 +177,23 @@ def test_ist_timestamp_is_real_ist_not_local_time():
     got = datetime.strptime(ist_now_str()[:19], "%Y-%m-%d %H:%M:%S")
     want = datetime.now(timezone(timedelta(hours=5, minutes=30))).replace(tzinfo=None)
     assert abs((got - want).total_seconds()) < 5
+
+
+# ---------------- X-10: key recovery must be honest ----------------
+def test_sqlcipher_open_without_driver_reports_unavailable_and_does_not_touch_file(tmp_path, monkeypatch, caplog):
+    import hashlib
+
+    import parsers.keychain_decryptor as kd
+
+    monkeypatch.setattr(kd, "_SQLCIPHER", None)
+    db = tmp_path / "enc.db"
+    db.write_bytes(b"\x01" * 4096)  # not a plaintext SQLite header
+    before = hashlib.sha256(db.read_bytes()).hexdigest()
+    ring = kd.CaseKeyring("C")
+    ring.register("k", "00" * 32)
+    with caplog.at_level("WARNING"):
+        assert kd.attempt_sqlcipher_open(str(db), ring) is None
+        assert kd.attempt_sqlcipher_decryption(str(db), None, str(tmp_path), ring) is None
+    assert "not installed" in caplog.text
+    assert hashlib.sha256(db.read_bytes()).hexdigest() == before
+    assert not [p for p in tmp_path.iterdir() if p.name.startswith("decrypted_")]

@@ -9,11 +9,36 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import os
 from pathlib import Path
 import re
 import sqlite3
 from typing import Any, Dict, List, Optional
+
+
+log = logging.getLogger(__name__)
+
+
+def _load_sqlcipher_driver():
+    """Return a DB-API module that really implements SQLCipher, or None.
+
+    The standard-library sqlite3 has no SQLCipher support: `PRAGMA key` is silently ignored and an
+    encrypted file fails with "file is not a database". Never use it to claim a decryption attempt.
+    """
+    for name in ("sqlcipher3.dbapi2", "pysqlcipher3.dbapi2"):
+        try:
+            return __import__(name, fromlist=["connect"])
+        except ImportError:
+            continue
+    return None
+
+
+_SQLCIPHER = _load_sqlcipher_driver()
+
+
+def sqlcipher_available() -> bool:
+    return _SQLCIPHER is not None
 
 
 class CaseKeyring:
@@ -42,19 +67,33 @@ class CaseKeyring:
         return len(self._keys)
 
 
-def attempt_sqlcipher_open(db_path: str, keyring: Optional[CaseKeyring] = None) -> Optional[sqlite3.Connection]:
-    """Attempt opening an encrypted database with keys in the keyring in read-only mode."""
+def attempt_sqlcipher_open(db_path: str, keyring: Optional[CaseKeyring] = None):
+    """Open an encrypted database read-only with a keyring key. Returns a connection or None.
+
+    Returns None (and logs why) when no SQLCipher driver is installed or no key opens the file.
+    The original file is opened with mode=ro and is never modified.
+    """
     if not os.path.exists(db_path):
         return None
     candidates = keyring.candidates() if keyring else {}
+    if not candidates:
+        return None
+    if _SQLCIPHER is None:
+        log.warning("SQLCipher driver (sqlcipher3) not installed: %s cannot be opened with the %d key(s) supplied",
+                    db_path, len(candidates))
+        return None
     for name, key_bytes in candidates.items():
+        conn = None
         try:
-            conn = sqlite3.connect(f"file:{Path(db_path).as_posix()}?mode=ro", uri=True)
+            conn = _SQLCIPHER.connect(f"file:{Path(db_path).as_posix()}?mode=ro", uri=True)
             conn.execute(f"PRAGMA key = \"x'{key_bytes.hex()}'\";")
             conn.execute("SELECT count(*) FROM sqlite_master;").fetchone()
             return conn
-        except sqlite3.DatabaseError:
+        except _SQLCIPHER.DatabaseError:
+            if conn is not None:
+                conn.close()
             continue
+    log.info("None of the %d supplied key(s) opened %s", len(candidates), db_path)
     return None
 
 
@@ -165,6 +204,9 @@ def attempt_sqlcipher_decryption(
 
     if not candidates:
         return None
+    if _SQLCIPHER is None:
+        log.warning("SQLCipher driver (sqlcipher3) not installed: cannot decrypt %s", encrypted_db_path)
+        return None
 
     decrypted_dest = os.path.join(
         output_scratch_dir, f"decrypted_{os.path.basename(encrypted_db_path)}"
@@ -176,7 +218,7 @@ def attempt_sqlcipher_decryption(
             try:
                 if os.path.exists(decrypted_dest):
                     os.remove(decrypted_dest)
-                conn = sqlite3.connect(encrypted_db_path)
+                conn = _SQLCIPHER.connect(f"file:{Path(encrypted_db_path).as_posix()}?mode=ro", uri=True)
                 cur = conn.cursor()
                 if isinstance(cand, bytes):
                     key_hex = cand.hex()
@@ -198,7 +240,10 @@ def attempt_sqlcipher_decryption(
                     with open(decrypted_dest, 'rb') as df:
                         if df.read(16) == b'SQLite format 3\x00':
                             return decrypted_dest
-            except Exception:
+            except _SQLCIPHER.DatabaseError:
+                continue  # wrong key or parameter profile
+            except Exception as exc:
+                log.warning("SQLCipher attempt failed unexpectedly for %s: %s", encrypted_db_path, exc)
                 continue
             finally:
                 if conn is not None:
