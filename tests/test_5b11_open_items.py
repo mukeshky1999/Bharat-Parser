@@ -54,3 +54,17 @@ def test_phone_split_across_chunk_boundary_is_found(tmp_path, monkeypatch):
     _, phones = vh.harvest_entities_from_file(str(f))
     got = dict(zip(phones["Phone_Number"], phones["Occurrences"]))
     assert got.get("9876543217") == 1 and got.get("8123456781") == 1       # each counted once, none lost, none doubled
+
+
+def test_phonepe_amount_unit_is_labelled(tmp_path):
+    from parsers.deep_sqlite import _parse_phonepe_transactions
+    db = str(tmp_path / "phonepe.db")
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE txn (id TEXT, amount INTEGER, amount_in_paise INTEGER, ts INTEGER, payee TEXT)")
+    c.execute("INSERT INTO txn VALUES ('T20231115123456789', 12500, NULL, 1700000000000, 'shop@okaxis')")
+    c.execute("INSERT INTO txn VALUES ('T20231115123456790', NULL, 5000, 1700000001000, 'shop@okaxis')")
+    c.commit(); c.close()
+    df = _parse_phonepe_transactions(db)
+    basis = {round(r["Amount"], 2): r["Amount_Basis"] for _, r in df.iterrows()}
+    assert basis[125.0].startswith("ASSUMED paise") and "not checked" in basis[125.0]
+    assert basis[50.0] == "paise, as the column name says"

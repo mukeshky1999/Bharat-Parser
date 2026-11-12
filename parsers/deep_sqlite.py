@@ -293,12 +293,13 @@ def _parse_phonepe_chats(db_path: str) -> pd.DataFrame:
 
 
 def _parse_phonepe_transactions(db_path: str, owner_identifiers: Optional[Set[str]] = None) -> pd.DataFrame:
-    out_cols = ['Date', 'Transaction_ID', 'Amount', 'Counterparty', 'Status', 'Type']
+    out_cols = ['Date', 'Transaction_ID', 'Amount', 'Counterparty', 'Status', 'Type', 'Amount_Basis']
     rows: List[Dict[str, Any]] = []
     for _, df in dump_sqlite_tables(db_path, max_rows_per_table=30000).items():
         for _, r in df.iterrows():
             try:
                 amount: Optional[float] = None
+                amount_basis: str = ''
                 vpa_candidates: List[str] = []
                 payer_vpa: Optional[str] = None
                 payee_vpa: Optional[str] = None
@@ -321,6 +322,8 @@ def _parse_phonepe_transactions(db_path: str, owner_identifiers: Optional[Set[st
                     if amount is None and col_low in ('amount', 'zamount', 'txnamount', 'amount_in_paise', 'amountinpaise'):
                         try:
                             amount = float(val) / 100.0
+                            amount_basis = ('paise, as the column name says' if 'paise' in col_low else
+                                            f"ASSUMED paise (column '{col}' states no unit); not checked against a real sample")
                         except (TypeError, ValueError):
                             pass
                     if '__decoded' in col_low and ('amount' in s.lower() or 'vpa' in s.lower()):
@@ -332,6 +335,8 @@ def _parse_phonepe_transactions(db_path: str, owner_identifiers: Optional[Set[st
                                     try:
                                         # PhonePe JSON stores amountInPaise or minor units; divide by 100
                                         amount = float(v) / 100.0
+                                        amount_basis = ('paise, as the key name says' if 'paise' in k_low else
+                                                        f"ASSUMED paise (key '{k}' states no unit); not checked against a real sample")
                                     except (TypeError, ValueError):
                                         pass
                                 if 'payer' in k_low or 'sender' in k_low:
@@ -379,6 +384,7 @@ def _parse_phonepe_transactions(db_path: str, owner_identifiers: Optional[Set[st
                     'Counterparty': resolved_cpty or 'Unknown',
                     'Status': status or 'UNKNOWN',
                     'Type': tx_type,
+                    'Amount_Basis': amount_basis,
                 })
             except Exception:
                 continue
