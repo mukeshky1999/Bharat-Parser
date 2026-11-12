@@ -43,3 +43,14 @@ def test_zangi_null_is_outgoing_unknown(tmp_path):
     c.commit(); c.close()
     df, _ = parse_zangi_database(db)
     assert df.iloc[0]["Direction"] == "Unknown"
+
+
+def test_phone_split_across_chunk_boundary_is_found(tmp_path, monkeypatch):
+    from parsers import vpa_harvester as vh
+    monkeypatch.setattr(vh, "_HARVEST_CHUNK_BYTES", 100)
+    data = bytearray(b" " * 95) + b"9876543217" + bytearray(b" " * 100)   # number straddles byte 100
+    data += b" 8123456781 "                                                # a second, wholly inside a chunk
+    f = tmp_path / "blob.bin"; f.write_bytes(bytes(data))
+    _, phones = vh.harvest_entities_from_file(str(f))
+    got = dict(zip(phones["Phone_Number"], phones["Occurrences"]))
+    assert got.get("9876543217") == 1 and got.get("8123456781") == 1       # each counted once, none lost, none doubled

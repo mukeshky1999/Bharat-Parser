@@ -21,6 +21,9 @@ _EMAIL_PROVIDER_HANDLES = {
 logger = logging.getLogger(__name__)
 
 
+_HARVEST_CHUNK_BYTES = 16 * 1024 * 1024  # read size; a test lowers it to exercise the chunk boundary
+
+
 def is_valid_indian_mobile(phone_10: str) -> bool:
     """
     Validates a 10-digit Indian mobile number and rejects binary timers/floats
@@ -294,7 +297,7 @@ def harvest_entities_from_file(file_path: str) -> Tuple[pd.DataFrame, pd.DataFra
         )
 
     try:
-        CHUNK = 16 * 1024 * 1024
+        CHUNK = _HARVEST_CHUNK_BYTES
         OVERLAP = 64
         prev_tail = b''
         with open(file_path, 'rb') as f:
@@ -318,9 +321,13 @@ def harvest_entities_from_file(file_path: str) -> Tuple[pd.DataFrame, pd.DataFra
                     if valid_vpa:
                         vpa_counter[valid_vpa] += 1
 
-                for p_bytes in PHONE_REGEX.findall(raw):
+                # Phone numbers are matched on the chunk with the previous tail in front, so a number split across
+                # the 16 MB boundary is found (Q-2b); a match lying wholly inside the tail was counted last time.
+                for pm in PHONE_REGEX.finditer(chunk):
+                    if pm.end() <= len(prev_tail):
+                        continue
                     try:
-                        std_phone = p_bytes.decode('ascii')[-10:]
+                        std_phone = pm.group(1).decode('ascii')
                         if is_valid_indian_mobile(std_phone):
                             phone_counter[std_phone] += 1
                     except UnicodeDecodeError:
