@@ -7,6 +7,7 @@ triangulation fraud detection, and off-chain Binance Pay vs on-chain transfers.
 
 from datetime import datetime, timezone
 import json
+import logging
 import os
 import re
 import struct
@@ -33,9 +34,54 @@ from src.cex.models import (
     CEXTransferRecord,
 )
 
+logger = logging.getLogger(__name__)
+
 INDIAN_MOBILE_REGEX = re.compile(r"\b[6-9]\d{9}\b")
 NPCI_12_DIGIT_UTR_REGEX = re.compile(r"\b\d{12}\b")
-VPA_REGEX = re.compile(r"\b[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}\b")
+VPA_REGEX = re.compile(r"\b[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}\b(?!\.[a-zA-Z0-9])")
+
+
+def _key_tokens(name: str) -> set:
+    """Lower-case word tokens of a key: 'kycRealName' -> {'kyc','real','name'}, 'guid' -> {'guid'}."""
+    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", str(name))
+    return {t for t in re.split(r"[^a-z0-9]+", spaced.lower()) if t}
+
+
+def _is_user_id_key(name: str) -> bool:
+    t = _key_tokens(name)
+    if t & {"device", "guid", "session", "push", "app", "install"}:
+        return False
+    return "uid" in t or "userid" in t or ("user" in t and "id" in t)
+
+
+def _is_kyc_name_key(name: str) -> bool:
+    t = _key_tokens(name)
+    if t & {"user", "nick", "file", "device", "app", "host", "display"} and "kyc" not in t and "real" not in t:
+        return False
+    return "realname" in t or ("real" in t and "name" in t) or ("full" in t and "name" in t) or ("kyc" in t and "name" in t)
+
+
+def _ts_iso(raw: Any) -> str:
+    """UTC ISO string from a seconds or milliseconds epoch; '' when absent or unreadable (never the analysis time)."""
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        return ""
+    if v <= 0:
+        return ""
+    try:
+        if v > 10_000_000_000:
+            return ForensicTimestamp.from_unix_milliseconds(int(v)).utc_iso8601
+        return ForensicTimestamp.from_unix_seconds(int(v)).utc_iso8601
+    except (ValueError, OverflowError, OSError):
+        return ""
+
+
+def _to_float(raw: Any) -> float:
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def decode_varint(data: bytes, offset: int) -> Tuple[int, int]:
@@ -99,7 +145,8 @@ class BinanceDecoder:
         try:
             with open(mmkv_path, "rb") as fh:
                 raw = fh.read()
-        except Exception:
+        except Exception as exc:
+            logger.warning("could not read MMKV %s: %s", mmkv_path, exc)
             return accounts
 
         if len(raw) < 4:
@@ -136,13 +183,14 @@ class BinanceDecoder:
         kyc_name_val: Optional[str] = None
 
         for k, v in history:
-            cleaned_k = k.lower()
-            if "userid" in cleaned_k or "uid" in cleaned_k:
-                # Strip string length prefix if present
+            # Whole-word key match: "guid" is not a user id and "userName"/"nickName" is not a KYC name.
+            if _is_user_id_key(k):
                 val_str = self._extract_clean_string(v)
-                if val_str and val_str not in user_ids:
+                if val_str:
+                    if val_str in user_ids:
+                        user_ids.remove(val_str)  # written again later: the LAST write decides which is active
                     user_ids.append(val_str)
-            elif "kyc" in cleaned_k or "realname" in cleaned_k or "name" in cleaned_k:
+            elif _is_kyc_name_key(k):
                 kyc_name_val = self._extract_clean_string(v) or kyc_name_val
 
         if not user_ids:
@@ -212,7 +260,8 @@ class BinanceDecoder:
         try:
             with open(cache_path, "rb") as fh:
                 content = fh.read()
-        except Exception:
+        except Exception as exc:
+            logger.warning("could not read cache %s: %s", cache_path, exc)
             return orders, transfers
 
         decompressed_data = content
@@ -230,15 +279,16 @@ class BinanceDecoder:
             json_obj = json.loads(text)
         except Exception:
             # Fallback regex search for JSON inside body
-            m = re.search(r"\{.*\}", decompressed_data.decode("utf-8", errors="ignore"))
+            m = re.search(r"\{.*\}", decompressed_data.decode("utf-8", errors="ignore"), re.S)
             if not m:
                 return orders, transfers
             try:
                 json_obj = json.loads(m.group(0))
-            except Exception:
+            except Exception as exc:
+                logger.warning("cache %s holds no parseable JSON: %s", cache_path, exc)
                 return orders, transfers
 
-        data = json_obj.get("data", json_obj)
+        data = json_obj.get("data", json_obj) if isinstance(json_obj, dict) else json_obj
         if isinstance(data, list):
             items = data
         else:
@@ -261,18 +311,21 @@ class BinanceDecoder:
                     stat_enum = CEXP2POrderStatus.UNKNOWN
                 elif status_raw in [4, "COMPLETED"]:
                     stat_enum = CEXP2POrderStatus.COMPLETED_RELEASED
-                elif status_raw in [2, "CANCELLED"]:
+                elif status_raw in [2, "CANCELLED", "CANCELLED_BY_SYSTEM"]:
                     stat_enum = CEXP2POrderStatus.CANCELLED
-                elif status_raw in [5, "APPEALING"]:
+                elif status_raw in [5, "APPEALING", "IN_APPEAL"]:
                     stat_enum = CEXP2POrderStatus.APPEAL_DISPUTED
-                else:
+                elif str(status_raw).upper() in {"TRADING", "BUYER_PAYED", "DISTRIBUTING", "PENDING"}:
                     stat_enum = CEXP2POrderStatus.IN_ESCROW_PENDING
+                else:
+                    # An unlisted code is not "in escrow". (The numeric codes above are unverified against a real export.)
+                    stat_enum = CEXP2POrderStatus.UNKNOWN
 
-                asset = str(item.get("asset", "USDT"))
-                qty = float(item.get("amount") or item.get("notifyTokenAmount") or 0.0)
-                fiat_curr = str(item.get("fiatUnit", "INR"))
-                total_fiat = float(item.get("totalPrice", 0.0))
-                rate = float(item.get("unitPrice")) if item.get("unitPrice") else None
+                asset = str(item.get("asset") or "")          # absent = not recorded, never USDT by default
+                qty = _to_float(item.get("amount") or item.get("notifyTokenAmount"))
+                fiat_curr = str(item.get("fiatUnit") or "")   # absent = not recorded, never INR by default
+                total_fiat = _to_float(item.get("totalPrice"))
+                rate = _to_float(item.get("unitPrice")) if item.get("unitPrice") else None
 
                 seller_nick = item.get("sellerNickname")
                 seller_uid = item.get("sellerUserNo")
@@ -287,21 +340,16 @@ class BinanceDecoder:
                 counter_name = seller_name if t_type == "BUY" else (buyer_name if t_type == "SELL" else None)
 
                 # Extract counterparty payment method
-                pay_method = item.get("payMethod", {})
-                rail = pay_method.get("tradeMethodName", "UPI")
-                fields = pay_method.get("fields", {})
+                pay_method = item.get("payMethod")
+                if not isinstance(pay_method, dict):
+                    pay_method = {}
+                rail = pay_method.get("tradeMethodName") or None   # absent = not recorded, never "UPI" by default
+                fields = pay_method.get("fields")
+                if not isinstance(fields, dict):
+                    fields = {}
                 vpa = fields.get("upiId") or fields.get("vpa") or fields.get("accountNo")
 
-                create_ts = item.get("createTime", 0)
-                if create_ts:
-                    forensic_ts = (
-                        ForensicTimestamp.from_unix_milliseconds(create_ts)
-                        if create_ts > 10_000_000_000
-                        else ForensicTimestamp.from_unix_seconds(create_ts)
-                    )
-                    iso_created = forensic_ts.utc_iso8601
-                else:
-                    iso_created = ""  # not recorded: never substitute the time of analysis
+                iso_created = _ts_iso(item.get("createTime"))  # "" = not recorded; never the time of analysis
 
                 ev_state = EvidentiaryState(
                     existence=EvidentiaryExistence.OBSERVED,
@@ -391,8 +439,9 @@ class BinanceDecoder:
         phase3_payer_cbs_name: str,
     ) -> bool:
         """
-        Detects Triangulation / Third-Party P2P laundering by checking
-        whether CEX owner KYC name matches the Core Banking System payer name.
+        Returns True when the two names do NOT match. That is a LEAD for the examiner to check, not proof of
+        third-party payment: initials, name order, "Mohd"/"Mohammed" and middle names all produce a mismatch.
+        Returns False both when the names match and when either name is missing (cannot tell).
         """
         if not cex_owner_kyc_name or not phase3_payer_cbs_name:
             return False
@@ -413,10 +462,10 @@ class BinanceDecoder:
         payer_tokens = set(norm_payer.split())
 
         # If names share significant tokens, consider them matching
-        if cex_tokens and payer_tokens and (cex_tokens == payer_tokens or cex_tokens.issubset(payer_tokens)):
+        if cex_tokens and payer_tokens and (cex_tokens.issubset(payer_tokens) or payer_tokens.issubset(cex_tokens)):
             return False
 
-        # Names differ: third-party payment triangulation confirmed!
+        # Names differ: a lead worth checking, not a finding
         return True
 
     def parse_transfer_record(
@@ -435,14 +484,9 @@ class BinanceDecoder:
         if is_offchain_pay:
             order_id = str(transfer_dict.get("orderId") or transfer_dict.get("id") or "")
             receiver_uid = str(transfer_dict.get("receiverUid") or "")
-            amt = float(transfer_dict.get("amount", 0.0))
-            asset = str(transfer_dict.get("currency", "USDT"))
-            raw_ts = transfer_dict.get("transactionTime", 0)
-
-            if raw_ts > 10_000_000_000:
-                ts_iso = ForensicTimestamp.from_unix_milliseconds(raw_ts).utc_iso8601
-            else:
-                ts_iso = ""  # not recorded: never substitute the time of analysis
+            amt = _to_float(transfer_dict.get("amount"))
+            asset = str(transfer_dict.get("currency") or "")
+            ts_iso = _ts_iso(transfer_dict.get("transactionTime"))
 
             ev_state = EvidentiaryState(
                 existence=EvidentiaryExistence.OBSERVED,
@@ -467,19 +511,17 @@ class BinanceDecoder:
         else:
             txid = str(transfer_dict.get("txId") or transfer_dict.get("hash") or "")
             address = str(transfer_dict.get("address") or "")
-            amt = float(transfer_dict.get("amount", 0.0))
-            asset = str(transfer_dict.get("asset", "USDT"))
-            raw_network = str(transfer_dict.get("network", "TRX")).upper()
+            amt = _to_float(transfer_dict.get("amount"))
+            asset = str(transfer_dict.get("asset") or "")
+            raw_network = str(transfer_dict.get("network") or "").upper()   # absent = not recorded, never TRON by default
 
             network_str = "TRC20" if raw_network in ["TRX", "TRON", "TRC20"] else raw_network
-            raw_ts = transfer_dict.get("applyTime", 0)
-
-            if raw_ts > 10_000_000_000:
-                ts_iso = ForensicTimestamp.from_unix_milliseconds(raw_ts).utc_iso8601
-            else:
-                ts_iso = ""  # not recorded: never substitute the time of analysis
+            ts_iso = _ts_iso(transfer_dict.get("applyTime"))
 
             matched_web3_uid = lookup.get(address)
+            if matched_web3_uid is None and address.lower().startswith("0x"):
+                # EVM addresses are case-insensitive (checksum casing is only a typo guard)
+                matched_web3_uid = {k.lower(): v for k, v in lookup.items()}.get(address.lower())
 
             ev_state = EvidentiaryState(
                 existence=EvidentiaryExistence.OBSERVED,

@@ -6,6 +6,8 @@ Complies with Section 4 of Phase 4 Module 4.4 Specification.
 
 import hashlib
 import hmac
+import logging
+import unicodedata
 from typing import List, Tuple
 
 from cryptography.hazmat.backends import default_backend
@@ -16,6 +18,8 @@ from src.seedhunter.models import (
     HDDerivedAddressRecord,
 )
 from src.validators.address_validators import keccak_256
+
+logger = logging.getLogger(__name__)
 
 BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
@@ -86,6 +90,9 @@ def derive_master_seed_bip39(mnemonic: str, passphrase: str = "") -> bytes:
     Derives 64-byte binary master seed from mnemonic and optional passphrase
     using PBKDF2-HMAC-SHA512 with 2048 iterations.
     """
+    # BIP-39 requires NFKD normalisation of both strings; without it a non-ASCII passphrase gives a different seed.
+    mnemonic = unicodedata.normalize("NFKD", mnemonic)
+    passphrase = unicodedata.normalize("NFKD", passphrase)
     salt = b"mnemonic" + passphrase.encode("utf-8")
     return hashlib.pbkdf2_hmac("sha512", mnemonic.encode("utf-8"), salt, 2048, 64)
 
@@ -226,6 +233,10 @@ def derive_all_standard_addresses(
     """
     Derives standard Index 0 addresses across TRON, Ethereum/EVM, Bitcoin SegWit,
     Bitcoin Legacy, and Solana from a BIP-39 mnemonic seed phrase.
+
+    Only the first address of each account is derived: no match here does not mean the wallet was unused.
+    A network whose derivation fails (e.g. RIPEMD-160 missing from this OpenSSL build) is skipped with a
+    logged warning instead of aborting every other network.
     """
     seed_bytes = derive_master_seed_bip39(mnemonic, passphrase)
 
@@ -239,7 +250,11 @@ def derive_all_standard_addresses(
 
     records = []
     for network, path in configs:
-        addr = derive_hd_address(seed_bytes, network, path)
+        try:
+            addr = derive_hd_address(seed_bytes, network, path)
+        except (ValueError, TypeError) as exc:
+            logger.warning("derivation for %s failed: %s", network, exc)
+            continue
         records.append(
             HDDerivedAddressRecord(
                 seed_record_uid=seed_record_uid,

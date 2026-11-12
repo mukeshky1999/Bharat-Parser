@@ -6,6 +6,7 @@ USDT-TRC20 into Monero (XMR), revealing true destination stealth addresses and s
 """
 
 import json
+import logging
 import os
 import re
 import struct
@@ -29,9 +30,17 @@ from src.web3.models import (
     Web3WalletAccountRecord,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class CakeWalletDecoder:
-    """Decodes Cake Wallet Flutter Hive boxes and Monero wallet state."""
+    """Decodes Cake Wallet Flutter Hive boxes and Monero wallet state.
+
+    UNVERIFIED FORMAT: the frame layout assumed in `_parse_hive_binary_frames` (JSON values in simple length
+    frames) has not been checked against a real Cake Wallet Hive box; real boxes store typed binary objects.
+    Until a real sample confirms it, treat every record from this decoder as a lead, and do not wire it into
+    a legal output (review R-20).
+    """
 
     def __init__(self) -> None:
         self.supported_providers = ("FixedFloat", "ChangeNow", "SideShift", "Trocador", "Exolix")
@@ -65,7 +74,8 @@ class CakeWalletDecoder:
             try:
                 with open(file_path, "rb") as fh:
                     raw_bytes = fh.read()
-            except Exception:
+            except Exception as exc:
+                logger.warning("could not read %s: %s", file_path, exc)
                 continue
 
             # Method 1: Structured binary frame parsing
@@ -77,29 +87,38 @@ class CakeWalletDecoder:
             # Deduplicate by trade_id
             seen_ids = set()
             combined_trades = []
+            carved_ids = set()
             for t in parsed_trades + carved_trades:
                 tid = t.get("trade_id") or t.get("id") or str(t.get("payout_address", ""))
                 if tid and tid not in seen_ids:
                     seen_ids.add(tid)
                     combined_trades.append(t)
+                    if t in carved_trades and t not in parsed_trades:
+                        carved_ids.add(tid)
 
             for t in combined_trades:
+                this_tid = t.get("trade_id") or t.get("id") or str(t.get("payout_address", ""))
                 trade_id = str(t.get("trade_id") or t.get("id") or "")
                 provider = str(t.get("provider") or "Unknown Swap Aggregator")
-                from_curr = str(t.get("from_currency") or t.get("from") or "USDTTRC20")
-                to_curr = str(t.get("to_currency") or t.get("to") or "XMR")
-                in_amt = str(t.get("input_amount") or t.get("amount") or "0.0")
+                # Not in the record = not recorded. The swap pair and amount are never assumed.
+                from_curr = str(t.get("from_currency") or t.get("from") or "")
+                to_curr = str(t.get("to_currency") or t.get("to") or "")
+                in_amt = str(t.get("input_amount") or t.get("amount") or "")
                 out_amt = str(t.get("output_amount") or "") if "output_amount" in t else None
                 payout_addr = str(t.get("payout_address") or t.get("payoutAddress") or "")
                 in_txid = str(t.get("input_txid") or t.get("inputTxId") or "") or None
                 out_txid = str(t.get("output_txid") or t.get("outputTxId") or "") or None
                 raw_ts = t.get("created_at") or t.get("createdAt") or 0
 
-                ts_val = int(raw_ts) if raw_ts else 0
-                if ts_val > 10_000_000_000:
-                    forensic_ts = ForensicTimestamp.from_unix_milliseconds(ts_val)
-                else:
-                    forensic_ts = ForensicTimestamp.from_unix_seconds(ts_val)
+                forensic_ts = None
+                try:
+                    ts_val = int(float(raw_ts)) if raw_ts else 0
+                    if ts_val > 10_000_000_000:
+                        forensic_ts = ForensicTimestamp.from_unix_milliseconds(ts_val)
+                    elif ts_val > 0:
+                        forensic_ts = ForensicTimestamp.from_unix_seconds(ts_val)
+                except (ValueError, TypeError, OverflowError, OSError) as exc:
+                    logger.warning("unreadable created_at %r in %s: %s", raw_ts, file_path, exc)
 
                 ev_state = EvidentiaryState(
                     existence=EvidentiaryExistence.OBSERVED,
@@ -121,7 +140,10 @@ class CakeWalletDecoder:
                     destination_payout_address=payout_addr,
                     output_payout_txid=out_txid,
                     swap_timestamp=forensic_ts,
-                    recovery_classification=ResidualConfidence.ORIGINAL_RECORD,
+                    recovery_classification=(
+                        ResidualConfidence.RESIDUAL_RECORD if this_tid in carved_ids
+                        else ResidualConfidence.ORIGINAL_RECORD
+                    ),
                     evidentiary_state=ev_state,
                 )
                 swaps.append(swap_rec)
@@ -156,8 +178,8 @@ class CakeWalletDecoder:
                         trade_obj = json.loads(val_bytes.decode("utf-8"))
                         if isinstance(trade_obj, dict):
                             trades.append(trade_obj)
-                    except Exception:
-                        continue
+                    except (ValueError, UnicodeDecodeError):
+                        logger.debug('frame at %d is not JSON', offset)  # was `continue` without advancing: an endless loop on the first non-JSON frame
                 offset += 4 + frame_len
             except Exception:
                 offset += 1

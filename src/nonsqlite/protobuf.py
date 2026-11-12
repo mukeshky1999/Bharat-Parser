@@ -11,13 +11,18 @@ from src.core.timestamps import ForensicTimestamp
 from src.nonsqlite.varint import decode_le_varint, decode_zigzag_64
 
 
-def decode_raw_protobuf(pb_buf: bytes) -> Tuple[Dict[str, Any], bool]:
+MAX_NESTING_DEPTH = 24
+
+
+def decode_raw_protobuf(pb_buf: bytes, _depth: int = 0) -> Tuple[Dict[str, Any], bool]:
     """
     Recursively decodes a raw Protocol Buffers byte slice without .proto schema definitions.
     Returns `(decoded_dict, is_valid_protobuf)`.
     """
     if not pb_buf:
         return {}, True
+    if _depth > MAX_NESTING_DEPTH:  # hostile or random data nests without end: stop instead of recursing to a crash
+        return {}, False
 
     pos = 0
     buf_len = len(pb_buf)
@@ -138,9 +143,17 @@ def decode_raw_protobuf(pb_buf: bytes) -> Tuple[Dict[str, Any], bool]:
             # 3-Way Disambiguation Cascade:
             # Check 1: Nested Protobuf Object?
             if sub_len > 0:
-                nested_dict, is_nested_valid = decode_raw_protobuf(sub_slice)
+                nested_dict, is_nested_valid = decode_raw_protobuf(sub_slice, _depth + 1)
                 if is_nested_valid and len(nested_dict) > 0:
                     field_info["nested_object"] = nested_dict
+                    # Printable text can also parse as a message by chance: keep both readings, do not choose silently.
+                    try:
+                        as_text = sub_slice.decode("utf-8")
+                        if as_text and sum(1 for c in as_text if c.isprintable() or c in "\r\n\t") / len(as_text) >= 0.90:
+                            field_info["value"] = as_text
+                            field_info["ambiguous_text_or_message"] = True
+                    except UnicodeDecodeError:
+                        field_info["text_reading"] = "not valid UTF-8"
                     fields_dict[field_key] = field_info
                     continue
 

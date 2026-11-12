@@ -24,6 +24,7 @@ class Web3AccountControlMode(str, Enum):
     FULL_PRIVATE_KEY_OR_SEED = "FULL_PRIVATE_KEY_OR_SEED"
     WATCH_ONLY_OBSERVED_WALLET = "WATCH_ONLY_OBSERVED_WALLET"
     PAIRED_HARDWARE_COLD_WALLET = "PAIRED_HARDWARE_COLD_WALLET"
+    UNKNOWN = "UNKNOWN"  # the record does not say who holds the keys
 
 
 @unique
@@ -37,6 +38,7 @@ class BlockchainNetwork(str, Enum):
     SOLANA = "SOLANA"
     TON_NETWORK = "TON_NETWORK"
     MONERO_XMR = "MONERO_XMR"
+    UNKNOWN = "UNKNOWN"  # the record does not name the chain
 
 
 @unique
@@ -124,9 +126,7 @@ class Web3CrossChainSwapRecord:
     output_amount_decimal: Optional[str] = None
     destination_payout_address: str = ""
     output_payout_txid: Optional[str] = None
-    swap_timestamp: ForensicTimestamp = field(
-        default_factory=lambda: ForensicTimestamp.from_unix_seconds(0)
-    )
+    swap_timestamp: Optional[ForensicTimestamp] = None  # None = not recorded (never 1970-01-01)
     recovery_classification: ResidualConfidence = ResidualConfidence.ORIGINAL_RECORD
     evidentiary_state: EvidentiaryState = field(
         default_factory=lambda: EvidentiaryState(

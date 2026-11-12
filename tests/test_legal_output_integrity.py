@@ -589,3 +589,83 @@ def test_whatsapp_direction_unknown_when_from_me_missing():
     from src.whatsapp.models import MessageDirection
 
     assert MessageDirection.UNKNOWN.value == "UNKNOWN"
+
+
+# ---- R-20: modules read in the last pass ----
+def test_cakewallet_non_json_frame_does_not_hang_and_nothing_is_invented(tmp_path):
+    import struct
+    from src.web3.cakewallet import CakeWalletDecoder
+    key = b"k"
+    val = b"not json at all"
+    frame = struct.pack(">I", 1 + len(key) + 2 + len(val) + 4) + struct.pack(">B", len(key)) + key + struct.pack(">H", len(val)) + val
+    p = tmp_path / "trades.hive"
+    p.write_bytes(frame * 3 + b'{"trade_id": "T1", "provider": "FixedFloat"}')
+    out = CakeWalletDecoder().decode_sandbox(str(p))
+    assert len(out["swaps"]) == 1
+    sw = out["swaps"][0]
+    assert sw.input_chain_and_asset == "" and sw.output_chain_and_asset == ""
+    assert sw.input_amount_decimal == ""
+    assert sw.swap_timestamp is None
+
+
+def test_trustwallet_missing_coin_and_type_are_unknown(tmp_path):
+    import json
+    from src.web3.trustwallet import TrustWalletDecoder
+    from src.web3.models import BlockchainNetwork, Web3AccountControlMode
+    p = tmp_path / "ks.json"
+    p.write_text(json.dumps({"activeAccounts": [{"address": "0xabc"}]}))
+    acc = TrustWalletDecoder().decode_sandbox(str(p))["accounts"][0]
+    assert acc.blockchain_network == BlockchainNetwork.UNKNOWN
+    assert acc.account_control_mode == Web3AccountControlMode.UNKNOWN
+
+
+def test_binance_key_matching_is_whole_word_and_no_default_asset(tmp_path):
+    from src.cex.binance import _is_user_id_key, _is_kyc_name_key, BinanceDecoder, VPA_REGEX
+    assert _is_user_id_key("userId") and _is_user_id_key("uid")
+    assert not _is_user_id_key("guid") and not _is_user_id_key("deviceUid")
+    assert _is_kyc_name_key("kycRealName")
+    assert not _is_kyc_name_key("userName") and not _is_kyc_name_key("nickName")
+    assert not VPA_REGEX.findall("mail me at john@gmail.com")
+    assert VPA_REGEX.findall("pay john@okaxis now")
+    t = BinanceDecoder().parse_transfer_record({"txId": "x", "address": "T1"})
+    assert t.asset_or_currency == "" and t.network_or_rail == "" and t.transfer_utc_iso == ""
+    t2 = BinanceDecoder().parse_transfer_record({"id": "1", "transactionTime": 1700000000}, is_offchain_pay=True)
+    assert t2.transfer_utc_iso.startswith("2023-11-1")  # a seconds timestamp is kept, not dropped
+
+
+def test_tl_decoders_report_truncation_instead_of_zero():
+    from src.telegram_signal.tl_deserializer import decode_tl_message
+    r = decode_tl_message(b"\x01\x02\x03\x04\x00\x00\x00\x00\x07\x00\x00\x00")
+    assert r["date"] is None
+    assert r["parse_complete"] is False
+
+
+def test_protobuf_depth_is_bounded_and_segb_bad_date_does_not_crash():
+    from src.nonsqlite.protobuf import decode_raw_protobuf
+    buf = b"\x08\x01"
+    for _ in range(200):
+        buf = b"\x0a" + bytes([len(buf)]) + buf if len(buf) < 128 else buf
+    decode_raw_protobuf(b"\x0a\x02" * 3000)  # must return, not raise RecursionError
+    from src.nonsqlite.segb import _cocoa_to_iso
+    assert _cocoa_to_iso(float("nan")) == "" and _cocoa_to_iso(1e30) == "" and _cocoa_to_iso(-5) == ""
+
+
+def test_mmkv_encrypted_without_key_returns_nothing(tmp_path):
+    import struct
+    from src.nonsqlite.mmkv import MMKVDecoder
+    m = tmp_path / "store"
+    m.write_bytes(struct.pack("<I", 20) + bytes(range(1, 40)))
+    (tmp_path / "store.crc").write_bytes(b"\x00" * 12 + b"\x01" * 16)
+    assert MMKVDecoder().decode_mmkv_file(m) == []
+
+
+def test_bip39_seed_uses_nfkd_and_scrypt_large_n_is_accepted():
+    from src.seedhunter.hd_derivator import derive_master_seed_bip39
+    assert derive_master_seed_bip39("abandon", "é") == derive_master_seed_bip39("abandon", "é")
+    import json
+    from src.seedhunter.vault_unwrapper import unwrap_web3_keystore_v3
+    ks = {"crypto": {"kdf": "scrypt", "kdfparams": {"n": 262144, "r": 8, "p": 1, "salt": "00"}, "ciphertext": "00", "mac": "00"}}
+    ok, _, meta = unwrap_web3_keystore_v3(json.dumps(ks), "pw")
+    assert ok is False and "MAC" in meta.get("error", "")  # reached the MAC check instead of failing on memory
+    ks["crypto"]["kdfparams"]["n"] = 1 << 30
+    assert "Refusing" in unwrap_web3_keystore_v3(json.dumps(ks), "pw")[2]["error"]

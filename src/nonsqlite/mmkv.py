@@ -76,7 +76,7 @@ def disambiguate_mmkv_value(val_bytes: bytes) -> Tuple[str, str]:
             v, v_len = decode_le_varint(val_bytes, 0)
             if v_len == L:
                 if L == 1 and v in (0, 1):
-                    desc = f"{v} (false)" if v == 0 else f"{v} (true)"
+                    desc = f"{v} (false, if the field is a boolean)" if v == 0 else f"{v} (true, if the field is a boolean)"
                 else:
                     zigzag = decode_zigzag_64(v)
                     desc = f"{v} (zigzag: {zigzag})"
@@ -131,7 +131,12 @@ class MMKVDecoder:
             crc_data = c_path.read_bytes()
             iv = crc_data[12:28]
             # If IV is non-zero and start of MMKV is high entropy, decrypt with AES-128-CFB
-            if any(b != 0 for b in iv) and crypt_key_16 and len(crypt_key_16) == 16:
+            if any(b != 0 for b in iv):
+                # A non-zero IV means the store is encrypted. Parsing ciphertext as if it were plaintext
+                # produces junk records, so without a working key nothing is returned (review R-20).
+                if not (crypt_key_16 and len(crypt_key_16) == 16):
+                    logger.warning("MMKV %s is encrypted (non-zero IV in .crc) and no 16-byte key was supplied: not decoded", m_path.name)
+                    return []
                 try:
                     cipher = Cipher(algorithms.AES(crypt_key_16), modes.CFB(iv))
                     decryptor = cipher.decryptor()
@@ -139,7 +144,8 @@ class MMKVDecoder:
                     file_bytes = file_bytes[:4] + dec_payload
                     self.is_encrypted = True
                 except Exception as exc:
-                    logger.debug("Failed AES-128-CFB decryption of MMKV file: %s", exc)
+                    logger.warning("AES-128-CFB decryption of MMKV %s failed: %s", m_path.name, exc)
+                    return []
 
         actual_size = struct.unpack("<I", file_bytes[:4])[0]
         # Sanity check actual_size

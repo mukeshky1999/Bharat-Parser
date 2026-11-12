@@ -6,6 +6,7 @@ alongside derivation paths and extended public keys (xpub/zpub).
 """
 
 import json
+import logging
 import os
 from typing import Any, Dict, List, Optional
 
@@ -35,6 +36,8 @@ SLIP0044_COIN_MAP = {
     501: BlockchainNetwork.SOLANA,
     607: BlockchainNetwork.TON_NETWORK,
 }
+
+logger = logging.getLogger(__name__)
 
 
 class TrustWalletDecoder:
@@ -71,25 +74,41 @@ class TrustWalletDecoder:
             try:
                 with open(file_path, "r", encoding="utf-8") as fh:
                     keystore_data = json.load(fh)
-            except Exception:
+            except Exception as exc:
+                logger.warning("could not read keystore %s: %s", file_path, exc)
+                continue
+            if not isinstance(keystore_data, dict):
                 continue
 
             wallet_id = keystore_data.get("id", "")
-            wallet_name = keystore_data.get("name", "Trust Wallet")
-            wallet_type = str(keystore_data.get("type", "mnemonic")).lower()
+            wallet_name = keystore_data.get("name") or ""
+            wallet_type = str(keystore_data.get("type") or "").lower()
 
-            mode = Web3AccountControlMode.FULL_PRIVATE_KEY_OR_SEED
+            # No "type" in the file means the control mode is not known, not "the app holds the seed".
             if wallet_type in ["address", "watch-only", "watch_only"]:
                 mode = Web3AccountControlMode.WATCH_ONLY_OBSERVED_WALLET
+            elif wallet_type:
+                mode = Web3AccountControlMode.FULL_PRIVATE_KEY_OR_SEED
+            else:
+                mode = Web3AccountControlMode.UNKNOWN
 
             active_accounts = keystore_data.get("activeAccounts", [])
+            if not isinstance(active_accounts, list):
+                continue
             for item in active_accounts:
-                coin_type = int(item.get("coin", 60))
+                if not isinstance(item, dict):
+                    continue
                 raw_addr = str(item.get("address", "")).strip()
                 derivation_path = item.get("derivationPath")
                 xpub = item.get("extendedPublicKey")
 
-                network = SLIP0044_COIN_MAP.get(coin_type, BlockchainNetwork.ETHEREUM_ERC20)
+                # A missing or unlisted coin type is an unknown chain, not Ethereum.
+                try:
+                    coin_type = int(item["coin"])
+                    network = SLIP0044_COIN_MAP.get(coin_type, BlockchainNetwork.UNKNOWN)
+                except (KeyError, ValueError, TypeError):
+                    coin_type = -1
+                    network = BlockchainNetwork.UNKNOWN
 
                 hex41_repr: Optional[str] = None
                 canon_addr = raw_addr

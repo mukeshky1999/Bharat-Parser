@@ -34,8 +34,10 @@ def unwrap_web3_keystore_v3(
     if not isinstance(crypto, dict):
         return False, None, {"error": "Missing crypto section"}
 
-    kdf = crypto.get("kdf", "").lower()
-    kdfparams = crypto.get("kdfparams", {})
+    kdf = str(crypto.get("kdf") or "").lower()
+    kdfparams = crypto.get("kdfparams") or {}
+    if not isinstance(kdfparams, dict):
+        return False, None, {"error": "Malformed kdfparams"}
     salt_hex = kdfparams.get("salt", "")
     try:
         salt = bytes.fromhex(salt_hex)
@@ -45,6 +47,8 @@ def unwrap_web3_keystore_v3(
     # 1. Key Derivation (32-byte derivedKey)
     if kdf == "pbkdf2":
         iterations = int(kdfparams.get("c", 262144))
+        if not (1 <= iterations <= 10_000_000):  # the file is untrusted: do not let it set an unbounded run time
+            return False, None, {"error": f"Refusing PBKDF2 iteration count {iterations}"}
         derived_key = hashlib.pbkdf2_hmac(
             "sha256", candidate_password.encode("utf-8"), salt, iterations, 32
         )
@@ -52,15 +56,20 @@ def unwrap_web3_keystore_v3(
         n = int(kdfparams.get("n", 8192))
         r = int(kdfparams.get("r", 8))
         p = int(kdfparams.get("p", 1))
-        derived_key = hashlib.scrypt(
-            candidate_password.encode("utf-8"),
-            salt=salt,
-            n=n,
-            r=r,
-            p=p,
-            maxmem=0,
-            dklen=32,
-        )
+        if not (2 <= n <= 1 << 22) or not (1 <= r <= 64) or not (1 <= p <= 16):
+            return False, None, {"error": f"Refusing scrypt parameters n={n} r={r} p={p}"}
+        try:
+            derived_key = hashlib.scrypt(
+                candidate_password.encode("utf-8"),
+                salt=salt,
+                n=n,
+                r=r,
+                p=p,
+                maxmem=2 * 128 * r * (n + p + 2),  # the default 32 MB limit rejects the real n=262144 keystores
+                dklen=32,
+            )
+        except (ValueError, MemoryError) as exc:
+            return False, None, {"error": f"scrypt failed: {exc}"}
     else:
         return False, None, {"error": f"Unsupported KDF: {kdf}"}
 

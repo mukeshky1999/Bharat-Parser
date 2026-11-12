@@ -32,6 +32,17 @@ def _extract_event_utc(d: Any) -> Optional[str]:
     return None
 
 
+def _cocoa_to_iso(cocoa_ts: float) -> str:
+    """UTC ISO-8601 for a Cocoa timestamp, or '' when the value is not a plausible date (never raises)."""
+    try:
+        if not (400000000.0 <= float(cocoa_ts) <= 1200000000.0):
+            return ""
+        dt = datetime.fromtimestamp(float(cocoa_ts) + 978307200.0, tz=timezone.utc)
+        return dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    except (ValueError, OverflowError, OSError):
+        return ""
+
+
 class SEGBDecoder:
     """
     Decodes Apple Biome SEGB (v1 & v2) binary telemetry streams.
@@ -160,9 +171,7 @@ class SEGBDecoder:
             raw_payload = data[payload_start_abs:payload_end_abs]
 
             # Convert Apple Cocoa timestamp to UTC ISO-8601 (Unix = Cocoa + 978307200)
-            unix_ts = cocoa_ts + 978307200.0
-            dt = datetime.fromtimestamp(unix_ts, tz=timezone.utc)
-            write_utc_iso = dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            write_utc_iso = _cocoa_to_iso(cocoa_ts)
 
             # Check if payload was zeroed out (state 3/4 deletion zeroing)
             is_zeroed = (len(raw_payload) == 0) or all(b == 0 for b in raw_payload)
@@ -201,7 +210,7 @@ class SEGBDecoder:
                     recovery_classification=classification,
                     segb_write_cocoa_raw=cocoa_ts,
                     segb_write_utc_iso=write_utc_iso,
-                    payload_event_utc_iso=event_utc or write_utc_iso,
+                    payload_event_utc_iso=event_utc,  # None when the payload carries no time; the write time is a separate field
                     decoded_protobuf_json=pb_json,
                     payload_byte_offset=payload_start_abs,
                 )
@@ -249,9 +258,7 @@ class SEGBDecoder:
             raw_payload = data[payload_start_abs:payload_end_abs]
 
             # Convert Cocoa timestamp to UTC ISO-8601
-            unix_ts = cocoa_ts1 + 978307200.0
-            dt = datetime.fromtimestamp(unix_ts, tz=timezone.utc)
-            write_utc_iso = dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            write_utc_iso = _cocoa_to_iso(cocoa_ts1)  # '' when out of range: v1 has no range check, garbage must not crash or be shown as a date
 
             is_zeroed = (len(raw_payload) == 0) or all(b == 0 for b in raw_payload)
 
@@ -288,7 +295,7 @@ class SEGBDecoder:
                     recovery_classification=classification,
                     segb_write_cocoa_raw=cocoa_ts1,
                     segb_write_utc_iso=write_utc_iso,
-                    payload_event_utc_iso=event_utc or write_utc_iso,
+                    payload_event_utc_iso=event_utc,  # None when the payload carries no time; the write time is a separate field
                     decoded_protobuf_json=pb_json,
                     payload_byte_offset=payload_start_abs,
                 )

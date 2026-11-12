@@ -107,3 +107,6 @@ R-18 (Binance P2P defaults), R-19 (laundering-chain correlator), X-14 (direction
 U-07 (UI re-invented direction, provenance, case particulars and labels), U-08 (CSV export truncation and formulas), T-01.
 Python: 508 passed. TypeScript: store, CSV and client suites pass; `tsc --noEmit` clean.
 Open: X-13, U-01..U-06 (redesign), Q-1 amount unit, R-16 block CRC, L-08, X-12. Unread modules are listed in the coverage statement.
+
+### Phase 1d: unread modules (2026-11-12). See `REVIEW_FINDINGS_2.md` section 7
+Fixed with regression tests: R-20a..R-20f. Python: 515 passed. Open: Hive box format unverified, Telegram date 0 in `telegram_decoder.py`.

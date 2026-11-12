@@ -20,6 +20,7 @@ class TLStreamReader:
         self.data = data
         self.length = len(data)
         self.cursor = 0
+        self.truncated = False  # set when a read ran past the end: the value returned was NOT in the data
 
     def remaining(self) -> int:
         """Returns the number of unconsumed bytes."""
@@ -28,6 +29,7 @@ class TLStreamReader:
     def read_int32(self) -> int:
         """Reads a 32-bit signed little-endian integer."""
         if self.cursor + 4 > self.length:
+            self.truncated = True
             return 0
         val = struct.unpack_from("<i", self.data, self.cursor)[0]
         self.cursor += 4
@@ -36,6 +38,7 @@ class TLStreamReader:
     def read_uint32(self) -> int:
         """Reads a 32-bit unsigned little-endian integer."""
         if self.cursor + 4 > self.length:
+            self.truncated = True
             return 0
         val = struct.unpack_from("<I", self.data, self.cursor)[0]
         self.cursor += 4
@@ -44,6 +47,7 @@ class TLStreamReader:
     def read_int64(self) -> int:
         """Reads a 64-bit signed little-endian integer."""
         if self.cursor + 8 > self.length:
+            self.truncated = True
             return 0
         val = struct.unpack_from("<q", self.data, self.cursor)[0]
         self.cursor += 8
@@ -52,6 +56,7 @@ class TLStreamReader:
     def read_uint64(self) -> int:
         """Reads a 64-bit unsigned little-endian integer."""
         if self.cursor + 8 > self.length:
+            self.truncated = True
             return 0
         val = struct.unpack_from("<Q", self.data, self.cursor)[0]
         self.cursor += 8
@@ -60,6 +65,7 @@ class TLStreamReader:
     def read_double(self) -> float:
         """Reads an IEEE 754 64-bit little-endian float."""
         if self.cursor + 8 > self.length:
+            self.truncated = True
             return 0.0
         val = struct.unpack_from("<d", self.data, self.cursor)[0]
         self.cursor += 8
@@ -82,6 +88,8 @@ class TLStreamReader:
             total_unpadded = 1 + str_len
             bytes_to_advance = math.ceil(total_unpadded / 4.0) * 4
             self.cursor += int(bytes_to_advance)
+            if end > self.length:
+                self.truncated = True
             if start <= self.length:
                 return self.data[start:min(end, self.length)]
             return b""
@@ -99,11 +107,14 @@ class TLStreamReader:
             total_unpadded = 4 + str_len
             bytes_to_advance = math.ceil(total_unpadded / 4.0) * 4
             self.cursor += int(bytes_to_advance)
+            if end > self.length:
+                self.truncated = True
             if start <= self.length:
                 return self.data[start:min(end, self.length)]
             return b""
         else:
             self.cursor += 4
+            self.truncated = True
             return b""
 
     def read_tl_string(self) -> str:
@@ -153,6 +164,8 @@ def decode_tl_user(blob: bytes) -> Dict[str, Any]:
         "is_scam": False,
         "is_fake": False,
         "is_premium": False,
+        "parse_complete": False,
+        "heuristic_fields": [],  # fields filled by the string scan, not read from a known position: leads only
     }
 
     if not blob or len(blob) < 8:
@@ -199,10 +212,13 @@ def decode_tl_user(blob: bytes) -> Dict[str, Any]:
             clean = s.strip()
             if not res["phone"] and clean.isdigit() and len(clean) in (10, 11, 12, 13, 14, 15):
                 res["phone"] = clean
+                res["heuristic_fields"].append("phone")
             elif not res["username"] and len(clean) >= 4 and clean.replace("_", "").isalnum() and not clean.isdigit():
                 if clean not in (res["first_name"], res["last_name"]):
                     res["username"] = clean
+                    res["heuristic_fields"].append("username")
 
+    res["parse_complete"] = not reader.truncated
     return res
 
 
@@ -222,6 +238,8 @@ def decode_tl_message(blob: bytes) -> Dict[str, Any]:
         "reply_to_msg_id": None,
         "media_metadata": None,
         "inline_buttons": None,
+        "parse_complete": False,
+        "heuristic_fields": [],
     }
 
     if not blob or len(blob) < 8:
@@ -231,7 +249,7 @@ def decode_tl_message(blob: bytes) -> Dict[str, Any]:
     constructor_id = reader.read_uint32()
     flags = reader.read_uint32()
     msg_id = reader.read_int32()
-    res["msg_id"] = msg_id
+    res["msg_id"] = None if reader.truncated else msg_id
 
     # Optional from_id (Bit 8)
     if flags & (1 << 8):
@@ -265,7 +283,9 @@ def decode_tl_message(blob: bytes) -> Dict[str, Any]:
         res["reply_to_msg_id"] = reader.read_int32()
 
     # Message Date
-    res["date"] = reader.read_int32()
+    date_val = reader.read_int32()
+    # A date of 0 or one read past the end of the blob is "not recorded", not 1 January 1970.
+    res["date"] = date_val if (date_val > 0 and not reader.truncated) else None
 
     # Message Text
     if reader.remaining() > 0:
@@ -291,7 +311,9 @@ def decode_tl_message(blob: bytes) -> Dict[str, Any]:
         if strings:
             # Pick longest string as message text candidate
             res["message_text"] = max(strings, key=len)
+            res["heuristic_fields"].append("message_text")
 
+    res["parse_complete"] = not reader.truncated
     return res
 
 

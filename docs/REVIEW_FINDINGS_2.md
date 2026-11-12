@@ -305,3 +305,18 @@ Not read: `src/nonsqlite/{mmkv,segb,protobuf}`, `src/telegram_signal/tl_deserial
 the rest of `src/cex/binance.py` (withdrawal and deposit paths), `src/seedhunter/{hd_derivator, vault_unwrapper internals}`,
 and the layout code of the React views (only data handling, labels and exports were read). None of the unread modules is
 called by the product today, so a defect there cannot reach an output until Phase 4 wires it; each is read before it is wired.
+
+## 7. The previously unread modules (2026-11-12)
+
+All nine modules listed as "not read" in section 6 were then read line by line.
+
+| ID | Where | Finding | Status |
+|---|---|---|---|
+| R-20a | `src/web3/cakewallet.py` | `continue` inside the frame loop without advancing the offset: an endless loop on the first frame whose value is not JSON; swap pair defaulted to USDT-TRC20 to XMR and amount to "0.0"; a missing time became 1970-01-01; carved JSON was labelled ORIGINAL_RECORD; read errors swallowed. The assumed Hive frame layout is unverified against a real box | FIXED (all but the format, which is documented as UNVERIFIED in the class docstring; do not wire until a real sample confirms it) |
+| R-20b | `src/web3/trustwallet.py` | A keystore with no `coin` was treated as Ethereum, a missing `type` as "app holds the seed", non-dict JSON crashed | FIXED (`UNKNOWN` network / control mode) |
+| R-20c | `src/cex/binance.py` | KYC name = the last MMKV key containing "name" (so "userName", "nickName"); user id matched "guid"; asset, fiat currency, rail and network defaulted to USDT / INR / UPI / TRON; second-resolution timestamps dropped; unlisted order status became "in escrow"; an e-mail address was extracted as a VPA; name mismatch reported as "triangulation confirmed" | FIXED (whole-word key match, last write wins, nothing defaulted, mismatch documented as a lead) |
+| R-20d | `src/nonsqlite/{mmkv,segb,protobuf}.py` | Encrypted MMKV without a key was parsed as plaintext (junk records); SEGB v1 had no date range check (crash on garbage), and the write time was shown as the event time; protobuf nesting was unbounded and printable text that also parsed as a message was silently read as a message | FIXED (no key = no records and a warning; blank date; depth limit 24; both readings kept with `ambiguous_text_or_message`) |
+| R-20e | `src/telegram_signal/tl_deserializer.py` | A read past the end of the blob returned 0, so a truncated message got id 0 and date 1970; the string scan could supply a phone, username or message text with no indication | FIXED (`parse_complete`, `heuristic_fields`, date None). `telegram_decoder.py` still turns a missing date into 0: OPEN (fix when wired) |
+| R-20f | `src/seedhunter/hd_derivator.py`, `vault_unwrapper.py` | BIP-39 input was not NFKD-normalised (wrong seed for non-ASCII passphrases); one missing RIPEMD-160 aborted every network; scrypt with real parameters (n=262144) raised on the default memory limit; the keystore set its own unbounded work factor | FIXED. Only index 0 of each account is derived, so no match does not mean no activity (documented) |
+
+Coverage: every file under `src/` that the plan listed as unread has now been read. The layout code of the React views is replaced by the redesign, not reviewed separately.
