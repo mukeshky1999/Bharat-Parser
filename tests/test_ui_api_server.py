@@ -359,6 +359,7 @@ class TestUIAPIServer(unittest.TestCase):
             server._ingest_lock._locked = False
 
         # Test 409 on benchmark lock
+        os.environ["BHARAT_ENABLE_BENCHMARK"] = "1"
         server._benchmark_lock._locked = True
         try:
             with self.assertRaises(HTTPException) as ctx:
@@ -370,6 +371,7 @@ class TestUIAPIServer(unittest.TestCase):
             self.assertIn("Conflict", ctx.exception.detail)
         finally:
             server._benchmark_lock._locked = False
+            os.environ.pop("BHARAT_ENABLE_BENCHMARK", None)
 
         # Test 412 Precondition Failed when no case is loaded
         server._case_state["loaded"] = False

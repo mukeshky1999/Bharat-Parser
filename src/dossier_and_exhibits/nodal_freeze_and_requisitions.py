@@ -12,6 +12,7 @@ import os
 from typing import Any, Optional
 
 from src.dossier_and_exhibits.models import (
+    ist_now_str,
     CryptoFreezeEntry,
     MuleTransactionEntry,
     NodalAgencyTarget,
@@ -94,7 +95,7 @@ class NodalFreezeExporter:
                     unique_utrs.add(t.utr_or_rrn_12_digit)
 
         sha256_hex = self._compute_sha256(csv_path)
-        now_ist = datetime.now().strftime("%Y-%m-%d %H:%M:%S IST (+05:30)")
+        now_ist = ist_now_str()
 
         record = NodalFreezePacketRecord(
             target_agency_or_portal=NodalAgencyTarget.I4C_NCRP_1930_CFCFRMS_BANK_LIEN,
@@ -152,7 +153,7 @@ class NodalFreezeExporter:
                     crypto_sums.append(e.fiat_or_token_balance)
 
         sha256_hex = self._compute_sha256(csv_path)
-        now_ist = datetime.now().strftime("%Y-%m-%d %H:%M:%S IST (+05:30)")
+        now_ist = ist_now_str()
 
         summary = ", ".join(crypto_sums) if crypto_sums else "Multiple Crypto Assets"
         record = NodalFreezePacketRecord(
@@ -197,17 +198,17 @@ class Section94BnssRequisitionDrafter:
             if pfx in self.BANK_IFSC_MAP:
                 return self.BANK_IFSC_MAP[pfx]
 
+        # An Indian mobile number does not identify its operator (number portability), and a cell id
+        # prefix is not proof either. Never guess the recipient: the examiner must name it.
         cat = lead.get("category")
         if cat == "TELECOM_TSP_NODAL":
-            if "405-86" in str(lead.get("cell_tower_id", "")) or str(lead.get("msisdn", "")).startswith("+919"):
-                return "Reliance Jio Infocomm Ltd."
-            return "Telecom Service Provider"
+            return "Telecom Service Provider (OPERATOR TO BE CONFIRMED BY IO)"
         if cat == "CRYPTO_CEX_OR_SWAP_COMPLIANCE":
-            return "Centralized Exchange Compliance"
+            return "Centralized Exchange Compliance (EXCHANGE TO BE CONFIRMED BY IO)"
         if cat == "HYPERLOCAL_DELIVERY_OR_RIDE_NODAL":
-            return "Hyperlocal Service Provider"
+            return "Hyperlocal Service Provider (PROVIDER TO BE CONFIRMED BY IO)"
 
-        return "Nodal Intermediary"
+        return "Nodal Intermediary (RECIPIENT TO BE CONFIRMED BY IO)"
 
     def resolve_category(self, lead: dict[str, Any]) -> RecipientNodalCategory:
         """Determines the RecipientNodalCategory enum from lead details."""
@@ -228,7 +229,14 @@ class Section94BnssRequisitionDrafter:
         case_info: dict[str, Any],
         output_dir: str,
     ) -> list[Section94BnssRequisitionRecord]:
-        """Groups discovered leads by organization and renders ready-to-sign statutory notices."""
+        """Groups discovered leads by organization and renders DRAFT notices for the IO to review and sign.
+
+        Officer, police station, FIR number and sections of law must be supplied; nothing is defaulted.
+        """
+        missing = [k for k in ("io_name", "police_station", "fir_number", "sections_of_law")
+                   if not str(case_info.get(k, "") or "").strip()]
+        if missing:
+            raise ValueError("Section 94 notice needs case details that are not recorded: " + ", ".join(missing))
         os.makedirs(output_dir, exist_ok=True)
         grouped_leads: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
@@ -237,7 +245,7 @@ class Section94BnssRequisitionDrafter:
             grouped_leads[org_name].append(lead)
 
         requisitions: list[Section94BnssRequisitionRecord] = []
-        now_ist = datetime.now().strftime("%Y-%m-%d %H:%M:%S IST (+05:30)")
+        now_ist = ist_now_str()
 
         for org_name, items in grouped_leads.items():
             nodal_cat = self.resolve_category(items[0])
@@ -281,7 +289,8 @@ class Section94BnssRequisitionDrafter:
 
             notice_text = (
                 "================================================================================\n"
-                "OFFICE OF THE INVESTIGATING OFFICER / CYBER CRIME INVESTIGATION CELL\n"
+                "DRAFT - FOR REVIEW AND SIGNATURE BY THE INVESTIGATING OFFICER\n"
+                "OFFICE OF THE INVESTIGATING OFFICER\n"
                 "NOTICE UNDER SECTION 94 OF THE BHARATIYA NAGARIK SURAKSHA SANHITA (BNSS), 2023\n"
                 "[Corresponding to erstwhile Section 91 of the Code of Criminal Procedure, 1973]\n"
                 "================================================================================\n\n"
@@ -289,10 +298,10 @@ class Section94BnssRequisitionDrafter:
                 f"The Nodal / Law Enforcement Liaison Officer,\n"
                 f"{org_name}\n\n"
                 f"From:\n"
-                f"{case_info.get('io_name', 'Investigating Officer')},\n"
-                f"{case_info.get('police_station', 'Cyber Crime PS')}, {case_info.get('district', '')}\n\n"
-                f"Case Reference: {case_info.get('fir_number', 'N/A')}\n"
-                f"Sections of Law: {case_info.get('sections_of_law', 'Sections 318(4) BNS, 2023 r/w 66D IT Act')}\n"
+                f"{case_info['io_name']},\n"
+                f"{case_info['police_station']}, {case_info.get('district', '')}\n\n"
+                f"Case Reference: {case_info['fir_number']}\n"
+                f"Sections of Law: {case_info['sections_of_law']}\n"
                 f"Date of Notice: {now_ist}\n\n"
                 "SUBJECT: URGENT REQUISITION FOR PRODUCTION OF ELECTRONIC RECORDS AND DATA UNDER SECTION 94 BNSS, 2023\n\n"
                 "Sir / Madam,\n\n"
@@ -310,11 +319,11 @@ class Section94BnssRequisitionDrafter:
                 f"{checklist}\n\n"
                 "MANDATE & COMPLIANCE TIMELINE:\n"
                 "You are hereby legally required under Section 94 of the Bharatiya Nagarik Suraksha Sanhita (BNSS), 2023 "
-                "to produce and furnish the aforesaid electronic records and documents within 48 hours of receipt of this notice. "
+                f"to produce and furnish the aforesaid electronic records and documents within {case_info.get('response_within') or 'the period specified by the Investigating Officer: ________'} of receipt of this notice. "
                 "The records must be certified in accordance with Section 63(4)(c) of the Bharatiya Sakshya Adhiniyam, 2023.\n\n"
                 f"Investigating Officer: ___________________________\n"
-                f"Name: {case_info.get('io_name', 'Investigating Officer')}\n"
-                f"Police Station: {case_info.get('police_station', 'Cyber Crime PS')}\n"
+                f"Name: {case_info['io_name']}\n"
+                f"Police Station: {case_info['police_station']}\n"
             )
 
             with open(doc_path, "w", encoding="utf-8") as f:

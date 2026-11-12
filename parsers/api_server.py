@@ -2331,7 +2331,13 @@ class BenchmarkResponse(BaseModel):
 
 @app.post("/api/benchmark/run", response_model=BenchmarkResponse)
 async def run_benchmark(req: BenchmarkRequest):
-    """Executes the 5-Stage Forensic Benchmark Pipeline under strict concurrency lock and threadpool."""
+    """Executes the 5-Stage Forensic Benchmark Pipeline under strict concurrency lock and threadpool.
+
+    Developer tool: disabled unless BHARAT_ENABLE_BENCHMARK=1, so a production build exposes no
+    endpoint that ingests an arbitrary path and writes reports elsewhere.
+    """
+    if os.environ.get("BHARAT_ENABLE_BENCHMARK") != "1":
+        raise HTTPException(status_code=404, detail="Benchmark endpoint is disabled in this build.")
     if _benchmark_lock.locked():
         raise HTTPException(
             status_code=409,
@@ -2346,7 +2352,7 @@ async def run_benchmark(req: BenchmarkRequest):
     if req.output_dir:
         abs_out = os.path.abspath(req.output_dir)
         # Sandbox output_dir to prevent arbitrary overwrites of system folders
-        if not (abs_out.startswith(DEFAULT_WORKSPACE_ROOT) or abs_out.startswith(tempfile.gettempdir())):
+        if not (_is_within(abs_out, DEFAULT_WORKSPACE_ROOT) or _is_within(abs_out, tempfile.gettempdir())):
             raise HTTPException(
                 status_code=403,
                 detail=f"Output directory must reside within workspace root ({DEFAULT_WORKSPACE_ROOT}) or system temp.",

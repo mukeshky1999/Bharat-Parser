@@ -4,8 +4,15 @@ Crime-Typology Dossier Builder, Nodal Freeze Packets, Section 94 BNSS Requisitio
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Optional
+
+
+def ist_now_str() -> str:
+    """Current time in IST (+05:30), independent of the machine's time zone."""
+    ist = timezone(timedelta(hours=5, minutes=30))
+    return datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S IST (+05:30)")
 
 
 class DossierProfileType(str, Enum):

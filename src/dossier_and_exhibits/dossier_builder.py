@@ -10,6 +10,7 @@ import os
 from typing import Any
 
 from src.dossier_and_exhibits.models import (
+    ist_now_str,
     CrimeDossierRecord,
     DossierProfileType,
     ExportAudienceScope,
@@ -39,7 +40,7 @@ class CrimeTypologyDossierBuilder:
     ) -> tuple[CrimeDossierRecord, str]:
         """Compiles a statutory crime-typology courtroom dossier across 7 structured chapters."""
         os.makedirs(output_dir, exist_ok=True)
-        now_ist = datetime.now().strftime("%Y-%m-%d %H:%M:%S IST (+05:30)")
+        now_ist = ist_now_str()
 
         case_title = dossier_data.get("case_title", "Forensic Investigation Dossier")
         fir_no = dossier_data.get("fir_number", "FIR No. Unspecified")

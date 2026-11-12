@@ -119,3 +119,61 @@ def test_anonymisation_without_victim_name_is_refused(tmp_path):
     with pytest.raises(ValueError):
         ExhibitAndDefensePackager().package_section_230_defense_bundle(
             "C", [_item()], str(tmp_path / "b"), anonymize_victim_identity=True, victim_name=None)
+
+
+# ---------------- X-08: benchmark endpoint ----------------
+def test_benchmark_disabled_by_default_and_output_dir_must_be_inside(tmp_path, monkeypatch):
+    import asyncio
+    import tempfile
+
+    from fastapi import HTTPException
+
+    import parsers.api_server as server
+
+    monkeypatch.delenv("BHARAT_ENABLE_BENCHMARK", raising=False)
+    req = server.BenchmarkRequest(dump_path=str(tmp_path))
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(server.run_benchmark(req))
+    assert e.value.status_code == 404
+
+    monkeypatch.setenv("BHARAT_ENABLE_BENCHMARK", "1")
+    evil = tempfile.gettempdir() + "_evil"  # shares the string prefix, is a sibling folder
+    req = server.BenchmarkRequest(dump_path=str(tmp_path), output_dir=evil)
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(server.run_benchmark(req))
+    assert e.value.status_code == 403
+
+
+# ---------------- X-07 / X-11: Section 94 notice ----------------
+CASE = {"io_name": "SI R. Nair", "police_station": "Town PS", "fir_number": "12/2026",
+        "sections_of_law": "318(4) BNS"}
+
+
+def test_section94_does_not_guess_operator_from_mobile_number(tmp_path):
+    from src.dossier_and_exhibits.nodal_freeze_and_requisitions import Section94BnssRequisitionDrafter
+
+    recs = Section94BnssRequisitionDrafter().generate_section_94_requisitions(
+        [{"category": "TELECOM_TSP_NODAL", "msisdn": "+919876543210"}], CASE, str(tmp_path))
+    assert "Jio" not in recs[0].recipient_organization_name
+    assert "CONFIRMED BY IO" in recs[0].recipient_organization_name
+    text = open(recs[0].rendered_notice_doc_path, encoding="utf-8").read()
+    assert "DRAFT" in text and "48 hours" not in text and "Cyber Crime PS" not in text
+
+
+def test_section94_refuses_missing_case_details(tmp_path):
+    from src.dossier_and_exhibits.nodal_freeze_and_requisitions import Section94BnssRequisitionDrafter
+
+    for key in CASE:
+        info = {k: v for k, v in CASE.items() if k != key}
+        with pytest.raises(ValueError, match=key):
+            Section94BnssRequisitionDrafter().generate_section_94_requisitions(
+                [{"category": "BANK_NODAL_OFFICER", "ifsc": "SBIN0001"}], info, str(tmp_path))
+
+
+def test_ist_timestamp_is_real_ist_not_local_time():
+    from src.dossier_and_exhibits.models import ist_now_str
+    from datetime import datetime, timezone, timedelta
+
+    got = datetime.strptime(ist_now_str()[:19], "%Y-%m-%d %H:%M:%S")
+    want = datetime.now(timezone(timedelta(hours=5, minutes=30))).replace(tzinfo=None)
+    assert abs((got - want).total_seconds()) < 5
