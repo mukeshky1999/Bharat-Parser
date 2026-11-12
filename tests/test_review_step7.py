@@ -98,3 +98,12 @@ def test_junction_in_evidence_folder_is_not_followed(client, tmp_path):
     assert any("link" in (e.get("error", "") + e.get("file", "")).lower() for e in r["processing_log"] if e["status"] == "WARNING")
     wc = os.path.join(r["workspace_dir"], "items", "EV-001", "working_copy")
     assert not os.path.exists(os.path.join(wc, "link", "secret.txt"))
+
+
+def test_direct_hex_window_does_not_reparse_offset_from_the_file_name(tmp_path):
+    from parsers.ui_fts5_paginator import CaseUIPaginatorStore
+    store = CaseUIPaginatorStore(str(tmp_path), db_name="s.db")
+    f = tmp_path / "Offset=0x10.bin"
+    f.write_bytes(bytes(range(256)) * 4)
+    res = store.read_provenance_hex_window(file_path=str(f), byte_offset=512, window_size=256)
+    assert res["provenance_parsed"]["byte_offset"] == 512

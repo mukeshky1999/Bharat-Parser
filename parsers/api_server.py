@@ -101,6 +101,7 @@ async def lifespan(app: FastAPI):
     # Shutdown sequence
     print("[*] Bharat-PA Forensics API shutting down. Draining thread pools and checkpointing databases...")
     _thread_pool.shutdown(wait=True)
+    _dialog_pool.shutdown(wait=False)
     if _active_store is not None:
         try:
             conn = _active_store._get_connection()
@@ -238,6 +239,8 @@ _case_state: Dict[str, Any] = {
 }
 
 _thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+# Tk is not thread safe and a dialog stays open until the user answers: one dedicated thread, so no shared worker is held.
+_dialog_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="tk-dialog")
 _ingest_lock = asyncio.Lock()
 _benchmark_lock = asyncio.Lock()
 
@@ -1809,7 +1812,7 @@ def get_case_summary():
 async def pick_evidence_file():
     """Opens native Windows File Explorer dialog using Tkinter on a worker thread."""
     loop = asyncio.get_running_loop()
-    selected_path = await loop.run_in_executor(_thread_pool, _run_native_file_dialog)
+    selected_path = await loop.run_in_executor(_dialog_pool, _run_native_file_dialog)
     return {"selected_path": selected_path}
 
 
@@ -1817,7 +1820,7 @@ async def pick_evidence_file():
 async def pick_evidence_folder():
     """Opens native Windows Directory Explorer dialog using Tkinter on a worker thread."""
     loop = asyncio.get_running_loop()
-    selected_path = await loop.run_in_executor(_thread_pool, _run_native_folder_dialog)
+    selected_path = await loop.run_in_executor(_dialog_pool, _run_native_folder_dialog)
     return {"selected_path": selected_path}
 
 

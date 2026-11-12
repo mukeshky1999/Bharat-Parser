@@ -644,7 +644,8 @@ class CaseUIPaginatorStore:
                     conn.execute(f"INSERT INTO {tbl}_fts({tbl}_fts) VALUES('rebuild')")
             conn.execute("DELETE FROM coverage")
             if "media_items" in existing:
-                conn.execute("DELETE FROM media_items")
+                from parsers import case_media
+                case_media.remove_item_media(conn, None)
             conn.commit()
         finally:
             conn.close()
@@ -666,7 +667,8 @@ class CaseUIPaginatorStore:
                     conn.execute(f"INSERT INTO {tbl}_fts({tbl}_fts) VALUES('rebuild')")
             conn.execute("DELETE FROM coverage WHERE Evidence_Item = ?", (item_id,))
             if "media_items" in existing:
-                conn.execute("DELETE FROM media_items WHERE Evidence_Item = ?", (item_id,))      # hash lists are case-level and stay
+                from parsers import case_media
+                case_media.remove_item_media(conn, item_id)      # hash lists are case-level and stay
             conn.commit()
         finally:
             conn.close()
@@ -1118,8 +1120,11 @@ class CaseUIPaginatorStore:
         }
 
         # Handle direct file_path & byte_offset call
-        if not provenance_str and file_path:
+        direct = bool(not provenance_str and file_path)
+        if direct:
             provenance_str = f"{file_path} :: Offset={byte_offset or 0}"
+        # A direct call is not parsed back out of a string: a file named like "Offset=0x0.bin" must not set the offset.
+        parse_src = "" if direct else provenance_str
 
         if not provenance_str or not isinstance(provenance_str, str):
             return empty_res
@@ -1139,28 +1144,28 @@ class CaseUIPaginatorStore:
         }
 
         # 1. Extract physical byte offset (0x... or decimal)
-        m_off = re.search(r'Offset\s*=\s*(0x[0-9a-fA-F]+|\d+)', provenance_str, re.IGNORECASE)
+        m_off = re.search(r'Offset\s*=\s*(0x[0-9a-fA-F]+|\d+)', parse_src, re.IGNORECASE)
         if m_off:
             raw_off = m_off.group(1)
             prov_parsed['byte_offset'] = int(raw_off, 16) if raw_off.lower().startswith('0x') else int(raw_off)
 
         # 2. Extract Page number
-        m_pg = re.search(r'Page(?:_|\s+)(\d+)', provenance_str, re.IGNORECASE)
+        m_pg = re.search(r'Page(?:_|\s+)(\d+)', parse_src, re.IGNORECASE)
         if m_pg:
             prov_parsed['page_number'] = int(m_pg.group(1))
 
         # 3. Extract Table name
-        m_tbl = re.search(r'Table(?:=|\s+)([A-Za-z0-9_]+)', provenance_str, re.IGNORECASE)
+        m_tbl = re.search(r'Table(?:=|\s+)([A-Za-z0-9_]+)', parse_src, re.IGNORECASE)
         if m_tbl:
             prov_parsed['table_name'] = m_tbl.group(1)
 
         # 4. Extract Row ID
-        m_row = re.search(r'Row(?:ID)?(?:=|\s+)(\d+)', provenance_str, re.IGNORECASE)
+        m_row = re.search(r'Row(?:ID)?(?:=|\s+)(\d+)', parse_src, re.IGNORECASE)
         if m_row:
             prov_parsed['row_id'] = m_row.group(1)
 
         # 5. Extract Recovery State
-        m_st = re.search(r'(?:State|Recovery)(?:=|\s+)([A-Za-z0-9_]+)', provenance_str, re.IGNORECASE)
+        m_st = re.search(r'(?:State|Recovery)(?:=|\s+)([A-Za-z0-9_]+)', parse_src, re.IGNORECASE)
         if m_st:
             prov_parsed['recovery_state'] = m_st.group(1)
 
@@ -1168,6 +1173,9 @@ class CaseUIPaginatorStore:
         parts = [p.strip() for p in provenance_str.split('::')]
         if parts:
             prov_parsed['file_path'] = parts[0]
+        if direct:
+            prov_parsed['file_path'] = file_path
+            prov_parsed['byte_offset'] = int(byte_offset or 0)
 
         target_offset = prov_parsed['byte_offset']
         target_length = prov_parsed['byte_length']

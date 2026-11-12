@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import hashlib
 import os
+import pathlib
 import re
 import sqlite3
 from datetime import datetime, timezone
@@ -63,15 +64,26 @@ def resolve_case_dir(root: str, case_id: str) -> str:
 
 
 class CaseFile:
+    read_only = False
+
     def __init__(self, workspace: str) -> None:
         self.workspace = workspace
         os.makedirs(workspace, exist_ok=True)
         self.path = os.path.join(workspace, FILE_NAME)
         self._init()
 
+    @classmethod
+    def open_read_only(cls, workspace: str) -> "CaseFile":
+        """Reads a case file without creating or changing anything (listing cases must not write to every case)."""
+        cf = cls.__new__(cls)
+        cf.workspace = workspace
+        cf.path = os.path.join(workspace, FILE_NAME)
+        cf.read_only = True
+        return cf
+
     # ------------------------------------------------------------------ plumbing
     def _conn(self) -> sqlite3.Connection:
-        c = sqlite3.connect(self.path)
+        c = sqlite3.connect(pathlib.Path(os.path.abspath(self.path)).as_uri() + "?mode=ro", uri=True) if self.read_only             else sqlite3.connect(self.path)
         c.row_factory = sqlite3.Row
         return c
 
@@ -120,7 +132,7 @@ class CaseFile:
 
     # ------------------------------------------------------------------ evidence items
     def _row_to_item(self, r: sqlite3.Row) -> Dict[str, Any]:
-        item: Dict[str, Any] = {"item_id": r["item_id"], "seq": r["seq"]}
+        item: Dict[str, Any] = {"item_id": r["item_id"], "seq": r["seq"], "corrupt_fields": []}
         for f in _FIELDS:
             v = r[f]
             if f in _JSON_FIELDS:
@@ -128,6 +140,7 @@ class CaseFile:
                     item[f] = json.loads(v) if v else None
                 except ValueError:
                     item[f] = None
+                    item["corrupt_fields"].append(f)     # damaged in the file: not the same as "not recorded"
             elif f == "integrity_match":
                 item[f] = None if v is None else bool(v)
             else:
@@ -204,10 +217,12 @@ def list_cases(root: str) -> List[Dict[str, Any]]:
         if not os.path.isfile(os.path.join(ws, FILE_NAME)):
             continue
         try:
-            cf = CaseFile(ws)
+            cf = CaseFile.open_read_only(ws)
             info = cf.info()
             items = cf.items()
-        except sqlite3.Error:
+        except sqlite3.Error as exc:
+            out.append({"case_id": name, "case_name": "", "examiner_name": "", "workspace": ws, "created_utc": "",
+                        "last_opened_utc": "", "evidence_items": [], "unreadable": f"{type(exc).__name__}: {exc}"})
             continue
         out.append({
             "case_id": info.get("case_id") or name,

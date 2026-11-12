@@ -226,3 +226,15 @@ def test_timeline_endpoint(client, tmp_path):
     assert r["counts"]["fixed"] + r["counts"]["clock_only"] + r["counts"]["no_time"] >= 1
     assert client.get("/api/case/timeline", params={"from": "nope"}).status_code == 422
     assert client.get("/api/case/timeline", params={"group": "zzz"}).status_code == 422
+
+
+def test_from_with_a_t_and_to_with_a_space_are_compared_in_one_form(store):
+    from parsers import case_timeline
+    conn = store._get_connection()
+    try:
+        r = case_timeline.timeline(conn, frm="2026-02-01T10:00", to="2026-02-01 23:00")
+        assert r["from"] == "2026-02-01T10:00"
+        with pytest.raises(case_timeline.TimelineError):
+            case_timeline.timeline(conn, frm="2026-02-02 10:00", to="2026-02-01T23:00")
+    finally:
+        conn.close()

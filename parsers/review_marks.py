@@ -72,6 +72,7 @@ def import_marks(conn: sqlite3.Connection, text: str, known_packages: Dict[str, 
         raise MarksRefused(f"More than {MAX_MARKS} marks.")
     items = {str(i["index"]): i for i in pkg["items"]}
     clean: List[Dict[str, str]] = []
+    seen_index: set = set()
     for m in marks:
         if not isinstance(m, dict):
             raise MarksRefused("A mark is not an object.")
@@ -86,10 +87,15 @@ def import_marks(conn: sqlite3.Connection, text: str, known_packages: Dict[str, 
             raise MarksRefused(f"The note on file {idx} is longer than {MAX_NOTE} characters.")
         if not label and not note.strip():
             continue                                   # an empty row says nothing
+        if idx in seen_index:
+            raise MarksRefused(f"File {idx} has more than one mark in this file. Nothing was imported.")
+        seen_index.add(idx)
         clean.append({"index": idx, "name": items[idx].get("name", ""), "sha256": sha, "label": label or "", "note": note})
     if not clean:
         raise MarksRefused("Every mark is empty.")
-    marks_sha = hashlib.sha256(raw).hexdigest()
+    # identified by what the marks say, not by the bytes: the same marks saved again with other spacing are the same marks
+    marks_sha = hashlib.sha256(json.dumps({"package_id": pid, "marks": clean, "reviewer": str(doc.get("reviewer") or "")},
+                                          sort_keys=True, ensure_ascii=True).encode("utf-8")).hexdigest()
     if conn.execute("SELECT 1 FROM reviewer_marks WHERE Marks_File_Sha256 = ? LIMIT 1", (marks_sha,)).fetchone():
         raise MarksRefused("This marks file was already imported.")
     reviewer = " ".join(str(doc.get("reviewer") or "").split())[:MAX_NAME]

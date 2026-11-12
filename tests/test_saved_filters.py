@@ -60,3 +60,16 @@ def test_endpoints_need_a_case_and_stay_in_that_case(tmp_path, monkeypatch):
     assert client.post("/api/case/filters", json={"scope": "bad", "name": "x", "state": {"a": 1}}).status_code == 422
     assert client.post("/api/case/filters/remove", json={"scope": "upi_ledger", "name": "Big"}).json() == {"removed": 1}
     assert client.get("/api/case/filters", params={"scope": "upi_ledger"}).json()["filters"] == []
+
+
+def test_non_finite_numbers_are_refused_and_remove_cleans_the_name(tmp_path):
+    import sqlite3
+    from parsers import case_filters
+    c = sqlite3.connect(str(tmp_path / "f.db"))
+    c.executescript(case_filters.SCHEMA)
+    with pytest.raises(case_filters.FilterError):
+        case_filters.save_filter(c, "calls", "x", {"a": float("nan")})
+    with pytest.raises(case_filters.FilterError):
+        case_filters.save_filter(c, "calls", "x", {"a": float("inf")})
+    case_filters.save_filter(c, "calls", "two   words", {"a": 1})
+    assert case_filters.remove_filter(c, "calls", "  two words ")["removed"] == 1

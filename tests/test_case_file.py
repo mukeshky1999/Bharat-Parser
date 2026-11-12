@@ -298,3 +298,30 @@ def test_workspace_root_follows_env_and_frozen_build(monkeypatch, tmp_path):
     monkeypatch.setattr(api_server.sys, "frozen", True, raising=False)
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "lad"))
     assert api_server._default_workspace_root() == str(tmp_path / "lad" / "BharatAnalyzer" / "cases")
+
+
+def test_listing_cases_does_not_write_and_names_an_unreadable_case(client, tmp_path):
+    a = _phone(tmp_path, "phoneA", PHONE_A)
+    client.post("/api/case/ingest", json={"evidence_path": str(a), "case_id": "L-1"})
+    root = tmp_path / "cases"
+    bad = root / "broken-case"
+    bad.mkdir()
+    (bad / "case_file.sqlite").write_bytes(b"this is not a database" * 50)
+    ok_file = root / case_dir_name("L-1") / "case_file.sqlite"
+    before = ok_file.read_bytes()
+    cases = client.get("/api/cases/recent").json()["cases"]
+    assert ok_file.read_bytes() == before
+    unreadable = [c for c in cases if c.get("unreadable")]
+    assert [c["case_id"] for c in unreadable] == ["broken-case"] and any(c["case_id"] == "L-1" for c in cases)
+
+
+def test_damaged_json_field_is_marked_corrupt(tmp_path):
+    cf = CaseFile(str(tmp_path / "c"))
+    cf.upsert_item("EV-001", label="x", source_path="s", kind="file", integrity_match=True, status="ingested",
+                   hashes={"sha256": "a"}, device={}, processing_log=[], dossier={}, record_counts={}, analysis={})
+    c = sqlite3.connect(cf.path)
+    c.execute("UPDATE evidence_items SET hashes = '{broken'")
+    c.commit()
+    c.close()
+    it = cf.items()[0]
+    assert it["hashes"] is None and it["corrupt_fields"] == ["hashes"]

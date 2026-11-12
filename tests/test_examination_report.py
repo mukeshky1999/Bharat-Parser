@@ -177,3 +177,35 @@ def test_report_sections_can_be_left_out_but_evidence_limitations_and_audit_cann
 def test_unknown_section_names_are_ignored(ingested):
     html = _html(api_server.examination_report_post(ReportParticulars(sections=["not_a_section", "tags"])))
     assert "Records tagged by the examiner" in html and "not_a_section" not in html
+
+
+# ---------------------------------------------------------------- review step 9
+def _two_item_state():
+    def item(i, status):
+        return {"item_id": i, "label": i, "hashes": {"sha256": "a" * 64, "postIngestionSha256": "a" * 64, "integrityMatch": True},
+                "device": {}, "processing_log": [{"stage": "parse_database", "file": f"{i}.db", "status": status, "error": "x"}],
+                "corrupt_fields": []}
+    return {"case_id": "C", "case_name": "n", "items": [item("EV-001", "OK"), item("EV-002", "FAILED")],
+            "processing_log": [{"stage": "parse_database", "file": "EV-001.db", "status": "OK", "error": ""}], "hashes": {}}
+
+
+def test_multi_device_tally_covers_every_device():
+    facts = examination_report.build_facts(_two_item_state(), {}, [], {"entries": [], "verified": True, "head_hash": ""}, {}, {})
+    assert facts["processing"]["ok"] == 1 and facts["processing"]["failed"] == 1
+    assert {e["evidence_item"] for e in facts["processing"]["log"]} == {"EV-001", "EV-002"}
+    html = examination_report.render_report_html(facts)
+    assert "EV-002 / parse_database" in html
+
+
+def test_damaged_case_file_value_is_not_called_not_recorded():
+    st = _two_item_state()
+    st["items"][0]["corrupt_fields"] = ["hashes"]
+    facts = examination_report.build_facts(st, {}, [], {"entries": [], "verified": True, "head_hash": ""}, {}, {})
+    assert any("damaged" in x and "hashes" in x for x in facts["limitations"])
+
+
+def test_facts_csv_carries_findings_and_encrypted_count():
+    facts = examination_report.build_facts(_two_item_state(), {}, [{"kind": "chat", "note": "n"}],
+                                           {"entries": [], "verified": True, "head_hash": ""}, {}, {})
+    text = examination_report.render_facts_csv(facts)
+    assert "finding.1" in text and "processing.encrypted_no_key" in text

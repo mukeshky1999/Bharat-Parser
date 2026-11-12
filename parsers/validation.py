@@ -268,12 +268,27 @@ def _corpus_checks(corpus_dir: str) -> List[Dict[str, Any]]:
     if not os.path.isfile(mpath):
         return [{"id": "CORPUS-00", "what": "Corpus manifest", "how_expected_was_fixed": "manifest.json in the corpus folder",
                  "expected": "present", "actual": "missing", "status": "ERROR", "error": f"{mpath} not found"}]
-    with open(mpath, "r", encoding="utf-8") as f:
-        manifest = json.load(f)
+    try:
+        with open(mpath, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+        if not isinstance(manifest, dict) or not isinstance(manifest.get("items", []), list):
+            raise ValueError("manifest.json must be an object with an 'items' list")
+    except (OSError, ValueError) as exc:
+        return [{"id": "CORPUS-00", "what": "Corpus manifest", "how_expected_was_fixed": "manifest.json in the corpus folder",
+                 "expected": "a readable manifest", "actual": "unreadable", "status": "ERROR",
+                 "error": f"{type(exc).__name__}: {exc}"}]
     for i, item in enumerate(manifest.get("items", []), 1):
+        if not isinstance(item, dict):
+            out.append({"id": f"CORPUS-{i:02d}", "what": f"item {i}", "how_expected_was_fixed": "manifest", "expected": "an object",
+                        "actual": type(item).__name__, "status": "ERROR", "error": "manifest item is not an object"})
+            continue
         rel = str(item.get("path", ""))
         full = os.path.normpath(os.path.join(corpus_dir, rel))
-        if os.path.commonpath([os.path.abspath(full), os.path.abspath(corpus_dir)]) != os.path.abspath(corpus_dir):
+        try:
+            outside = os.path.commonpath([os.path.abspath(full), os.path.abspath(corpus_dir)]) != os.path.abspath(corpus_dir)
+        except ValueError:                      # another drive
+            outside = True
+        if outside:
             out.append({"id": f"CORPUS-{i:02d}", "what": rel, "how_expected_was_fixed": "manifest", "expected": "inside the corpus folder",
                         "actual": "outside", "status": "ERROR", "error": "path leaves the corpus folder"})
             continue

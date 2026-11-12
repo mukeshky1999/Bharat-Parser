@@ -47,7 +47,10 @@ def _clean_state(state: Any) -> Dict[str, Any]:
             out[key] = v[:MAX_VALUE_CHARS]
         else:
             raise FilterError(f"The choice '{key}' is not a plain value.")
-    if len(json.dumps(out)) > MAX_STATE_BYTES:
+    for k, v in out.items():
+        if isinstance(v, float) and (v != v or v in (float("inf"), float("-inf"))):
+            raise FilterError(f"The choice '{k}' is not a finite number.")
+    if len(json.dumps(out, allow_nan=False)) > MAX_STATE_BYTES:
         raise FilterError("The filter is too large.")
     return out
 
@@ -73,7 +76,7 @@ def save_filter(conn: sqlite3.Connection, scope: str, name: str, state: Any) -> 
     conn.execute(
         "INSERT INTO saved_filters (Scope, Name, State, Saved_At_Utc) VALUES (?,?,?,?) "
         "ON CONFLICT(Scope, Name) DO UPDATE SET State = excluded.State, Saved_At_Utc = excluded.Saved_At_Utc",
-        (scope, nm, json.dumps(clean, sort_keys=True), now))
+        (scope, nm, json.dumps(clean, sort_keys=True, allow_nan=False), now))
     conn.commit()
     return {"name": nm, "replaced": bool(exists)}
 
@@ -81,6 +84,7 @@ def save_filter(conn: sqlite3.Connection, scope: str, name: str, state: Any) -> 
 def remove_filter(conn: sqlite3.Connection, scope: str, name: str) -> Dict[str, Any]:
     if scope not in SCOPES:
         raise FilterError("Unknown screen.")
-    cur = conn.execute("DELETE FROM saved_filters WHERE Scope = ? AND Name = ?", (scope, name))
+    nm = " ".join(str(name or "").split())          # the same cleaning save_filter applied
+    cur = conn.execute("DELETE FROM saved_filters WHERE Scope = ? AND Name = ?", (scope, nm))
     conn.commit()
     return {"removed": cur.rowcount}

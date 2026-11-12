@@ -223,3 +223,38 @@ def test_media_endpoints_end_to_end(tmp_path, monkeypatch):
     assert client.post("/api/case/hashsets/remove", json={"name": "L"}).json() == {"removed": "L"}
     log = json.dumps(client.get("/api/audit").json())
     assert "hash_set_imported" in log and "media_analysed" in log
+
+
+# ---------------------------------------------------------------- review step 9
+def test_modification_time_is_not_reported_as_the_camera_clock(conn, tmp_path):
+    ex = Image.Exif()
+    ex[0x0132] = "2026:03:03 03:03:03"                  # DateTime: when the file was last written
+    f = _f(tmp_path, "edited.jpg", exif=ex.tobytes())
+    case_media.analyse_files(conn, [f], str(tmp_path / "thumbs"))
+    m = case_media.list_media(conn)["items"][0]
+    assert m["exif_clock"] is None
+    assert "2026:03:03 03:03:03" in conn.execute("SELECT Exif_Json FROM media_items").fetchone()[0]
+
+
+def test_analysing_again_keeps_the_id_and_clears_old_results(conn, tmp_path):
+    f = _f(tmp_path, "a.jpg", exif=_exif())
+    case_media.analyse_files(conn, [f], str(tmp_path / "thumbs"))
+    first = conn.execute("SELECT id FROM media_items").fetchone()[0]
+    Image.new("RGB", (8, 8)).save(f["local_path"], "JPEG")          # now a picture with no EXIF
+    case_media.analyse_files(conn, [f], str(tmp_path / "thumbs"), redo=True)
+    row = conn.execute("SELECT id, Camera_Make, Exif_Clock, Gps_Lat FROM media_items").fetchone()
+    assert row["id"] == first and row["Camera_Make"] is None and row["Exif_Clock"] is None and row["Gps_Lat"] is None
+    assert conn.execute("SELECT COUNT(*) FROM media_items").fetchone()[0] == 1
+
+
+def test_thumbnails_go_with_their_item_unless_another_row_uses_them(conn, tmp_path):
+    a = _f(tmp_path, "a.jpg")
+    case_media.analyse_files(conn, [a], str(tmp_path / "thumbs"))
+    thumb = conn.execute("SELECT Thumb_Path FROM media_items").fetchone()[0]
+    assert os.path.isfile(thumb)
+    b = dict(a, evidence_item="EV-002")                              # same bytes in another device: same thumbnail file
+    case_media.analyse_files(conn, [b], str(tmp_path / "thumbs"))
+    case_media.remove_item_media(conn, "EV-001")
+    assert os.path.isfile(thumb)
+    case_media.remove_item_media(conn, "EV-002")
+    assert not os.path.isfile(thumb)

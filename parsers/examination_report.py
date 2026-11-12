@@ -117,11 +117,17 @@ def build_facts(
         # Several devices in one case: every statement is made per item, never for "the" evidence.
         ev_items = [_item_facts(it) for it in items]
         lim: List[str] = []
+        plog = []                                   # the tally and the log cover every device, each entry naming its device
         for it in items:
             lim += [f"[{it.get('item_id')}] {x}" for x in limitations(it.get("processing_log") or [], it.get("hashes") or {})]
+            plog += [dict(e, evidence_item=it.get("item_id")) for e in (it.get("processing_log") or [])]
     else:
         ev_items = None
         lim = limitations(plog, hashes)
+    for it in items:
+        if it.get("corrupt_fields"):
+            tag = f"[{it.get('item_id')}] " if len(items) > 1 else ""
+            lim.append(f"{tag}Stored values damaged in the case file (not the same as not recorded): {', '.join(it['corrupt_fields'])}.")
     parts = {k: str((particulars or {}).get(k) or "").strip() for k, _ in PARTICULAR_FIELDS}
     return {
         "generated": now_stamps(),
@@ -161,6 +167,7 @@ def build_facts(
             "ok": sum(1 for e in plog if str(e.get("status", "")).upper() == "OK"),
             "failed": sum(1 for e in plog if str(e.get("status", "")).upper() == "FAILED"),
             "warnings": sum(1 for e in plog if str(e.get("status", "")).upper() == "WARNING"),
+            "encrypted_no_key": sum(1 for e in plog if str(e.get("status", "")).upper() == "ENCRYPTED_NO_KEY"),
             "log": plog,
         },
         "limitations": lim,
@@ -276,7 +283,7 @@ def render_report_html(f: Dict[str, Any], sections: Optional[List[str]] = None) 
     audit_cls = "ok" if au.get("verified") else "bad"
     fail_log = [x for x in f["processing"]["log"] if str(x.get("status", "")).upper() in ("FAILED", "WARNING")]
     log_rows = "".join(
-        f"<tr><td>{_e(str(x.get('status')))}</td><td>{_e(str(x.get('stage')))}</td><td class='mono'>{_e(str(x.get('file')))}</td><td>{_e(str(x.get('error') or ''))}</td></tr>"
+        f"<tr><td>{_e(str(x.get('status')))}</td><td>{_e((str(x['evidence_item']) + ' / ' if x.get('evidence_item') else '') + str(x.get('stage')))}</td><td class='mono'>{_e(str(x.get('file')))}</td><td>{_e(str(x.get('error') or ''))}</td></tr>"
         for x in fail_log[:200]
     )
 
@@ -341,10 +348,15 @@ def render_facts_csv(f: Dict[str, Any]) -> str:
         for t in tg["tags"]:
             if t["count"]:
                 rows.append((f"tags.{t['tag']}", f"records={t['count']} not_placed={t['detached']}"))
-        rows.append(("tags.relied_upon_listed", tg["relied_upon_total"]))
+        rows.append(("tags.relied_upon_total", tg["relied_upon_total"]))
+        rows.append(("tags.relied_upon_listed", min(tg["relied_upon_total"], len(tg["relied_upon"]))))
         rows.append(("tags.relied_upon_not_listed_privileged", tg["relied_upon_withheld_privileged"]))
+        rows.append(("tags.relied_upon_not_placed", tg.get("relied_upon_detached", 0)))
+    for i, fd in enumerate(f.get("findings") or [], 1):
+        rows.append((f"finding.{i}", "; ".join(f"{k}={v}" for k, v in sorted(fd.items()) if v not in (None, ""))))
     p = f["processing"]
-    rows += [("processing.ok", p["ok"]), ("processing.failed", p["failed"]), ("processing.warnings", p["warnings"])]
+    rows += [("processing.ok", p["ok"]), ("processing.failed", p["failed"]), ("processing.warnings", p["warnings"]),
+             ("processing.encrypted_no_key", p.get("encrypted_no_key", 0))]
     rows += [(f"limitation.{i}", x) for i, x in enumerate(f["limitations"], 1)]
     rows += [("audit.entries", len(f["audit"].get("entries") or [])), ("audit.verified", f["audit"].get("verified")),
              ("audit.head_hash", f["audit"].get("head_hash"))]

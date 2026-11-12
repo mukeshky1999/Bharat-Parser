@@ -226,8 +226,9 @@ def _analyse_image(path: str, thumb_path: str) -> Dict[str, Any]:
                 sub = ex.get_ifd(0x8769)
             except Exception:
                 sub = {}
-            clock = _clean(sub.get(0x9003)) or _clean(ex.get(0x0132))
-            out["Exif_Clock"] = clock
+            # Only DateTimeOriginal is the capture clock. DateTime (0x0132) is when the file was last written, often by an
+            # editor, and is kept in Exif_Json under its own name.
+            out["Exif_Clock"] = _clean(sub.get(0x9003))
             try:
                 out["Gps_Lat"], out["Gps_Lon"] = _gps(dict(ex.get_ifd(0x8825)))
             except Exception:
@@ -250,6 +251,28 @@ def _analyse_image(path: str, thumb_path: str) -> Dict[str, Any]:
         thumb.save(thumb_path, "JPEG", quality=80)
         out["Thumb_Path"] = thumb_path
     return out
+
+
+_MEDIA_COLUMNS = ["Evidence_Item", "Vfs_Path", "File_Name", "File_Size", "Kind", "SHA256", "MD5", "Width", "Height", "Format",
+                  "Camera_Make", "Camera_Model", "Software", "Exif_Clock", "Gps_Lat", "Gps_Lon", "Exif_Json", "DHash", "Thumb_Path",
+                  "Status", "Status_Detail", "Decoded_By", "Analysed_At_UTC"]
+
+
+def remove_item_media(conn: sqlite3.Connection, evidence_item: Optional[str] = None) -> int:
+    """Deletes the media rows of one evidence item (all items when None) and the thumbnail files nothing else uses."""
+    if evidence_item is None:
+        paths = [r[0] for r in conn.execute("SELECT Thumb_Path FROM media_items WHERE Thumb_Path IS NOT NULL")]
+        n = conn.execute("DELETE FROM media_items").rowcount
+    else:
+        paths = [r[0] for r in conn.execute("SELECT Thumb_Path FROM media_items WHERE Evidence_Item = ? AND Thumb_Path IS NOT NULL", (evidence_item,))]
+        n = conn.execute("DELETE FROM media_items WHERE Evidence_Item = ?", (evidence_item,)).rowcount
+    for p in set(paths):
+        if not conn.execute("SELECT 1 FROM media_items WHERE Thumb_Path = ? LIMIT 1", (p,)).fetchone():
+            try:
+                os.remove(p)
+            except OSError:
+                pass                           # already gone
+    return n
 
 
 def analyse_files(conn: sqlite3.Connection, files: Sequence[Dict[str, Any]], thumb_dir: str, redo: bool = False) -> Dict[str, Any]:
@@ -288,8 +311,12 @@ def analyse_files(conn: sqlite3.Connection, files: Sequence[Dict[str, Any]], thu
                 except Exception as exc:               # corrupt, truncated, unsupported (for example HEIC) or too large
                     row.update(Status="NOT_DECODED", Status_Detail=f"{exc.__class__.__name__}: {str(exc)[:160]}", Decoded_By="hashlib")
                     counts["not_decoded"] += 1
-        cols = list(row)
-        conn.execute(f"INSERT OR REPLACE INTO media_items({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", [row[c] for c in cols])
+        # Updated in place, so the id of a file (and any link that uses it) survives analysing it again; columns the new
+        # analysis does not fill go back to empty rather than keeping an earlier result.
+        full = {c: row.get(c) for c in _MEDIA_COLUMNS}
+        updates = ",".join(f"{c}=excluded.{c}" for c in _MEDIA_COLUMNS if c not in ("Evidence_Item", "Vfs_Path"))
+        conn.execute(f"INSERT INTO media_items({','.join(_MEDIA_COLUMNS)}) VALUES ({','.join('?' * len(_MEDIA_COLUMNS))}) "
+                     f"ON CONFLICT(Evidence_Item, Vfs_Path) DO UPDATE SET {updates}", [full[c] for c in _MEDIA_COLUMNS])
     conn.commit()
     counts["pillow"] = ver
     return counts

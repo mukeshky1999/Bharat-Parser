@@ -104,7 +104,7 @@ def timeline(conn: sqlite3.Connection, tables: Optional[Sequence[str]] = None, g
     for label, v in (("from", frm), ("to", to)):
         if v and not _looks_like_time(v):
             raise TimelineError(f"'{label}' must look like 2026-02-01 or 2026-02-01 09:30:00 (Indian Standard Time), not {v!r}.")
-    if frm and to and frm > to:
+    if frm and to and _bound(frm, False) > _bound(to, True):      # compared in one form: "T" and a space sort differently
         raise TimelineError("'from' is after 'to'.")
     tag_name = None
     if tag:
@@ -162,7 +162,7 @@ def timeline(conn: sqlite3.Connection, tables: Optional[Sequence[str]] = None, g
     events = [dict(zip(names, r)) for r in cur.fetchall()]
     for e in events:
         e["summary"] = (e["summary"] or "")[:300]
-        e["time_basis"] = e.pop("basis") or ("RECORDED_UTC_AND_IST" if e["utc"] else "RECORDED_IST")
+        e["time_basis"] = e.pop("basis") or ("RECORDED_UTC_AND_IST" if e["utc"] not in (None, "") else "RECORDED_IST")
         e.pop("sort_key", None)
     if events and "tags" in present:
         from parsers.case_tags import tags_for
@@ -176,7 +176,7 @@ def timeline(conn: sqlite3.Connection, tables: Optional[Sequence[str]] = None, g
     basis: Dict[str, int] = {}
     if group == "fixed":
         for b, n in conn.execute(
-                f"SELECT COALESCE(basis, CASE WHEN utc IS NOT NULL THEN 'RECORDED_UTC_AND_IST' ELSE 'RECORDED_IST' END), COUNT(*) "
+                f"SELECT COALESCE(basis, CASE WHEN NULLIF(utc, '') IS NOT NULL THEN 'RECORDED_UTC_AND_IST' ELSE 'RECORDED_IST' END), COUNT(*) "
                 f"FROM ({sql}) GROUP BY 1", params):
             basis[b] = n
     result["time_basis"] = basis

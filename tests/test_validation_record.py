@@ -81,3 +81,13 @@ def test_validation_works_when_the_server_requires_an_access_token(monkeypatch):
     monkeypatch.setenv("BHARAT_API_TOKEN", "t" * 32)
     r = validation.run_validation()
     assert r["tally"]["FAIL"] == 0 and r["tally"]["ERROR"] == 0, [c for c in r["checks"] if c["status"] != "PASS"]
+
+
+def test_bad_corpus_manifest_is_an_error_result_not_a_crash(tmp_path):
+    from parsers import validation
+    (tmp_path / "manifest.json").write_text("{not json")
+    out = validation._corpus_checks(str(tmp_path))
+    assert out[0]["status"] == "ERROR" and out[0]["id"] == "CORPUS-00"
+    (tmp_path / "manifest.json").write_text('{"items": [{"path": "D:/elsewhere/x", "sha256": "a"}, 5]}')
+    out = validation._corpus_checks(str(tmp_path))
+    assert [c["status"] for c in out] == ["ERROR", "ERROR"]

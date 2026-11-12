@@ -106,3 +106,17 @@ def test_endpoints_audit_and_package_must_come_from_this_case(tmp_path, monkeypa
     actions = [e["action"] for e in client.get("/api/audit").json()["entries"]]
     assert "reviewer_marks_imported" in actions
     assert client.get("/api/case/tags").json()["tags"] and all(t["count"] == 0 for t in client.get("/api/case/tags").json()["tags"])
+
+
+def test_same_marks_with_other_spacing_are_still_a_duplicate_and_two_marks_on_one_file_are_refused(conn, tmp_path):
+    res, known = _pkg(tmp_path)
+    text = _marks(res)
+    review_marks.import_marks(conn, text, known)
+    respaced = json.dumps(json.loads(text), indent=4)             # same marks, different bytes
+    with pytest.raises(review_marks.MarksRefused, match="already imported"):
+        review_marks.import_marks(conn, respaced, known)
+    doc = json.loads(text)
+    doc["reviewer"] = "someone else"
+    doc["marks"] = [doc["marks"][0], dict(doc["marks"][0], note="second opinion")]
+    with pytest.raises(review_marks.MarksRefused, match="more than one mark"):
+        review_marks.import_marks(conn, json.dumps(doc), known)
