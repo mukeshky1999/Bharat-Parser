@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type DialogName = 'ADD_EXTRACTION' | 'SEC230' | 'NCRP' | 'SETTINGS' | 'PALETTE' | null;
+export type DialogName = 'ADD_EXTRACTION' | 'SETTINGS' | 'PALETTE' | null;
 
 interface UiState {
   dialog: DialogName;
@@ -8,7 +8,7 @@ interface UiState {
   close: () => void;
 }
 
-/** Which dialog is open. Only one at a time; Esc closes it. (Section 63 keeps its own flag in the workbench store.) */
+/** Which dialog is open. Only one at a time; Esc closes it. */
 export const useUi = create<UiState>((set) => ({
   dialog: null,
   open: (d) => set({ dialog: d }),

@@ -31,8 +31,7 @@ import {
 } from 'lucide-react';
 import {
   DeviceMetadata,
-  DualHashResult,
-  ForensicProvenance
+  DualHashResult
 } from '../../shared/forensic-types';
 import { useWorkbenchStore, ActiveTabType } from '../state/workbenchStore';
 import { useUi } from '../state/uiStore';
@@ -62,8 +61,6 @@ export const ExtractionSummaryTab: React.FC<ExtractionSummaryTabProps> = ({
 }) => {
   const {
     setActiveTab,
-    setIsBsaModalOpen,
-    setSelectedArtifact,
     caseManifest,
     integrity,
     syncWithBackendCase
@@ -172,27 +169,6 @@ export const ExtractionSummaryTab: React.FC<ExtractionSummaryTabProps> = ({
       istFormatted: 'N/A',
       epochMs: 0
     }
-  };
-
-  const handleSourceLinkClick = (filePath: string, hexOffsetStr: string, tableName: string) => {
-    const byteOffset = parseInt(hexOffsetStr.replace('0x', ''), 16) || 0;
-    const dummyProv: ForensicProvenance = {
-      evidenceId: backendSummary?.case_id || 'ACTIVE_CASE_EXT_01',
-      archivePath: meta.evidenceSourcePath || '',
-      vfsInternalPath: filePath,
-      containerType: 'SQLITE',
-      tableName: tableName,
-      pageNumber: Math.floor(byteOffset / 4096) + 1,
-      byteOffset: byteOffset,
-      byteLength: 64,
-      recoveryState: 'ACTIVE',
-      rawPayloadHex: '4143434f554e54535f4944454e544954595f5345414c30303030303030303030'
-    };
-    setSelectedArtifact({
-      id: `PROV_${hexOffsetStr}`,
-      provenance: dummyProv,
-      notes: `Inspected source file: ${filePath} at offset ${hexOffsetStr}`
-    });
   };
 
   const dossier = backendSummary?.owner_dossier || {};
@@ -425,7 +401,7 @@ export const ExtractionSummaryTab: React.FC<ExtractionSummaryTabProps> = ({
           <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-between text-xs text-slate-400 font-mono">
             <span className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>A Section 63 BSA certificate can be prepared in stage 8 once evidence is open</span>
+              <span>A report and facts annexure can be prepared in stage 8 once evidence is open</span>
             </span>
             <span className="text-slate-500">Hashes are recorded on opening</span>
           </div>
@@ -540,12 +516,12 @@ export const ExtractionSummaryTab: React.FC<ExtractionSummaryTabProps> = ({
 
             <div className="pt-3 border-t border-slate-800 mt-3 flex items-center justify-between gap-2">
               <button
-                onClick={() => setIsBsaModalOpen(true)}
-                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-slate-50 text-xs font-semibold rounded shadow transition-colors flex items-center gap-1.5"
-                title="Generates Section 63(4)(c) BSA 2023 Statutory Certificate"
+                onClick={() => setActiveTab('REPORT_EXPORT')}
+                className="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 text-slate-50 text-xs font-semibold rounded shadow transition-colors flex items-center gap-1.5"
+                title="Opens the examination report, facts annexure, review package and audit log"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>Export Sec 63 BSA Certificate</span>
+                <span>Report and export</span>
               </button>
 
               <button

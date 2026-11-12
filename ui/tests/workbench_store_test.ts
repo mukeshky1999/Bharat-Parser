@@ -66,7 +66,7 @@ async function runWorkbenchStoreTest() {
   }
 
   // 4. Chat view modes
-  for (const m of ['GRID', 'BUBBLE', 'DOSSIER'] as const) {
+  for (const m of ['GRID', 'BUBBLE'] as const) {
     useWorkbenchStore.getState().setChatViewMode(m);
     assert(useWorkbenchStore.getState().chatViewMode === m, `Chat view mode set to ${m}`);
   }

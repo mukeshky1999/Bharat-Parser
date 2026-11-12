@@ -236,46 +236,40 @@ export interface MuleNetworkResponse {
   status?: number;
 }
 
-export interface Sec230BnssResponse {
-  success: boolean;
-  case_id: string;
-  bundle_path: string;
-  pocso_withheld_count: number;
-  html_viewer_path: string;
-  statutory_mandate: string;
-  error?: string;
-  detail?: string;
-  status?: number;
+export interface ReportParticulars {
+  case_number?: string;
+  agency?: string;
+  examiner_name?: string;
+  designation?: string;
+  requesting_officer?: string;
+  notes?: string;
 }
 
-export interface NcrpCandidate {
-  account_no: string;
-  ifsc: string;
-  vpa: string;
-  is_complainant_victim: boolean;
-  volume_inr: number;
-  counterparty_name?: string;
+export interface AuditEntry {
+  seq: number;
+  ts_utc: string;
+  ts_ist: string;
+  actor: string;
+  action: string;
+  payload: Record<string, unknown>;
+  hash: string;
 }
 
-export interface NcrpFreezeResponse {
+export interface AuditSummary {
+  entries: AuditEntry[];
+  verified: boolean;
+  error: string;
+  head_hash: string;
+}
+
+export interface PackageResult {
   success: boolean;
-  csv_path: string;
-  csv_content: string;
-  sha256: string;
-  total_accounts_evaluated: number;
-  total_freeze_targets: number;
-  total_lien_amount_inr: number;
-  safeguards: Array<{
-    account_no: string;
-    is_victim: boolean;
-    is_freeze_locked: boolean;
-    freeze_checkbox_disabled: boolean;
-    role_badge: string;
-  }>;
-  portal: string;
+  directory: string;
+  viewer_path: string;
+  included: number;
+  withheld: number;
+  merkle_root: string;
   error?: string;
-  detail?: string;
-  status?: number;
 }
 
 export interface OcrAnalyzeResponse {
@@ -906,13 +900,6 @@ class ForensicClient {
   }
 
   /**
-   * Returns Section 63(4)(c) BSA statutory certificate URL.
-   */
-  public getSec63BsaReportUrl(): string {
-    return '/api/report/sec63-bsa';
-  }
-
-  /**
    * Ingests or opens a dump file / workspace via backend.
    * Matches Pydantic CaseOpenResponse.
    */
@@ -1106,64 +1093,7 @@ class ForensicClient {
     }
   }
 
-  /**
-   * Generates Section 230 BNSS statutory defense disclosure bundle with victim PII redaction
-   * and judicial notice cards for intimate/POCSO media.
-   */
-  public async generateSec230BnssPackage(
-    caseId: string,
-    outputDir?: string,
-    anonymize: boolean = true,
-    victimName?: string,
-    signal?: AbortSignal,
-    items?: Array<{ path: string; redaction_tag: string }>
-  ): Promise<Sec230BnssResponse> {
-    try {
-      const res = await this.fetchApi<Sec230BnssResponse>('/api/report/sec230-bnss', {
-        method: 'POST',
-        signal,
-        body: JSON.stringify({
-          case_id: caseId,
-          output_dir: outputDir,
-          anonymize_victim_identity: anonymize,
-          victim_name: victimName,
-          items
-        })
-      });
-      if (res.data && res.data.success) {
-        return res.data;
-      }
-      return {
-        success: false,
-        case_id: caseId,
-        bundle_path: '',
-        pocso_withheld_count: 0,
-        html_viewer_path: '',
-        statutory_mandate: '',
-        status: res.status,
-        error: res.error || 'Failed to generate Section 230 BNSS bundle',
-        detail: res.error || 'Failed to generate Section 230 BNSS bundle'
-      };
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error generating Sec 230 bundle';
-      return {
-        success: false,
-        case_id: caseId,
-        bundle_path: '',
-        pocso_withheld_count: 0,
-        html_viewer_path: '',
-        statutory_mandate: '',
-        status: 0,
-        error: msg,
-        detail: msg
-      };
-    }
-  }
-
-  /**
-   * Generates 14-column 1930 NCRP bank freeze sheet and enforces Complainant Safeguard Lock.
-   */
-  /** Media files of the loaded case that can be packaged for a Section 230 disclosure copy. */
+  /** Media files of the loaded case that exist on disk and can go into a review package. */
   public async getMediaCandidates(
     signal?: AbortSignal
   ): Promise<{ items: Array<{ path: string; vfs_path: string; file_name: string; file_size: number }>; error?: string }> {
@@ -1172,73 +1102,62 @@ class ForensicClient {
     return { items: [], error: res.error || 'Could not list case media' };
   }
 
-  /** Candidate beneficiary accounts derived from the loaded case (never sample data). */
-  public async getNcrpCandidates(
-    complainantAccount: string,
-    signal?: AbortSignal
-  ): Promise<{ candidates: NcrpCandidate[]; error?: string }> {
-    const res = await this.fetchApi<{ candidates: NcrpCandidate[] }>(
-      `/api/report/ncrp-candidates?complainant_account=${encodeURIComponent(complainantAccount)}`,
-      { signal }
-    );
-    if (res.data) return { candidates: res.data.candidates || [] };
-    return { candidates: [], error: res.error || 'Could not load candidate accounts' };
-  }
-
-  public async exportNcrpFreezePacket(
-    candidates: any[] | undefined,
-    outputDir: string | undefined,
-    complainantAccount: string,
-    acknowledgementNo: string,
-    signal?: AbortSignal,
-    details?: { state_ut?: string; police_station?: string; investigating_officer?: string; crime_category?: string }
-  ): Promise<NcrpFreezeResponse> {
+  /** Examination report as HTML, built from the loaded case plus the particulars the examiner typed. */
+  public async getExaminationReportHtml(particulars: ReportParticulars, signal?: AbortSignal): Promise<{ html: string; error?: string }> {
     try {
-      const res = await this.fetchApi<NcrpFreezeResponse>('/api/report/ncrp-freeze', {
+      const res = await this.authFetch('/api/report/examination', {
         method: 'POST',
         signal,
-        body: JSON.stringify({
-          candidates,
-          output_dir: outputDir,
-          complainant_account: complainantAccount,
-          acknowledgement_no: acknowledgementNo,
-          ...(details || {})
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(particulars),
       });
-      if (res.data && res.data.success) {
-        return res.data;
-      }
-      return {
-        success: false,
-        csv_path: '',
-        csv_content: '',
-        sha256: '',
-        total_accounts_evaluated: 0,
-        total_freeze_targets: 0,
-        total_lien_amount_inr: 0,
-        safeguards: [],
-        portal: '',
-        status: res.status,
-        error: res.error || 'Failed to export NCRP freeze packet',
-        detail: res.error || 'Failed to export NCRP freeze packet'
-      };
+      if (!res.ok) return { html: '', error: await this.errorText(res) };
+      return { html: await res.text() };
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error generating NCRP freeze packet';
-      return {
-        success: false,
-        csv_path: '',
-        csv_content: '',
-        sha256: '',
-        total_accounts_evaluated: 0,
-        total_freeze_targets: 0,
-        total_lien_amount_inr: 0,
-        safeguards: [],
-        portal: '',
-        status: 0,
-        error: msg,
-        detail: msg
-      };
+      return { html: '', error: e instanceof Error ? e.message : 'Could not build the report' };
     }
+  }
+
+  /** The facts annexure as JSON or CSV text. */
+  public async getCaseFacts(format: 'json' | 'csv', signal?: AbortSignal): Promise<{ text: string; error?: string }> {
+    try {
+      const res = await this.authFetch(`/api/report/facts?format=${format}`, { signal });
+      if (!res.ok) return { text: '', error: await this.errorText(res) };
+      return { text: await res.text() };
+    } catch (e: unknown) {
+      return { text: '', error: e instanceof Error ? e.message : 'Could not build the annexure' };
+    }
+  }
+
+  public async getAuditLog(signal?: AbortSignal): Promise<AuditSummary> {
+    const res = await this.fetchApi<AuditSummary>('/api/audit', { signal });
+    if (res.data) return res.data;
+    return { entries: [], verified: false, error: res.error || 'Could not read the audit log', head_hash: '' };
+  }
+
+  /** Builds the review package. Every item must carry a disposition; the backend refuses otherwise. */
+  public async buildReviewPackage(
+    items: Array<{ path: string; disposition?: string; note?: string }>,
+    maskTerms: string[],
+    signal?: AbortSignal
+  ): Promise<PackageResult> {
+    const res = await this.fetchApi<PackageResult>('/api/report/package', {
+      method: 'POST',
+      signal,
+      body: JSON.stringify({ items, mask_terms: maskTerms }),
+    });
+    if (res.data && res.data.success) return res.data;
+    return { success: false, directory: '', viewer_path: '', included: 0, withheld: 0, merkle_root: '', error: res.error || 'The package was not built.' };
+  }
+
+  private async errorText(res: Response): Promise<string> {
+    try {
+      const j = await res.json();
+      if (j && j.detail) return typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
+    } catch {
+      /* not JSON */
+    }
+    return res.statusText || `HTTP ${res.status}`;
   }
 
   /**

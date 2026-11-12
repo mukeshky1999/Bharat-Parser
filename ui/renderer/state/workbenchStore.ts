@@ -18,7 +18,7 @@ import { forensicClient, registerApiToastListener } from '../api/forensicClient'
 export type ActiveFilterType = 'ALL' | 'WAL_AND_CARVED_ONLY' | 'CLOCK_TAMPER_ONLY';
 export type RecoveryPillFilter = 'ALL' | 'ACTIVE' | 'WAL' | 'CARVED' | 'SPILLOVER';
 export type EphemeralPillFilter = 'ALL' | 'VIEW_ONCE' | 'DISAPPEARING' | 'REVOKED' | 'ATTACHMENTS';
-export type ChatWorkspaceMode = 'GRID' | 'BUBBLE' | 'DOSSIER';
+export type ChatWorkspaceMode = 'GRID' | 'BUBBLE';
 export type BottomDockTabType = 'HEX' | 'DECODED_TREE';
 
 export type ActiveTabType =
@@ -32,7 +32,7 @@ export type ActiveTabType =
   | 'MULE_GRAPH'
   | 'CALLS'
   | 'FINDINGS'
-  | 'COURT_OUTPUT'
+  | 'REPORT_EXPORT'
   | 'CRYPTO'
   | 'SQLITE_WIZARD'
   | 'FILE_SYSTEM'
@@ -101,7 +101,6 @@ export interface WorkbenchStoreState {
   ephemeralFilter: EphemeralPillFilter;
   chatViewMode: ChatWorkspaceMode;
   searchQuery: string;
-  isBsaModalOpen: boolean;
 
   // Pagination (100 rows per page)
   currentPage: number;
@@ -134,7 +133,6 @@ export interface WorkbenchStoreState {
   setCurrentPage: (page: number) => void;
   setPageSize: (size: number) => void;
   setBottomDockTab: (tab: BottomDockTabType) => void;
-  setIsBsaModalOpen: (open: boolean) => void;
   setSelectedArtifact: (artifact: SelectedArtifactState | null) => Promise<void>;
   fetchHexWindowForOffset: (provenance: ForensicProvenance) => Promise<void>;
   syncWithBackendCase: () => Promise<void>;
@@ -235,7 +233,6 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
   ephemeralFilter: 'ALL',
   chatViewMode: 'GRID',
   searchQuery: '',
-  isBsaModalOpen: false,
 
   currentPage: 1,
   pageSize: 100,
@@ -282,7 +279,6 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
   setCurrentPage: (page) => set({ currentPage: Math.max(1, page) }),
   setPageSize: (size) => set({ pageSize: size, currentPage: 1 }),
   setBottomDockTab: (tab) => set({ bottomDockTab: tab }),
-  setIsBsaModalOpen: (open) => set({ isBsaModalOpen: open }),
 
   setSelectedArtifact: async (artifact) => {
     // The raw bytes are fetched when the examiner opens the "Source bytes" tab, not on every selection:

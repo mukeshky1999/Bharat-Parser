@@ -8,9 +8,6 @@ import { CommandPalette } from './CommandPalette';
 import { SettingsDialog } from './SettingsDialog';
 import { Toasts } from './Toasts';
 import { EvidenceCard, buildPin } from '../inspectors/EvidenceCard';
-import { Sec63BsaModal } from '../views/Sec63BsaModal';
-import { Sec230BnssModal } from '../views/Sec230BnssModal';
-import { Ncrp1930FreezeModal } from '../views/Ncrp1930FreezeModal';
 import { AddExtractionModal } from '../views/AddExtractionModal';
 import { useWorkbenchStore } from '../state/workbenchStore';
 import { useFindings } from '../state/findingsStore';
@@ -46,11 +43,6 @@ export const AppShell: React.FC = () => {
   const syncWithBackendCase = useWorkbenchStore((s) => s.syncWithBackendCase);
   const addToast = useWorkbenchStore((s) => s.addToast);
   const setActiveTab = useWorkbenchStore((s) => s.setActiveTab);
-  const isBsaModalOpen = useWorkbenchStore((s) => s.isBsaModalOpen);
-  const setIsBsaModalOpen = useWorkbenchStore((s) => s.setIsBsaModalOpen);
-  const upi = useWorkbenchStore((s) => s.upiTransactions);
-  const chats = useWorkbenchStore((s) => s.chats);
-  const apk = useWorkbenchStore((s) => s.apkFindings);
   const caseId = useWorkbenchStore((s) => s.caseManifest?.caseId);
   const loadFindings = useFindings((s) => s.load);
   const prefs = usePreferences();
@@ -150,13 +142,6 @@ export const AppShell: React.FC = () => {
       <SettingsDialog />
 
       <AddExtractionModal isOpen={dialog === 'ADD_EXTRACTION'} onClose={close} />
-      <Sec63BsaModal
-        isOpen={isBsaModalOpen}
-        onClose={() => setIsBsaModalOpen(false)}
-        counts={{ upiCount: upi.length, walCount: 0, carvedCount: 0, apkCount: apk.length, remoteCount: 0, chatCount: chats.length }}
-      />
-      <Sec230BnssModal isOpen={dialog === 'SEC230'} onClose={close} />
-      <Ncrp1930FreezeModal isOpen={dialog === 'NCRP'} onClose={close} />
     </div>
   );
 };

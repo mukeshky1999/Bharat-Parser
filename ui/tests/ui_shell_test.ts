@@ -53,6 +53,7 @@ const root = path.join(__dirname, '..', 'renderer');
 const files = walk(root);
 const banned: Array<[RegExp, string]> = [
   [/PhysicalAnalyzer|Physical Analyzer|Cellebrite|Magnet AXIOM|Oxygen Forensic|Chainalysis|TRM Labs|PAWorkbench|PAField|PATable|PA Table/, 'names from the product this design must not resemble'],
+  [/Section 63|Section 230|Section 94|Bharatiya|BNSS|NCRP|Sec63|Sec230|1930 freeze|court-admissible/i, 'legal form or statute wording (the tool supplies facts; the examiner prepares legal forms)'],
   [/-\[#[0-9a-fA-F]{3,8}\]/, 'hard-coded colour in a class (use the theme scale)'],
   [/text-\[(?:[0-9]|10)(?:\.\d+)?px\]/, 'text smaller than 11px'],
   [/animate-(?:pulse|ping|bounce)/, 'blinking or pulsing animation'],

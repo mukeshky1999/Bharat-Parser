@@ -14,7 +14,7 @@ import { LocationsMediaView } from '../views/LocationsMediaView';
 import { CryptoWalletView } from '../views/CryptoWalletView';
 import { FileSystemExplorerTab } from '../views/FileSystemExplorerTab';
 import { FindingsView } from '../views/FindingsView';
-import { CourtOutputView } from '../views/CourtOutputView';
+import { ReportExportView } from '../views/ReportExportView';
 
 export const Workspace: React.FC = () => {
   const activeTab = useWorkbenchStore((s) => s.activeTab);
@@ -55,7 +55,7 @@ export const Workspace: React.FC = () => {
         {activeTab === 'OS_SPILLOVER' && <OsSpilloverView />}
         {activeTab === 'LOCATIONS_MEDIA' && <LocationsMediaView />}
         {activeTab === 'FINDINGS' && <FindingsView />}
-        {activeTab === 'COURT_OUTPUT' && <CourtOutputView />}
+        {activeTab === 'REPORT_EXPORT' && <ReportExportView />}
       </div>
     </main>
   );

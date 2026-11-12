@@ -17,7 +17,6 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
   const open = useUi((s) => s.open);
   const setActiveTab = useWorkbenchStore((s) => s.setActiveTab);
   const setSearchQuery = useWorkbenchStore((s) => s.setSearchQuery);
-  const setIsBsaModalOpen = useWorkbenchStore((s) => s.setIsBsaModalOpen);
   const activeTab = useWorkbenchStore((s) => s.activeTab);
   const setPref = usePreferences((s) => s.set);
   const [q, setQ] = useState('');
@@ -32,9 +31,6 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
       ...go,
       { id: 'open-file', label: 'Open evidence file…', run: onPickFile },
       { id: 'open-folder', label: 'Open extracted folder…', run: onPickFolder },
-      { id: 'sec63', label: 'Prepare Section 63 certificate', hint: 'Stage 8', run: () => setIsBsaModalOpen(true) },
-      { id: 'sec230', label: 'Prepare Section 230 disclosure bundle', hint: 'Stage 8', run: () => open('SEC230') },
-      { id: 'ncrp', label: 'Prepare NCRP 1930 freeze sheet', hint: 'Stage 8', run: () => open('NCRP') },
       { id: 'settings', label: 'Display settings', run: () => open('SETTINGS') },
       { id: 't-dim', label: 'Theme: Dim', run: () => setPref({ theme: 'dim' }) },
       { id: 't-light', label: 'Theme: Light', run: () => setPref({ theme: 'light' }) },
@@ -42,7 +38,7 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
       { id: 'd-compact', label: 'Rows: Compact', run: () => setPref({ density: 'compact' }) },
       { id: 'd-comf', label: 'Rows: Comfortable', run: () => setPref({ density: 'comfortable' }) },
     ];
-  }, [setActiveTab, setIsBsaModalOpen, open, setPref, onPickFile, onPickFolder]);
+  }, [setActiveTab, open, setPref, onPickFile, onPickFolder]);
 
   const term = q.trim().toLowerCase();
   const matches = term ? commands.filter((c) => `${c.label} ${c.hint ?? ''}`.toLowerCase().includes(term)) : commands.slice(0, 12);
