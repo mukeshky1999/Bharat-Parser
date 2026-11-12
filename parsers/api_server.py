@@ -2456,8 +2456,14 @@ def _report_facts(particulars: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not parts.get("agency"):
         parts["agency"] = _case_state.get("agency_name") or ""
     findings = list_findings()["findings"]
+    from parsers import case_tag_report
+    conn = _active_store._get_connection()
+    try:
+        tag_data = case_tag_report.tag_facts(conn)
+    finally:
+        conn.close()
     return examination_report.build_facts(
-        _case_state, _active_store.get_project_tree_counts(), findings, _audit_summary(), parts, _tool_environment()
+        _case_state, _active_store.get_project_tree_counts(), findings, _audit_summary(), parts, _tool_environment(), tag_data
     )
 
 
@@ -2489,6 +2495,23 @@ def report_facts(format: str = Query("json", pattern="^(json|csv)$")):
                         headers={**_NO_STORE, "Content-Disposition": 'attachment; filename="case_facts.csv"'})
     return Response(content=examination_report.render_facts_json(facts), media_type="application/json",
                     headers={**_NO_STORE, "Content-Disposition": 'attachment; filename="case_facts.json"'})
+
+
+@app.get("/api/report/accounts-of-interest")
+def accounts_of_interest(format: str = Query("json", pattern="^(json|csv)$")):
+    """Accounts from payment records the examiner tagged; accounts shared with complainant/excluded/privileged records are listed apart."""
+    from parsers import case_tag_report
+    _require_case()
+    conn = _active_store._get_connection()
+    try:
+        data = case_tag_report.accounts_of_interest(conn)
+    finally:
+        conn.close()
+    _audit_event("report_generated", {"kind": "accounts_of_interest", "format": format, "listed": len(data["accounts"]), "left_out": len(data["left_out"])})
+    if format == "csv":
+        return Response(content=case_tag_report.accounts_csv(data), media_type="text/csv; charset=utf-8",
+                        headers={**_NO_STORE, "Content-Disposition": 'attachment; filename="accounts_of_interest.csv"'})
+    return data
 
 
 @app.get("/api/audit")

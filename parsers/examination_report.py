@@ -105,6 +105,7 @@ def build_facts(
     audit: Dict[str, Any],
     particulars: Optional[Dict[str, Any]],
     environment: Dict[str, Any],
+    tags: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """The annexure: every fact the report prints, as plain data."""
     hashes = case_state.get("hashes") or {}
@@ -164,6 +165,7 @@ def build_facts(
         },
         "limitations": lim,
         "findings": findings,
+        "tags": tags or {"available": False},
         "audit": audit,
     }
 
@@ -232,6 +234,22 @@ def render_report_html(f: Dict[str, Any]) -> str:
         ) + "</table>"
     else:
         fnd_html = "<p>No findings were pinned.</p>"
+    tg = f.get("tags") or {}
+    if tg.get("available") and (tg.get("detached_total") or any(t["count"] for t in tg["tags"])):
+        tag_rows = "".join(f"<tr><td>{_e(t['tag'])}</td><td>{t['count']}</td><td>{t['detached']}</td></tr>" for t in tg["tags"] if t["count"])
+        rel = "".join(
+            f"<tr><td>{_e(str(r['table']))} #{r['id']}</td><td>{_e(str(r['evidence_item'] or NOT_RECORDED))}</td><td>{_e(str(r['summary'] or ''))}</td>"
+            f"<td class='mono'>{_e(str(r['provenance'] or NOT_RECORDED))}</td><td>{_e(str(r['note'] or ''))}</td></tr>" for r in tg["relied_upon"])
+        more_rel = tg["relied_upon_total"] - len(tg["relied_upon"])
+        tags_html = (
+            "<p>Tags are the examiner's decisions; the software applies none by itself.</p>"
+            f"<table><tr><th>Tag</th><th>Records</th><th>Not placed on a record</th></tr>{tag_rows}</table>"
+            + (f"<h3>Records relied upon</h3><table><tr><th>Record</th><th>Evidence item</th><th>Content when tagged</th><th>Where it came from</th><th>Note</th></tr>{rel}</table>" if rel else "<p>No record is tagged as relied upon.</p>")
+            + (f"<p>{more_rel} further relied-upon record(s) are not listed here.</p>" if more_rel > 0 else "")
+            + (f"<p>{tg['relied_upon_withheld_privileged']} relied-upon record(s) also carry the privileged tag and are not listed.</p>" if tg["relied_upon_withheld_privileged"] else "")
+            + (f"<p>{tg['relied_upon_detached']} relied-upon tag(s) could not be placed on a record after the evidence was processed again and are not listed.</p>" if tg["relied_upon_detached"] else ""))
+    else:
+        tags_html = "<p>No records were tagged.</p>"
     entries = au.get("entries") or []
     shown = entries[:500]
     audit_rows = "".join(
@@ -274,7 +292,9 @@ It contains no opinion and makes no declaration. Any legal form a court or agenc
 
 <h2>7. Findings pinned by the examiner</h2>{fnd_html}
 
-<h2>8. Audit log</h2>
+<h2>8. Records tagged by the examiner</h2>{tags_html}
+
+<h2>9. Audit log</h2>
 <p>Entries: {len(entries)}. Chain check: <strong class="{audit_cls}">{audit_state}</strong>{(' (' + _e(au.get('error','')) + ')') if au.get('error') else ''}.
 Head hash at the time of this report: <span class="mono">{_e(str(au.get('head_hash','')))}</span></p>
 <table><tr><th>#</th><th>Time (UTC)</th><th>By</th><th>Action</th></tr>{audit_rows}</table>{more}
@@ -302,6 +322,13 @@ def render_facts_csv(f: Dict[str, Any]) -> str:
         rows.append((f"evidence_items.{u['item_id']}.label", u["label"]))
     for k, c in f["counts"].items():
         rows.append((f"counts.{k}", f"active={c['active']} recovered={c['recovered']} total={c['total']}"))
+    tg = f.get("tags") or {}
+    if tg.get("available"):
+        for t in tg["tags"]:
+            if t["count"]:
+                rows.append((f"tags.{t['tag']}", f"records={t['count']} not_placed={t['detached']}"))
+        rows.append(("tags.relied_upon_listed", tg["relied_upon_total"]))
+        rows.append(("tags.relied_upon_not_listed_privileged", tg["relied_upon_withheld_privileged"]))
     p = f["processing"]
     rows += [("processing.ok", p["ok"]), ("processing.failed", p["failed"]), ("processing.warnings", p["warnings"])]
     rows += [(f"limitation.{i}", x) for i, x in enumerate(f["limitations"], 1)]
