@@ -71,6 +71,7 @@ from parsers.multi_source_fusion import (
 )
 from parsers.plugin_loader import PluginRegistry
 from parsers import examination_report, review_package
+from parsers.case_file import CaseFile, FILE_NAME as CASE_FILE_NAME, list_cases, safe_case_dir_name
 from src.audit.ledger import AuditLedger, AuditTamperError
 from parsers.ui_fts5_paginator import CaseUIPaginatorStore
 from tools.forensic_benchmark_recorder import ForensicBenchmarkRecorder
@@ -257,6 +258,10 @@ class IngestCaseRequest(BaseModel):
     case_name: Optional[str] = None
     examiner_name: Optional[str] = ""   # supplied by the examiner; never a placeholder name
     agency_name: Optional[str] = ""
+    # "replace" (default) starts the case again from this evidence. "add" puts another device into the
+    # existing case; the same source added again replaces only that item.
+    mode: Optional[str] = "replace"
+    label: Optional[str] = ""           # the examiner's name for this device, e.g. "Suspect's phone"
 
 
 class BenchmarkRequest(BaseModel):
@@ -429,39 +434,84 @@ def _is_within(path: str, root: str) -> bool:
         return False
 
 
-def _resolve_case_file(requested: str, *, for_sqlite: bool = False) -> str:
+def _case_roots() -> List[Tuple[Optional[str], Optional[str], str]]:
+    """(evidence item id, evidence source path, working copy folder) for every item of the loaded case."""
+    ws = os.path.abspath(_active_store.case_workspace)
+    if not _case_state.get("loaded"):
+        return [(None, None, os.path.join(ws, "working_copy"))]
+    items = _case_state.get("items")
+    if items:
+        return [
+            (it["item_id"], it.get("source_path"),
+             os.path.join(ws, "items", safe_case_dir_name(it["item_id"]), "working_copy"))
+            for it in items
+        ]
+    return [(None, _case_state.get("evidence_path"), os.path.join(ws, "working_copy"))]
+
+
+def _resolve_case_file(requested: str, *, for_sqlite: bool = False, evidence_item: Optional[str] = None) -> str:
     """
     Resolves a client-supplied path to a file the active case may read.
 
-    Only the case workspace and the evidence source are allowed. When SQLite is going to open the
-    file, a path inside the original evidence folder is redirected to the identical file in the
-    case working copy, so the original is never touched.
+    Only the case workspace and the evidence sources are allowed. When SQLite is going to open the
+    file, a path inside an original evidence folder is redirected to the identical file in that item's
+    working copy, so the original is never touched.
+
+    A case can hold several devices, and two phones have the same relative paths. A relative path that
+    exists in more than one evidence item is refused (409) unless the caller names the item.
     """
     if not requested or not isinstance(requested, str):
         raise HTTPException(status_code=400, detail="A file path is required.")
     ws = os.path.abspath(_active_store.case_workspace)
-    ev = _case_state.get("evidence_path") if _case_state.get("loaded") else None
+    roots = _case_roots()
+    if evidence_item:
+        roots = [r for r in roots if r[0] == evidence_item]
+        if not roots:
+            raise HTTPException(status_code=404, detail=f"No evidence item {evidence_item} in this case.")
+    ev_paths = [r[1] for r in roots if r[1]]
 
-    candidates = [os.path.abspath(requested), os.path.abspath(os.path.join(ws, requested))]
-    # Parsers record paths relative to the evidence root ("data/data/com.whatsapp/databases/msgstore.db"):
-    # try the case working copy, then the evidence folder itself.
-    if ".." not in re.split(r"[\\/]+", requested) and not os.path.isabs(requested):
-        candidates.append(os.path.abspath(os.path.join(ws, "working_copy", requested)))
-        if ev and os.path.isdir(ev):
-            candidates.append(os.path.abspath(os.path.join(ev, requested)))
+    def in_ev(p: str) -> bool:
+        return any(_is_within(p, e) for e in ev_paths)
+
+    direct = [os.path.abspath(requested), os.path.abspath(os.path.join(ws, requested))]
+    relative_ok = ".." not in re.split(r"[\\/]+", requested) and not os.path.isabs(requested)
+
+    # (item id, evidence source, working copy, candidate); the item id is None for a direct path
+    cands: List[Tuple[Optional[str], Optional[str], Optional[str], str]] = [(None, None, None, c) for c in direct]
+    if relative_ok:
+        for item_id, ev, wc in roots:
+            cands.append((item_id, ev, wc, os.path.abspath(os.path.join(wc, requested))))
+            if ev and os.path.isdir(ev):
+                cands.append((item_id, ev, wc, os.path.abspath(os.path.join(ev, requested))))
+
     allowed_missing = False
-    for cand in candidates:
-        in_ws = _is_within(cand, ws)
-        in_ev = bool(ev) and _is_within(cand, ev)
-        if not (in_ws or in_ev):
+    found: List[Tuple[Optional[str], Optional[str], Optional[str], str]] = []
+    for item_id, ev, wc, cand in cands:
+        if not (_is_within(cand, ws) or in_ev(cand)):
             continue
         if not os.path.isfile(cand):
             allowed_missing = True
             continue
-        if for_sqlite and in_ev and not in_ws:
-            wc = os.path.join(ws, "working_copy")
-            rel = os.path.relpath(cand, ev if os.path.isdir(ev) else os.path.dirname(ev))
-            mapped = os.path.join(wc, rel)
+        found.append((item_id, ev, wc, cand))
+
+    if found:
+        direct_hit = [f for f in found if f[0] is None]
+        chosen_group = direct_hit or found
+        items_hit = {f[0] for f in chosen_group if f[0] is not None}
+        if len(items_hit) > 1:
+            raise HTTPException(
+                status_code=409,
+                detail=f"This path exists in more than one evidence item ({', '.join(sorted(items_hit))}). "
+                       "Say which item it belongs to.",
+            )
+        item_id, ev, wc, cand = chosen_group[0]
+        if for_sqlite and in_ev(cand) and not _is_within(cand, ws):
+            owner = next((r for r in roots if r[1] and _is_within(cand, r[1])), None)
+            if owner is None:
+                raise HTTPException(status_code=404, detail="No working copy exists for this evidence file.")
+            o_ev, o_wc = owner[1], owner[2]
+            rel = os.path.relpath(cand, o_ev if os.path.isdir(o_ev) else os.path.dirname(o_ev))
+            mapped = os.path.join(o_wc, rel)
             if not os.path.isfile(mapped):
                 raise HTTPException(status_code=404, detail="No working copy exists for this evidence file.")
             return mapped
@@ -474,6 +524,58 @@ def _resolve_case_file(requested: str, *, for_sqlite: bool = False) -> str:
     )
 
 
+def _case_state_from_file(ws: str, cf: CaseFile, active_item_id: Optional[str] = None) -> Dict[str, Any]:
+    """The in-memory case state, rebuilt from the case file. The same code runs after an ingest and after a reopen."""
+    info = cf.info()
+    items = cf.items()
+    active = next((i for i in items if i["item_id"] == active_item_id), None) or (items[-1] if items else None)
+    analysis = (active or {}).get("analysis") or {}
+    return {
+        "loaded": True,
+        "case_id": info.get("case_id") or os.path.basename(ws),
+        "case_name": info.get("case_name") or "",
+        "evidence_path": (active or {}).get("source_path") or ws,
+        "examiner_name": info.get("examiner_name", ""),
+        "agency_name": info.get("agency_name", ""),
+        "items": [
+            {k: it.get(k) for k in ("item_id", "label", "source_path", "kind", "added_utc", "integrity_match",
+                                    "hashes", "device", "processing_log", "record_counts")}
+            for it in items
+        ],
+        "active_item": (active or {}).get("item_id"),
+        "extractions": [
+            {"evidenceId": it["item_id"], "label": it.get("label") or "", "sourcePath": it.get("source_path"),
+             "type": "PHYSICAL_OR_LOGICAL", "hashes": it.get("hashes") or {}, "deviceMetadata": it.get("device") or {}}
+            for it in items
+        ],
+        "owner_dossier": (active or {}).get("dossier"),
+        "hashes": (active or {}).get("hashes") or {},
+        "device_metadata": (active or {}).get("device"),
+        "processing_log": (active or {}).get("processing_log") or [],
+        "mule_alerts": analysis.get("mule_alerts", []),
+        "syndicate_roles": analysis.get("syndicate_roles", []),
+        "charge_sheet_chain": analysis.get("charge_sheet_chain", {}),
+        "pyvis_html": analysis.get("pyvis_html", ""),
+        "workspace_dir": ws,
+    }
+
+
+def _item_summaries(state: Dict[str, Any]) -> List[Dict[str, Any]]:
+    out = []
+    for it in state.get("items") or []:
+        h = it.get("hashes") or {}
+        d = it.get("device") or {}
+        out.append({
+            "item_id": it["item_id"], "label": it.get("label") or "", "source_path": it.get("source_path") or "",
+            "kind": it.get("kind") or "", "added_utc": it.get("added_utc") or "",
+            "integrity_match": it.get("integrity_match"),
+            "sha256": h.get("sha256") or "", "model": d.get("model") or "", "manufacturer": d.get("manufacturer") or "",
+            "records": it.get("record_counts") or {},
+            "failed_steps": sum(1 for e in (it.get("processing_log") or []) if str(e.get("status", "")).upper() == "FAILED"),
+        })
+    return out
+
+
 # ------------------------------------------------------------------------------
 # Core Ingestion Pipeline Implementation
 # ------------------------------------------------------------------------------
@@ -484,6 +586,8 @@ def _execute_ingestion_pipeline(
     case_name: str,
     examiner_name: str,
     agency_name: str,
+    mode: str = "replace",
+    label: str = "",
 ) -> Dict[str, Any]:
     global _active_store, _case_state
 
@@ -491,9 +595,22 @@ def _execute_ingestion_pipeline(
     if not os.path.exists(abs_evidence):
         raise HTTPException(status_code=404, detail=f"Evidence path not found: {abs_evidence}")
 
-    workspace_dir = os.path.abspath(os.path.join(DEFAULT_WORKSPACE_ROOT, case_id))
+    mode = "add" if mode == "add" else "replace"
+    workspace_dir = os.path.abspath(os.path.join(DEFAULT_WORKSPACE_ROOT, safe_case_dir_name(case_id)))
     os.makedirs(workspace_dir, exist_ok=True)
-    extracted_dbs_dir = os.path.join(workspace_dir, "extracted_dbs")
+    cfile = CaseFile(workspace_dir)
+    if mode == "replace":
+        # The case starts again from this one item. Folders of earlier items (and the pre-5B.2 layout) go.
+        item_id, reprocess = "EV-001", False
+        for stale_dir in ("items", "working_copy", "extracted_dbs"):
+            shutil.rmtree(os.path.join(workspace_dir, stale_dir), ignore_errors=True)
+    else:
+        # Another device for the same case. The same source again replaces only that item.
+        existing = cfile.item_for_source(abs_evidence)
+        item_id, reprocess = (existing["item_id"], True) if existing else (cfile.next_item_id(), False)
+        shutil.rmtree(os.path.join(workspace_dir, "items", item_id), ignore_errors=True)
+    item_dir = os.path.join(workspace_dir, "items", item_id)
+    extracted_dbs_dir = os.path.join(item_dir, "extracted_dbs")
     os.makedirs(extracted_dbs_dir, exist_ok=True)
 
     # 1. Compute Pre-Ingestion SHA-256 and MD5
@@ -523,7 +640,7 @@ def _execute_ingestion_pipeline(
         )
 
     if is_archive:
-        container_engine = TerabyteForensicContainerEngine(abs_evidence, workspace_dir)
+        container_engine = TerabyteForensicContainerEngine(abs_evidence, item_dir)
         container_engine.index_and_materialize_targets()
         # Collect materialized DBs
         discovered_files: List[str] = []
@@ -533,7 +650,7 @@ def _execute_ingestion_pipeline(
     elif os.path.isdir(abs_evidence):
         # Evidence is never opened in place: SQLite creates -shm/-wal side files and may
         # checkpoint. Parse a byte-identical working copy instead.
-        working_copy_dir = os.path.join(workspace_dir, "working_copy")
+        working_copy_dir = os.path.join(item_dir, "working_copy")
         if os.path.isdir(working_copy_dir):
             shutil.rmtree(working_copy_dir)
         shutil.copytree(abs_evidence, working_copy_dir)
@@ -552,7 +669,7 @@ def _execute_ingestion_pipeline(
                     "local_disk_path": f_path,
                 })
     else:
-        working_copy_dir = os.path.join(workspace_dir, "working_copy")
+        working_copy_dir = os.path.join(item_dir, "working_copy")
         if os.path.isdir(working_copy_dir):
             shutil.rmtree(working_copy_dir)
         os.makedirs(working_copy_dir)
@@ -810,44 +927,49 @@ def _execute_ingestion_pipeline(
     # 8. Commit All Data to SQLite+FTS5 Case Store
     # Opening the same case id again must not add the records a second time: start from an empty store.
     # (The findings file is separate and is kept.)
-    for suffix in ("", "-wal", "-shm"):
-        stale = os.path.join(workspace_dir, "bharat_case_store.db" + suffix)
-        if os.path.isfile(stale):
-            os.remove(stale)
+    if mode == "replace":
+        for suffix in ("", "-wal", "-shm"):
+            stale = os.path.join(workspace_dir, "bharat_case_store.db" + suffix)
+            if os.path.isfile(stale):
+                os.remove(stale)
+        cfile.remove_all_items()
     store = CaseUIPaginatorStore(workspace_dir, db_name="bharat_case_store.db")
+    if mode == "add" and reprocess:
+        store.delete_evidence_item(item_id)
+    ingested: Dict[str, int] = {}
 
     if all_chats_list:
         combined_chats = pd.concat(all_chats_list, ignore_index=True)
-        store.ingest_dataframe_chunked("chats", combined_chats)
+        ingested["chats"] = store.ingest_dataframe_chunked("chats", combined_chats, evidence_item=item_id)
 
     if not combined_txs_df.empty:
-        store.ingest_dataframe_chunked("transactions", combined_txs_df)
+        ingested["transactions"] = store.ingest_dataframe_chunked("transactions", combined_txs_df, evidence_item=item_id)
 
     if all_contacts_list:
         combined_contacts = pd.concat(all_contacts_list, ignore_index=True)
-        store.ingest_dataframe_chunked("contacts", combined_contacts)
+        ingested["contacts"] = store.ingest_dataframe_chunked("contacts", combined_contacts, evidence_item=item_id)
 
     if all_calls_list:
         combined_calls = pd.concat(all_calls_list, ignore_index=True)
-        store.ingest_dataframe_chunked("calls", combined_calls)
+        ingested["calls"] = store.ingest_dataframe_chunked("calls", combined_calls, evidence_item=item_id)
 
     if all_locations_list:
         combined_locations = pd.concat(all_locations_list, ignore_index=True)
-        store.ingest_dataframe_chunked("locations", combined_locations)
+        ingested["locations"] = store.ingest_dataframe_chunked("locations", combined_locations, evidence_item=item_id)
 
     if all_spillover_list:
         combined_spillover = pd.concat(all_spillover_list, ignore_index=True)
-        store.ingest_dataframe_chunked("os_spillover", combined_spillover)
+        ingested["os_spillover"] = store.ingest_dataframe_chunked("os_spillover", combined_spillover, evidence_item=item_id)
 
     if not combined_crypto_df.empty:
-        store.ingest_dataframe_chunked("p2p_orders", combined_crypto_df)
+        ingested["p2p_orders"] = store.ingest_dataframe_chunked("p2p_orders", combined_crypto_df, evidence_item=item_id)
 
     if not aligned_fiat_crypto_df.empty:
-        store.ingest_dataframe_chunked("fiat_crypto_bridge", aligned_fiat_crypto_df)
+        ingested["fiat_crypto_bridge"] = store.ingest_dataframe_chunked("fiat_crypto_bridge", aligned_fiat_crypto_df, evidence_item=item_id)
 
     if catalog_entries:
         catalog_df = pd.DataFrame(catalog_entries)
-        store.ingest_dataframe_chunked("vfs_files", catalog_df)
+        ingested["vfs_files"] = store.ingest_dataframe_chunked("vfs_files", catalog_df, evidence_item=item_id)
 
     for tbl, cols in store.last_dropped_columns.items():
         if cols:
@@ -888,41 +1010,50 @@ def _execute_ingestion_pipeline(
         "UPI_Circle_Delegations": master_owner_dossier.get("UPI_Circle_Delegations", []),
     }
 
-    _case_state = {
-        "loaded": True,
-        "case_id": case_id,
-        "case_name": case_name,
-        "evidence_path": abs_evidence,
-        "examiner_name": examiner_name,
-        "agency_name": agency_name,
-        "extractions": [
-            {
-                "evidenceId": case_id,
-                "sourcePath": abs_evidence,
-                "type": "PHYSICAL_OR_LOGICAL",
-                "hashes": hashes,
-                "deviceMetadata": device_meta,
-            }
-        ],
-        "counts": counts,
-        "owner_dossier": serializable_dossier,
-        "hashes": hashes,
-        "processing_log": processing_log,
-        "mule_alerts": mule_alerts,
-        "syndicate_roles": roles_df.to_dict("records") if not roles_df.empty else [],
-        "device_metadata": device_meta,
-        "pyvis_html": pyvis_html,
-        "charge_sheet_chain": {
-            "case_id": case_id,
-            "evidence_hash_sha256": hashes.get("sha256"),
-            "mule_alerts_count": len(mule_alerts),
-            "syndicate_entities_count": len(roles_df) if not roles_df.empty else 0,
-            "roles": roles_df.to_dict("records") if not roles_df.empty else [],
-            "alerts": mule_alerts,
+    roles_list = roles_df.to_dict("records") if not roles_df.empty else []
+    kind = "archive" if is_archive else ("folder" if os.path.isdir(abs_evidence) else "file")
+    info_now = cfile.info()
+    cfile.set_info(
+        case_id=case_id,
+        case_name=case_name,
+        examiner_name=examiner_name,
+        agency_name=agency_name,
+        created_utc=info_now.get("created_utc") or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        last_opened_utc=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f"),
+    )
+    model_txt = str(device_meta.get("model") or "")
+    item_label = (label or "").strip() or (model_txt if model_txt and model_txt != "Not recorded" else os.path.basename(abs_evidence))
+    cfile.upsert_item(
+        item_id,
+        label=item_label,
+        source_path=abs_evidence,
+        kind=kind,
+        integrity_match=hashes.get("integrityMatch"),
+        status="ingested",
+        hashes=hashes,
+        device=device_meta,
+        processing_log=processing_log,
+        dossier=serializable_dossier,
+        record_counts=ingested,
+        analysis={
+            "mule_alerts": mule_alerts,
+            "syndicate_roles": roles_list,
+            "charge_sheet_chain": {
+                "case_id": case_id,
+                "evidence_hash_sha256": hashes.get("sha256"),
+                "mule_alerts_count": len(mule_alerts),
+                "syndicate_entities_count": len(roles_df) if not roles_df.empty else 0,
+                "roles": roles_list,
+                "alerts": mule_alerts,
+            },
+            "pyvis_html": pyvis_html,
         },
-    }
+    )
+    _case_state = _case_state_from_file(workspace_dir, cfile, item_id)
+    _case_state["counts"] = counts
 
     _audit_event("evidence_ingested", {
+        "evidence_item": item_id, "mode": mode,
         "evidence": os.path.basename(abs_evidence),
         "sha256_before": hashes.get("sha256"), "sha256_after": hashes.get("postIngestionSha256"),
         "integrity_match": hashes.get("integrityMatch"),
@@ -934,6 +1065,8 @@ def _execute_ingestion_pipeline(
         "case_name": case_name,
         "workspace_dir": workspace_dir,
         "db_path": _active_store.db_path,
+        "evidence_item": item_id,
+        "evidence_items": _item_summaries(_case_state),
         "hashes": hashes,
         "integrity_match": hashes["integrityMatch"],
         "processing_log": processing_log,
@@ -992,7 +1125,44 @@ def get_case_state():
         "counts": _active_store.get_project_tree_counts(),
         "owner_dossier": _case_state["owner_dossier"],
         "hashes": _case_state["hashes"],
+        "evidence_items": _item_summaries(_case_state),
+        "active_item": _case_state.get("active_item"),
     }
+
+
+@app.get("/api/cases/recent")
+def recent_cases():
+    """Cases found in the cases folder, most recently opened first. Opening one needs no new processing."""
+    return {"cases": list_cases(DEFAULT_WORKSPACE_ROOT)}
+
+
+@app.get("/api/case/evidence-items")
+def evidence_items():
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=412, detail="No case is loaded.")
+    return {"case_id": _case_state["case_id"], "active_item": _case_state.get("active_item"),
+            "items": _item_summaries(_case_state)}
+
+
+class ActiveItemRequest(BaseModel):
+    item_id: str
+
+
+@app.post("/api/case/active-item")
+def select_active_item(req: ActiveItemRequest):
+    """Which device the owner profile, link graph and alerts describe. Records of all devices stay in the case."""
+    global _case_state
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=412, detail="No case is loaded.")
+    ws = _case_state.get("workspace_dir") or _active_store.case_workspace
+    if not os.path.isfile(os.path.join(ws, CASE_FILE_NAME)):
+        raise HTTPException(status_code=404, detail="This case has no case file.")
+    cf = CaseFile(ws)
+    if cf.get_item(req.item_id) is None:
+        raise HTTPException(status_code=404, detail=f"No evidence item {req.item_id} in this case.")
+    _case_state = _case_state_from_file(ws, cf, req.item_id)
+    _audit_event("active_item_selected", {"evidence_item": req.item_id})
+    return {"success": True, "active_item": req.item_id}
 
 
 # ---------------------------------------------------------------------------
@@ -1103,6 +1273,8 @@ def get_case_summary():
         "syndicate_roles": _case_state["syndicate_roles"],
         "counts": _active_store.get_project_tree_counts(),
         "extractions": _case_state["extractions"],
+        "evidence_items": _item_summaries(_case_state),
+        "active_item": _case_state.get("active_item"),
     }
 
 
@@ -1140,10 +1312,19 @@ async def ingest_evidence_case(req: IngestCaseRequest):
     if not req.evidence_path or not req.evidence_path.strip():
         raise HTTPException(status_code=400, detail="Evidence path is required")
 
+    mode = "add" if (req.mode or "replace") == "add" else "replace"
+    existing_info: Dict[str, str] = {}
+    if mode == "add":
+        if not req.case_id:
+            raise HTTPException(status_code=400, detail="case_id is required to add evidence to an existing case.")
+        ws_existing = os.path.join(DEFAULT_WORKSPACE_ROOT, safe_case_dir_name(req.case_id))
+        if not os.path.isfile(os.path.join(ws_existing, CASE_FILE_NAME)):
+            raise HTTPException(status_code=404, detail=f"No case {req.case_id} to add evidence to.")
+        existing_info = CaseFile(ws_existing).info()
     case_id = req.case_id or f"CASE_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-    case_name = req.case_name or os.path.splitext(os.path.basename(req.evidence_path))[0]
-    examiner = req.examiner_name or ""
-    agency = req.agency_name or ""
+    case_name = req.case_name or existing_info.get("case_name") or os.path.splitext(os.path.basename(req.evidence_path))[0]
+    examiner = req.examiner_name or existing_info.get("examiner_name") or ""
+    agency = req.agency_name or existing_info.get("agency_name") or ""
 
     loop = asyncio.get_running_loop()
     try:
@@ -1156,6 +1337,8 @@ async def ingest_evidence_case(req: IngestCaseRequest):
                 case_name,
                 examiner,
                 agency,
+                mode,
+                req.label or "",
             )
             return result
     except HTTPException:
@@ -1187,6 +1370,7 @@ def query_artifacts(
     offset: int = Query(0, ge=0),
     sort_col: Optional[str] = Query("id"),
     sort_asc: bool = Query(False),
+    evidence_item: Optional[str] = Query(None),
 ):
     """Sub-10ms paginated query from SQLite+FTS5 case store."""
     category_map = {
@@ -1220,6 +1404,8 @@ def query_artifacts(
         filters["recovery_filter"] = recovery_filter
     if isinstance(ephemeral_filter, str) and ephemeral_filter != "ALL":
         filters["ephemeral_filter"] = ephemeral_filter
+    if isinstance(evidence_item, str) and evidence_item:
+        filters["evidence_item"] = evidence_item
 
     try:
         page_df, total = _active_store.get_paginated_rows(
@@ -1964,29 +2150,36 @@ async def open_case_workspace(req: CaseOpenRequest):
 
         _active_store = new_store
 
-        # Atomically synchronize _case_state to prevent torn reads and stale certificate generation
-        recovered_case_id = meta.get("case_id") or os.path.basename(ws)
-        recovered_case_name = meta.get("case_name") or f"Case Workspace: {recovered_case_id}"
-        evidence_path = meta.get("evidence_path") or ws
+        # A case written by 5B.2 or later has a case file: everything is restored from it, nothing is processed again.
+        if os.path.isfile(os.path.join(ws, CASE_FILE_NAME)):
+            cf_open = CaseFile(ws)
+            cf_open.touch_opened()
+            _case_state = _case_state_from_file(ws, cf_open)
+            _case_state["counts"] = _active_store.get_project_tree_counts()
+        else:
+            # Older workspace: only what its store and its metadata table hold.
+            recovered_case_id = meta.get("case_id") or os.path.basename(ws)
+            recovered_case_name = meta.get("case_name") or f"Case Workspace: {recovered_case_id}"
+            evidence_path = meta.get("evidence_path") or ws
 
-        _case_state = {
-            "loaded": True,
-            "case_id": recovered_case_id,
-            "case_name": recovered_case_name,
-            "evidence_path": evidence_path,
-            "examiner_name": meta.get("examiner_name", ""),
-            "agency_name": meta.get("agency_name", ""),
-            "extractions": [{"evidenceId": recovered_case_id, "sourcePath": evidence_path}],
-            "counts": _active_store.get_project_tree_counts(),
-            "owner_dossier": json.loads(meta.get("owner_dossier", "{}")),
-            "device_metadata": json.loads(meta.get("device_metadata", "{}")),
-            "hashes": json.loads(meta.get("hashes", "{}")),
-            "mule_alerts": json.loads(meta.get("mule_alerts", "[]")),
-            "syndicate_roles": json.loads(meta.get("syndicate_roles", "[]")),
-            "charge_sheet_chain": json.loads(meta.get("charge_sheet_chain", "{}")),
-            "pyvis_html": meta.get("pyvis_html"),
-            "workspace_dir": ws,
-        }
+            _case_state = {
+                "loaded": True,
+                "case_id": recovered_case_id,
+                "case_name": recovered_case_name,
+                "evidence_path": evidence_path,
+                "examiner_name": meta.get("examiner_name", ""),
+                "agency_name": meta.get("agency_name", ""),
+                "extractions": [{"evidenceId": recovered_case_id, "sourcePath": evidence_path}],
+                "counts": _active_store.get_project_tree_counts(),
+                "owner_dossier": json.loads(meta.get("owner_dossier", "{}")),
+                "device_metadata": json.loads(meta.get("device_metadata", "{}")),
+                "hashes": json.loads(meta.get("hashes", "{}")),
+                "mule_alerts": json.loads(meta.get("mule_alerts", "[]")),
+                "syndicate_roles": json.loads(meta.get("syndicate_roles", "[]")),
+                "charge_sheet_chain": json.loads(meta.get("charge_sheet_chain", "{}")),
+                "pyvis_html": meta.get("pyvis_html"),
+                "workspace_dir": ws,
+            }
 
     _audit_event("case_opened", {"workspace": os.path.basename(str(ws))})
     return CaseOpenResponse(
@@ -2038,6 +2231,7 @@ async def get_paginated_records(
     recovery_filter: Optional[str] = Query(None, description="Filter: ALL, ACTIVE, WAL, CARVED, SPILLOVER"),
     ephemeral_filter: Optional[str] = Query(None, description="Filter: VIEW_ONCE, DISAPPEARING, REVOKED, ATTACHMENTS"),
     app: Optional[str] = Query(None, description="App filter"),
+    evidence_item: Optional[str] = Query(None, description="Only records from this evidence item (device)"),
 ):
     """Legacy paginated endpoint with strict pagination constraints and case validation."""
     if not _case_state["loaded"]:
@@ -2060,6 +2254,7 @@ async def get_paginated_records(
             search_query=search,
             limit=page_size,
             offset=offset,
+            evidence_item=evidence_item,
         )
     )
 
@@ -2103,6 +2298,7 @@ async def get_hex_window(
     file_path: str = Query(..., description="Relative path within workspace or evidence"),
     offset: int = Query(..., ge=0, description="Target byte offset"),
     window_size: int = Query(4096, ge=256, le=65536, description="Byte window size"),
+    evidence_item: Optional[str] = Query(None, description="Evidence item (device) the path belongs to"),
 ):
     """Legacy hex window endpoint with boundary validation and threadpool execution."""
     if not _case_state["loaded"]:
@@ -2112,7 +2308,7 @@ async def get_hex_window(
         )
 
     # Resolve and sandbox file path (same rules as every other endpoint: case workspace or evidence source only)
-    abs_target = _resolve_case_file(file_path)
+    abs_target = _resolve_case_file(file_path, evidence_item=evidence_item if isinstance(evidence_item, str) else None)
 
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(

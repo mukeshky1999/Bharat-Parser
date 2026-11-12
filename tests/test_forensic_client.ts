@@ -206,6 +206,33 @@ async function runForensicClientTests() {
       'Client surfaces "Request aborted" error message when aborted'
     );
 
+    // =========================================================================
+    // TEST CASE 3: adding a device to a case sends the mode and the examiner's label
+    // =========================================================================
+    console.log('\n--- Test Suite 3: Add a device to an existing case ---');
+    let sentBody: Record<string, unknown> = {};
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      if (String(input).endsWith('/api/case/ingest')) {
+        sentBody = JSON.parse(String(init?.body ?? '{}'));
+      }
+      return new Response(JSON.stringify({ success: true, evidence_item: 'EV-002' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    };
+    const added = await forensicClient.ingestCase('phoneB', 'CASE-2', undefined, undefined, { mode: 'add', label: 'Second phone' });
+    assert(added.success === true && added.evidence_item === 'EV-002', 'Client returns the new evidence item id');
+    assert(sentBody.mode === 'add' && sentBody.label === 'Second phone', 'Client sends mode "add" and the label');
+    await forensicClient.ingestCase('phoneA', 'CASE-2');
+    assert(sentBody.mode === 'replace', 'Client defaults to starting the case again, never to adding silently');
+
+    globalThis.fetch = async (): Promise<Response> =>
+      new Response(JSON.stringify({ cases: [{ case_id: 'C1', evidence_items: [] }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    const recent = await forensicClient.getRecentCases();
+    assert(recent.length === 1 && recent[0].case_id === 'C1', 'Client lists saved cases');
+    globalThis.fetch = async (): Promise<Response> => new Response('{}', { status: 500 });
+    assert((await forensicClient.getRecentCases()).length === 0, 'A failing server gives an empty list, not a crash');
+
     console.log(`=== RESULTS: ALL ${passedTests}/${totalTests} FORENSIC CLIENT TESTS PASSED (100% SUCCESS) ===\n`);
   } finally {
     // Restore original fetch

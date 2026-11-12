@@ -103,8 +103,44 @@ export interface BenchmarkResponse {
   status?: number;
 }
 
+/** One device (phone, image or folder) in a case. A value the evidence did not give is an empty string. */
+export interface EvidenceItemSummary {
+  item_id: string;
+  label: string;
+  source_path: string;
+  kind: string;
+  added_utc: string;
+  integrity_match: boolean | null;
+  sha256: string;
+  model: string;
+  manufacturer: string;
+  records: Record<string, number>;
+  failed_steps: number;
+}
+
+export interface RecentCase {
+  case_id: string;
+  case_name: string;
+  examiner_name: string;
+  workspace: string;
+  created_utc: string;
+  last_opened_utc: string;
+  evidence_items: Array<{ item_id: string; label: string; source_path: string; integrity_match: boolean | null }>;
+}
+
+export interface IngestOptions {
+  /** "replace" starts the case again from this evidence; "add" puts another device into the existing case. */
+  mode?: 'replace' | 'add';
+  /** The examiner's own name for this device. */
+  label?: string;
+  examinerName?: string;
+  agencyName?: string;
+}
+
 export interface IngestCaseResponse {
   success: boolean;
+  evidence_item?: string;
+  evidence_items?: EvidenceItemSummary[];
   case_id?: string | null;
   case_name?: string | null;
   evidence_path?: string | null;
@@ -489,7 +525,8 @@ class ForensicClient {
     evidencePath: string,
     caseId?: string,
     caseName?: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options?: IngestOptions
   ): Promise<IngestCaseResponse> {
     try {
       const res = await this.fetchApi<IngestCaseResponse>('/api/case/ingest', {
@@ -498,7 +535,11 @@ class ForensicClient {
         body: JSON.stringify({
           evidence_path: evidencePath,
           case_id: caseId,
-          case_name: caseName
+          case_name: caseName,
+          mode: options?.mode ?? 'replace',
+          label: options?.label ?? '',
+          examiner_name: options?.examinerName ?? '',
+          agency_name: options?.agencyName ?? ''
         })
       });
       if (res.data && res.data.success) {
@@ -513,6 +554,40 @@ class ForensicClient {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to ingest evidence container';
       return { success: false, status: 0, detail: msg, error: msg };
+    }
+  }
+
+  /** Cases saved on this computer, most recently opened first. Opening one does not process anything again. */
+  public async getRecentCases(signal?: AbortSignal): Promise<RecentCase[]> {
+    try {
+      const res = await this.fetchApi<{ cases: RecentCase[] }>('/api/cases/recent', { signal });
+      return res.data?.cases ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** The devices in the open case. */
+  public async getEvidenceItems(signal?: AbortSignal): Promise<EvidenceItemSummary[]> {
+    try {
+      const res = await this.fetchApi<{ items: EvidenceItemSummary[] }>('/api/case/evidence-items', { signal });
+      return res.data?.items ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Which device the owner profile, link graph and alerts describe. Records of every device stay in the case. */
+  public async selectActiveItem(itemId: string, signal?: AbortSignal): Promise<boolean> {
+    try {
+      const res = await this.fetchApi<{ success: boolean }>('/api/case/active-item', {
+        method: 'POST',
+        signal,
+        body: JSON.stringify({ item_id: itemId })
+      });
+      return Boolean(res.data?.success);
+    } catch {
+      return false;
     }
   }
 

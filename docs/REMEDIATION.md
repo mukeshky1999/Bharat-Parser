@@ -141,3 +141,14 @@ Done:
 4. A flaky guard in `test_examination_report.py` was fixed: the pattern for "1930" had no word boundary and matched a random SHA-256 in about one run in a hundred.
 Python 515 passed (491 before this phase); `npm run test:ts` passes; `tsc` clean.
 Not done in this step (still planned): wiring `src/vfs` (stage A) and `src/upi`/`src/dlt` (stage C) into the product; M-08 and the `src/crypto/sqlcipher.py` wiring (X-10); offsets for rows served from a WAL; the odd-hour risk badge still reads the unzoned `Date` string.
+
+### Phase 5B.2: a case is saved, holds several devices, and reopens without processing (2026-11-12, branch `feature/parity-and-independence`)
+Done:
+1. **Case file** (`parsers/case_file.py`, `case_file.sqlite` beside the record store). It holds the case particulars and one row per evidence item (`EV-001`, `EV-002`, ...): source, hashes before and after, device facts, processing log, owner profile, per-item link analysis and record counts. Unknown values are stored as NULL.
+2. **Several devices in one case.** `POST /api/case/ingest` takes `mode`: `replace` (default, as before: the case starts again from this evidence) or `add` (another device in the existing case; the same source added again replaces only that item). Every stored record carries `Evidence_Item`; the old stores gain the column when opened. Each item has its own working copy under `items/<id>/`, so the second phone no longer deletes the first phone's files.
+3. **Same relative path on two phones is never guessed.** A path that exists in more than one item is refused with 409 unless the call names the item (`evidence_item`, on `hex-window` and `records`).
+4. **Reopen without re-ingest.** `POST /api/case/open` restores everything from the case file (hashes, devices, logs, profile, alerts); a test deletes the evidence folders and reopens. `GET /api/cases/recent` lists saved cases, most recently opened first; `GET /api/case/evidence-items`; `POST /api/case/active-item` chooses which device the owner profile, link graph and alerts describe.
+5. **The examination report and annexure state hashes, device facts and limitations per device** when a case has more than one (the old single "evidence" block would have described only one phone).
+6. The case id can no longer be used to leave the cases folder (it was joined into a path as typed).
+Python 531 passed (515 before; 16 new in `tests/test_case_file.py`); `npm run test:ts` 18/18 client tests; `tsc` clean.
+Not done: UI for the recent-cases list, the add-device button and the device switcher (5C.6); the link graph is per device, not across devices, because "This Phone" would merge two phones into one node; cross-device links are a later, labelled-as-lead feature; `vite build` and Electron screenshots not run.

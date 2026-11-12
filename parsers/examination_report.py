@@ -68,6 +68,36 @@ def limitations(processing_log: List[Dict[str, Any]], hashes: Dict[str, Any]) ->
     return out
 
 
+def _item_facts(it: Dict[str, Any]) -> Dict[str, Any]:
+    """The evidence and device facts of one evidence item."""
+    h = it.get("hashes") or {}
+    d = it.get("device") or {}
+    state, state_text = integrity_state(h)
+    return {
+        "item_id": it.get("item_id") or NOT_RECORDED,
+        "label": it.get("label") or NOT_RECORDED,
+        "evidence": {
+            "source_path": it.get("source_path") or NOT_RECORDED,
+            "size_bytes": h.get("fileSizeBytes"),
+            "sha256_before": h.get("sha256") or NOT_RECORDED,
+            "md5_before": h.get("md5") or NOT_RECORDED,
+            "sha256_after": h.get("postIngestionSha256") or NOT_RECORDED,
+            "md5_after": h.get("postIngestionMd5") or NOT_RECORDED,
+            "comparison": state,
+            "comparison_text": state_text,
+        },
+        "device": {
+            "model": d.get("model") or NOT_RECORDED,
+            "manufacturer": d.get("manufacturer") or NOT_RECORDED,
+            "os_version": d.get("androidVersion") or NOT_RECORDED,
+            "build": d.get("buildNumber") or NOT_RECORDED,
+            "serial": d.get("serialNumber") or NOT_RECORDED,
+            "imei": d.get("imei1") or NOT_RECORDED,
+            "acquisition_time": d.get("acquisitionTime") or NOT_RECORDED,
+        },
+    }
+
+
 def build_facts(
     case_state: Dict[str, Any],
     counts: Dict[str, Any],
@@ -81,12 +111,23 @@ def build_facts(
     dev = case_state.get("device_metadata") or {}
     state, state_text = integrity_state(hashes)
     plog = case_state.get("processing_log") or []
+    items = case_state.get("items") or []
+    if len(items) > 1:
+        # Several devices in one case: every statement is made per item, never for "the" evidence.
+        ev_items = [_item_facts(it) for it in items]
+        lim: List[str] = []
+        for it in items:
+            lim += [f"[{it.get('item_id')}] {x}" for x in limitations(it.get("processing_log") or [], it.get("hashes") or {})]
+    else:
+        ev_items = None
+        lim = limitations(plog, hashes)
     parts = {k: str((particulars or {}).get(k) or "").strip() for k, _ in PARTICULAR_FIELDS}
     return {
         "generated": now_stamps(),
         "case": {"id": case_state.get("case_id") or NOT_RECORDED, "name": case_state.get("case_name") or NOT_RECORDED},
         "particulars": {k: (v or NOT_PROVIDED) for k, v in parts.items()},
-        "evidence": {
+        "evidence_items": ev_items,
+        "evidence": None if ev_items else {
             "source_path": case_state.get("evidence_path") or NOT_RECORDED,
             "size_bytes": hashes.get("fileSizeBytes"),
             "sha256_before": hashes.get("sha256") or NOT_RECORDED,
@@ -96,7 +137,7 @@ def build_facts(
             "comparison": state,
             "comparison_text": state_text,
         },
-        "device": {
+        "device": None if ev_items else {
             "model": dev.get("model") or NOT_RECORDED,
             "manufacturer": dev.get("manufacturer") or NOT_RECORDED,
             "os_version": dev.get("androidVersion") or NOT_RECORDED,
@@ -121,7 +162,7 @@ def build_facts(
             "warnings": sum(1 for e in plog if str(e.get("status", "")).upper() == "WARNING"),
             "log": plog,
         },
-        "limitations": limitations(plog, hashes),
+        "limitations": lim,
         "findings": findings,
         "audit": audit,
     }
@@ -152,10 +193,28 @@ def _source_text(src: Dict[str, Any]) -> str:
 
 
 def render_report_html(f: Dict[str, Any]) -> str:
-    ev, dev, env, au = f["evidence"], f["device"], f["environment"], f["audit"]
-    cls = {"MATCH": "ok", "MISMATCH": "bad"}.get(ev["comparison"], "warn")
-    size = ev.get("size_bytes")
-    size_txt = f"{int(size):,} bytes" if isinstance(size, int) else NOT_RECORDED
+    env, au = f["environment"], f["audit"]
+    many = f.get("evidence_items")
+    units = many if many else [{"item_id": None, "label": None, "evidence": f["evidence"], "device": f["device"]}]
+
+    def _evidence_table(u: Dict[str, Any]) -> str:
+        ev = u["evidence"]
+        cls = {"MATCH": "ok", "MISMATCH": "bad"}.get(ev["comparison"], "warn")
+        size = ev.get("size_bytes")
+        size_txt = f"{int(size):,} bytes" if isinstance(size, int) else NOT_RECORDED
+        head = f"<h3>{_e(str(u['item_id']))}: {_e(str(u['label']))}</h3>" if many else ""
+        return head + f"""<table>{_rows([("Source", ev['source_path']), ("Size", size_txt), ("SHA-256 before processing", ev['sha256_before']), ("MD5 before processing", ev['md5_before']),
+ ("SHA-256 after processing", ev['sha256_after']), ("MD5 after processing", ev['md5_after'])], mono=True)}
+<tr><th>Comparison</th><td class="{cls}"><strong>{_e(ev['comparison'])}</strong>: {_e(ev['comparison_text'])}</td></tr></table>"""
+
+    def _device_table(u: Dict[str, Any]) -> str:
+        dev = u["device"]
+        head = f"<h3>{_e(str(u['item_id']))}: {_e(str(u['label']))}</h3>" if many else ""
+        return head + f"""<table>{_rows([("Model", dev['model']), ("Manufacturer", dev['manufacturer']), ("OS version", dev['os_version']), ("Build", dev['build']),
+ ("Serial number", dev['serial']), ("IMEI", dev['imei']), ("Acquisition time", dev['acquisition_time'])])}</table>"""
+
+    evidence_html = "".join(_evidence_table(u) for u in units)
+    device_html = "".join(_device_table(u) for u in units)
 
     count_rows = "".join(
         f"<tr><td>{_e(c['label'])}</td><td>{c['active']}</td><td>{c['recovered']}</td><td>{c['total']}</td></tr>"
@@ -198,13 +257,10 @@ It contains no opinion and makes no declaration. Any legal form a court or agenc
 <table>{_rows([("Case ID (in this tool)", f['case']['id']), ("Case name", f['case']['name'])] + [(label, f['particulars'][k]) for k, label in PARTICULAR_FIELDS])}</table>
 
 <h2>2. Evidence and hashes</h2>
-<table>{_rows([("Source", ev['source_path']), ("Size", size_txt), ("SHA-256 before processing", ev['sha256_before']), ("MD5 before processing", ev['md5_before']),
- ("SHA-256 after processing", ev['sha256_after']), ("MD5 after processing", ev['md5_after'])], mono=True)}
-<tr><th>Comparison</th><td class="{cls}"><strong>{_e(ev['comparison'])}</strong>: {_e(ev['comparison_text'])}</td></tr></table>
+{evidence_html}
 
 <h2>3. Device, as recorded in the evidence</h2>
-<table>{_rows([("Model", dev['model']), ("Manufacturer", dev['manufacturer']), ("OS version", dev['os_version']), ("Build", dev['build']),
- ("Serial number", dev['serial']), ("IMEI", dev['imei']), ("Acquisition time", dev['acquisition_time'])])}</table>
+{device_html}
 
 <h2>4. Tool and processing environment</h2>
 <table>{_rows([(k, v) for k, v in env.items()])}</table>
@@ -237,8 +293,13 @@ def render_facts_csv(f: Dict[str, Any]) -> str:
     """Flat field,value rows for copying into the lab's own form."""
     rows: List[Tuple[str, Any]] = [("generated_utc", f["generated"]["utc"]), ("generated_ist", f["generated"]["ist"])]
     for sect in ("case", "particulars", "evidence", "device", "environment"):
-        for k, v in f[sect].items():
+        for k, v in (f.get(sect) or {}).items():
             rows.append((f"{sect}.{k}", v))
+    for u in f.get("evidence_items") or []:
+        for sect in ("evidence", "device"):
+            for k, v in u[sect].items():
+                rows.append((f"evidence_items.{u['item_id']}.{sect}.{k}", v))
+        rows.append((f"evidence_items.{u['item_id']}.label", u["label"]))
     for k, c in f["counts"].items():
         rows.append((f"counts.{k}", f"active={c['active']} recovered={c['recovered']} total={c['total']}"))
     p = f["processing"]

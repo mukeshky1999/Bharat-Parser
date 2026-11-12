@@ -77,6 +77,13 @@ def adapt_legacy_chat_frame(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+ALLOWED_TABLES = frozenset({
+    'chats', 'transactions', 'contacts', 'calls', 'locations', 'os_spillover',
+    'notifications', 'custodial_wallets', 'p2p_orders', 'fiat_crypto_bridge',
+    'crypto_addresses', 'vfs_files',
+})
+
+
 class CaseUIPaginatorStore:
     """
     On-disk high-throughput SQLite + FTS5 Paginated Data Store for 1 TB+ dumps.
@@ -430,9 +437,34 @@ class CaseUIPaginatorStore:
                 if col not in have:
                     cur.execute(f"ALTER TABLE transactions ADD COLUMN {col} TEXT")
 
+            # Phase 5B.2: every record says which evidence item (device) it came from.
+            for tbl in sorted(ALLOWED_TABLES):
+                tbl_cols = {r[1] for r in cur.execute(f"PRAGMA table_info({tbl})")}
+                if "Evidence_Item" not in tbl_cols:
+                    cur.execute(f"ALTER TABLE {tbl} ADD COLUMN Evidence_Item TEXT")
+                if tbl in ("chats", "transactions"):
+                    cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{tbl}_evidence_item ON {tbl}(Evidence_Item)")
+
             conn.commit()
         finally:
             conn.close()
+
+    def delete_evidence_item(self, item_id: str) -> Dict[str, int]:
+        """Removes every record of one evidence item (used when that item is processed again). Other items are untouched."""
+        removed: Dict[str, int] = {}
+        conn = self._get_connection()
+        try:
+            existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            for tbl in sorted(ALLOWED_TABLES):
+                cur = conn.execute(f"DELETE FROM {tbl} WHERE Evidence_Item = ?", (item_id,))
+                removed[tbl] = cur.rowcount
+                if removed[tbl] and f"{tbl}_fts" in existing:
+                    # chats and transactions have a delete trigger; the others do not, so rebuild their index
+                    conn.execute(f"INSERT INTO {tbl}_fts({tbl}_fts) VALUES('rebuild')")
+            conn.commit()
+        finally:
+            conn.close()
+        return removed
 
     # ==========================================================================
     # STREAMING CHUNKED INGESTION
@@ -443,6 +475,7 @@ class CaseUIPaginatorStore:
         table_name: str,
         df: pd.DataFrame,
         chunk_size: int = 5000,
+        evidence_item: Optional[str] = None,
     ) -> int:
         """
         Streams parsed DataFrames to disk in chunks of chunk_size and immediately
@@ -472,6 +505,9 @@ class CaseUIPaginatorStore:
 
             if target_table == 'chats':
                 df = adapt_legacy_chat_frame(df)
+            if evidence_item:
+                df = df.copy()
+                df['Evidence_Item'] = evidence_item
 
             common_cols = [c for c in db_cols if c in df.columns]
             # C-11: never drop data silently. Columns the store cannot hold are reported.
@@ -792,6 +828,10 @@ class CaseUIPaginatorStore:
                             where_clauses.append("Is_Revoked_Deleted = 1")
                         elif v == 'MEDIA_OR_GPS':
                             where_clauses.append("(Attachment_Path_or_URL != '' OR Geo_Coordinates != '')")
+
+                    elif k == 'evidence_item':
+                        where_clauses.append("Evidence_Item = ?")
+                        params.append(str(v))
 
                     elif k == 'thread_id':
                         where_clauses.append("Thread_ID = ?")
