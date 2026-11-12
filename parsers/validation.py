@@ -162,6 +162,14 @@ def _case_media_hashes_and_status(tmp: str) -> Any:
         conn.close()
 
 
+def _client(api_server: Any) -> Any:
+    """A test client for the server's own app. When the server was started with an access token (as the desktop app
+    does), the client carries it, because the validation talks to the same app in the same process."""
+    from fastapi.testclient import TestClient
+    token = os.environ.get("BHARAT_API_TOKEN", "")
+    return TestClient(api_server.app, headers={"X-Bharat-Token": token} if token else None)
+
+
 class ValidationBusy(RuntimeError):
     """An ingest is running, so the validation cannot borrow the server's state."""
 
@@ -203,7 +211,7 @@ def _case_pipeline(tmp: str) -> Any:
         c.close()
         with open(os.path.join(ev, "mystery.bin"), "wb") as f:
             f.write(b"\x00\x01\x02" * 50)
-        client = TestClient(api_server.app)
+        client = _client(api_server)
         res = client.post("/api/case/ingest", json={"evidence_path": ev, "case_id": "VALIDATION"}).json()
         rows = client.get("/api/artifacts/query", params={"category": "upi_transactions"}).json().get("rows", [])
         cov = client.get("/api/case/coverage").json()
@@ -278,7 +286,7 @@ def _corpus_checks(corpus_dir: str) -> List[Dict[str, Any]]:
         def run() -> Any:
             from fastapi.testclient import TestClient
             with tempfile.TemporaryDirectory() as tmp, isolated_api(os.path.join(tmp, "cases")) as api_server:
-                client = TestClient(api_server.app)
+                client = _client(api_server)
                 res = client.post("/api/case/ingest", json={"evidence_path": corpus_dir, "case_id": "VALIDATION-CORPUS"}).json()
                 if not res.get("success"):
                     raise RuntimeError(res.get("error") or "ingest failed")

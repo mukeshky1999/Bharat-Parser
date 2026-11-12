@@ -74,3 +74,10 @@ def test_validation_refuses_while_an_ingest_is_running(monkeypatch):
     from fastapi.testclient import TestClient
     monkeypatch.setattr(api_server._ingest_progress, "state", "running")
     assert TestClient(api_server.app).post("/api/validation/run").status_code == 409
+
+
+def test_validation_works_when_the_server_requires_an_access_token(monkeypatch):
+    """The desktop app starts the server with a per-launch token; the validation must carry it (found in the running app)."""
+    monkeypatch.setenv("BHARAT_API_TOKEN", "t" * 32)
+    r = validation.run_validation()
+    assert r["tally"]["FAIL"] == 0 and r["tally"]["ERROR"] == 0, [c for c in r["checks"] if c["status"] != "PASS"]
