@@ -333,6 +333,25 @@ async function runForensicClientTests() {
     globalThis.fetch = async (): Promise<Response> => new Response('nope', { status: 404 });
     assert((await forensicClient.getMediaThumbnail(1)) === null, 'A missing thumbnail gives null, not a broken URL');
 
+    // Suite 9: key broker
+    console.log('\n--- Test Suite 9: Key broker ---');
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      askedUrl = String(input);
+      sentPkg = String(init?.body ?? '');
+      return new Response(JSON.stringify({ success: true, keys: [], needed: [], events: [], note: '' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    await forensicClient.ingestCase('/ev', undefined, undefined, undefined, { mode: 'add', keys: { app: 'ab'.repeat(32) } });
+    assert(JSON.parse(sentPkg).keys.app === 'ab'.repeat(32) && JSON.parse(sentPkg).mode === 'add', 'Keys you type go with the ingest request');
+    await forensicClient.ingestCase('/ev', undefined, undefined, undefined, { keys: {} });
+    assert(!('keys' in JSON.parse(sentPkg)), 'An empty key list is not sent');
+    await forensicClient.checkKeys({ k: 'value' });
+    assert(askedUrl.endsWith('/api/keys/check') && JSON.parse(sentPkg).keys.k === 'value', 'Keys are described by their own call');
+    await forensicClient.getCaseKeys();
+    assert(askedUrl.endsWith('/api/case/keys'), 'Files needing a key have their own call');
+    const fsMod = await import('fs');
+    const panel = fsMod.readFileSync('ui/renderer/inspectors/KeyBrokerPanel.tsx', 'utf8');
+    assert(!/localStorage|sessionStorage|indexedDB|persist\(|zustand/.test(panel), 'The key panel keeps typed keys in component state only');
+
     console.log(`=== RESULTS: ALL ${passedTests}/${totalTests} FORENSIC CLIENT TESTS PASSED (100% SUCCESS) ===\n`);
   } finally {
     // Restore original fetch

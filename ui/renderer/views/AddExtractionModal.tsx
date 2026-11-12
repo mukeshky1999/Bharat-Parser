@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { forensicClient } from '../api/forensicClient';
 import { useWorkbenchStore } from '../state/workbenchStore';
+import { KeyEntry, KeyRow, keysFromRows } from '../inspectors/KeyBrokerPanel';
 
 interface AddExtractionModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
   const [caseId, setCaseId] = useState('');
   const [extractionFormat, setExtractionFormat] = useState<'UFDR' | 'TAR' | 'ZIP' | 'FOLDER' | 'SQLITE'>('TAR');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [keyRows, setKeyRows] = useState<KeyRow[]>([]);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -108,8 +110,10 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
         containerPath.trim(),
         caseId.trim() || undefined,
         undefined,
-        controller.signal
+        controller.signal,
+        { keys: keysFromRows(keyRows) }
       );
+      setKeyRows([]); // typed keys are cleared as soon as they have been sent
 
       if (controller.signal.aborted || !isMountedRef.current) return;
 
@@ -246,6 +250,13 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
               className="w-full h-8 bg-slate-900 border border-slate-700 rounded px-3 text-xs text-slate-50 placeholder-slate-500 focus:outline-none focus:border-cyan-600 font-mono"
             />
           </div>
+
+          {/* Keys for encrypted databases (optional) */}
+          <details className="bg-slate-900 border border-slate-700 rounded p-2.5">
+            <summary className="cursor-pointer text-[0.6875rem] font-semibold text-slate-300 uppercase tracking-wide">Keys for encrypted databases (optional)</summary>
+            <p className="text-[0.6875rem] text-slate-400 my-2">Only keys you list here, and keys stored in the evidence itself, are tried. They are used while this evidence is processed and are not saved.</p>
+            <KeyEntry rows={keyRows} onChange={setKeyRows} disabled={isProcessing} />
+          </details>
 
           {/* Forensic Ingestion Info Banner */}
           <div className="bg-slate-900 border border-slate-700 rounded p-2.5 space-y-1 text-[0.6875rem] text-slate-300">

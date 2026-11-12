@@ -345,6 +345,16 @@ export interface IngestOptions {
   label?: string;
   examinerName?: string;
   agencyName?: string;
+  /** Keys you hold for encrypted databases: name to hex, base64 or passphrase. Used while this device is processed; never stored. */
+  keys?: Record<string, string>;
+}
+
+export interface KeyCheckRow { name: string; usable: boolean; readings: Array<{ how: 'raw' | 'hex' | 'base64' | 'passphrase'; fingerprint: string }>; problems: string[] }
+
+export interface KeysNeeded {
+  needed: Array<{ evidence_item: string; label: string | null; source_path: string | null; files: Array<{ file: string; size_bytes: number | null; reason: string | null }> }>;
+  events: Array<{ seq: number; ts_utc: string; action: 'keys_available' | 'key_used'; details: Record<string, unknown> }>;
+  note: string;
 }
 
 export interface IngestCaseResponse {
@@ -749,7 +759,8 @@ class ForensicClient {
           mode: options?.mode ?? 'replace',
           label: options?.label ?? '',
           examiner_name: options?.examinerName ?? '',
-          agency_name: options?.agencyName ?? ''
+          agency_name: options?.agencyName ?? '',
+          keys: options?.keys && Object.keys(options.keys).length ? options.keys : undefined
         })
       });
       if (res.data && res.data.success) {
@@ -765,6 +776,16 @@ class ForensicClient {
       const msg = e instanceof Error ? e.message : 'Failed to ingest evidence container';
       return { success: false, status: 0, detail: msg, error: msg };
     }
+  }
+
+  /** Describe the keys you typed: the readings the ingest would try and each one's fingerprint. Values are not returned. */
+  public async checkKeys(keys: Record<string, string>): Promise<{ data: { keys: KeyCheckRow[] } | null; error: string | null }> {
+    return this.fetchApi('/api/keys/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keys }) });
+  }
+
+  /** Files this case could not open for want of a key, and what the audit log says about key use. */
+  public async getCaseKeys(): Promise<{ data: KeysNeeded | null; error: string | null }> {
+    return this.fetchApi('/api/case/keys');
   }
 
   /** Cases saved on this computer, most recently opened first. Opening one does not process anything again. */

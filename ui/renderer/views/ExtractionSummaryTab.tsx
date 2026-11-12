@@ -36,6 +36,7 @@ import {
 import { useWorkbenchStore, ActiveTabType } from '../state/workbenchStore';
 import { useUi } from '../state/uiStore';
 import { forensicClient, CaseSummaryResponse } from '../api/forensicClient';
+import { KeysNeededCard } from '../inspectors/KeyBrokerPanel';
 
 /** The backend reports a dossier field as a list, a plain string, or a "Not Found" marker. Returns text to show, or null when nothing was found. */
 function dossierText(v: unknown): string | null {
@@ -312,6 +313,17 @@ export const ExtractionSummaryTab: React.FC<ExtractionSummaryTabProps> = ({
               <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
               <span>{errorMessage}</span>
             </div>
+          )}
+
+          {isLoaded && (
+            <KeysNeededCard
+              refreshKey={backendSummary?.case_id ?? ''}
+              onProcessed={async () => {
+                await syncWithBackendCase();
+                const data = await forensicClient.getCaseSummary();
+                if (data) setBackendSummary(data);
+              }}
+            />
           )}
 
           {/* Three Large Intake Action Cards */}

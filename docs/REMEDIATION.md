@@ -244,3 +244,14 @@ Python 624 passed (610 before; 14 new in `tests/test_tags_and_timeline.py`); `np
 - Audit events: `hash_set_imported`, `hash_set_removed`, `media_analysed`. Processing an evidence item again removes its media rows (hash lists are case-level and stay).
 - Pillow is in `requirements.txt` but was not installed in the project venv; it is installed now (13.0.0). Without it images are hashed only and the record says so.
 - Not done: screens (5C), video frames, HEIC, EXIF thumbnails embedded in the file, tamper analysis of images. Analysis runs inside the request (no progress events); a very large case is done in several calls.
+
+### Phase 5B.9: key broker (2026-11-12)
+The decryption itself was wired earlier (X-10: `keys` in the ingest request, `parsers/encrypted_db.py`, `src/crypto/sqlcipher.py`; keys never stored, the audit log gets `keys_available` / `key_used` with the key's name and 8-digit fingerprint; no wordlist, no brute force). This step adds what the examiner needs around it.
+- `POST /api/keys/check`: for each key typed, the readings the ingest would try (raw, hex, base64, passphrase) with each reading's fingerprint, and problems (empty, too long, no possible reading, same material under two names). **No value is returned, stored or logged**; `Cache-Control: no-store`.
+- `GET /api/case/keys`: `needed` = files whose outcome is `ENCRYPTED_NO_KEY`, per evidence item with its label and source path; `events` = the `keys_available` / `key_used` entries of the audit log (names and fingerprints only).
+- **Retrying with a key** is processing that device again with `keys` (`mode: add`, same source): the device is replaced, and its tags are re-attached by provenance (5B.6). There is no way to apply a key to one file in place; the whole device is processed again.
+- Screens: `inspectors/KeyBrokerPanel.tsx`. "Keys for encrypted databases (optional)" in the Add extraction dialog; a card on the Summary tab, shown only when the case has unread encrypted files, that lists them and offers "Process this device again with these keys". Typed keys live in component state only (a test fails if the panel touches local storage, session storage, IndexedDB or a store) and are cleared as soon as they have been sent.
+- Client: `checkKeys`, `getCaseKeys`, `keys` in `IngestOptions`.
+Limits: the cancel / progress behaviour of a long decrypt is the general ingest one (5B.3). A key stored by the app inside the evidence is found only where `parsers/keychain_decryptor` looks. Not screenshot-tested in Electron.
+
+Verification of the whole 2026-11-12 batch (tags in outputs, 5B.8, 5B.9): see the test counts in the commit messages; `vite build` runs (first time in this branch).
