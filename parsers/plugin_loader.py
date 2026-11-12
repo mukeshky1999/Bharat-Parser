@@ -1089,6 +1089,8 @@ class PluginRegistry:
         target_uuids: Optional[List[str]] = None,
         candidate_plugin: Optional[AppPlugin] = None,
     ) -> Optional[AppPlugin]:
+        if not clean_path or not isinstance(clean_path, str):
+            return None
         path_lower = clean_path.replace("\\", "/").lower()
 
         if target_uuids and candidate_plugin:

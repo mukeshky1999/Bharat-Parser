@@ -262,19 +262,30 @@ class TestCaseUIPaginatorStore(unittest.TestCase):
         prov_str = "Physical_Dump.tar :: Table=messages :: RowID=42 :: Page_2 :: Offset=0x00066000 :: State=WAL_RECOVERED"
         res = self.store.read_provenance_hex_window(prov_str, window_bytes=4096)
 
+        # Provenance is parsed, but the file does not exist: no bytes may be invented (C-04).
         self.assertEqual(res["target_offset"], 0x00066000)
         self.assertEqual(res["provenance_parsed"]["page_number"], 2)
         self.assertEqual(res["provenance_parsed"]["table_name"], "messages")
         self.assertEqual(res["provenance_parsed"]["recovery_state"], "WAL_RECOVERED")
-        self.assertEqual(res["window_bytes"], 4096)
-        self.assertGreater(len(res["hex_lines"]), 0)
+        self.assertEqual(res["window_bytes"], 0)
+        self.assertEqual(res["hex_lines"], [])
+        self.assertEqual(res["raw_hex"], "")
+        self.assertIn("File not found", res["error"])
 
-        # Verify highlighted byte span exists
-        has_highlight = any(
-            any(b["isHighlighted"] for b in line["bytes"])
-            for line in res["hex_lines"]
-        )
-        self.assertTrue(has_highlight)
+    def test_read_provenance_hex_window_reads_real_bytes(self):
+        path = os.path.join(self.test_dir, "real.bin")
+        payload = bytes(range(256)) * 32
+        with open(path, "wb") as f:
+            f.write(payload)
+        res = self.store.read_provenance_hex_window(file_path=path, byte_offset=512, window_size=256)
+        self.assertNotIn("error", res)
+        start = res["start_offset"]
+        self.assertEqual(bytes.fromhex(res["raw_hex"]), payload[start:start + res["window_bytes"]])
+        self.assertTrue(any(b["isHighlighted"] for l in res["hex_lines"] for b in l["bytes"]))
+
+        beyond = self.store.read_provenance_hex_window(file_path=path, byte_offset=10**6, window_size=256)
+        self.assertEqual(beyond["raw_hex"], "")
+        self.assertIn("beyond end of file", beyond["error"])
 
 
 if __name__ == "__main__":

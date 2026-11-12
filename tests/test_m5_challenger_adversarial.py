@@ -151,7 +151,7 @@ class TestM5ChallengerAdversarial(unittest.TestCase):
                 },
             ]
 
-            req = NcrpFreezeRequest(
+            req = NcrpFreezeRequest(acknowledgement_no="NCRP-TEST-001", 
                 case_id=f"M5_NCRP_WS_{idx}",
                 complainant_account=comp_acc,
                 candidates=custom_candidates,
@@ -186,7 +186,7 @@ class TestM5ChallengerAdversarial(unittest.TestCase):
             {"account_no": victim_acc, "ifsc": "HDFC0002", "vpa": "v2@hdfc", "is_complainant_victim": False, "volume_inr": 60000.0},
             {"account_no": "MULE_LEGIT_123", "ifsc": "SBIN0001", "vpa": "m@sbi", "is_complainant_victim": False, "volume_inr": 40000.0},
         ]
-        req = NcrpFreezeRequest(
+        req = NcrpFreezeRequest(acknowledgement_no="NCRP-TEST-001", 
             case_id="M5_NCRP_MULTI",
             complainant_account=victim_acc,
             candidates=custom_candidates,
@@ -211,7 +211,7 @@ class TestM5ChallengerAdversarial(unittest.TestCase):
             {"account_no": "", "ifsc": "HDFC0003", "vpa": "empty_acc@hdfc", "volume_inr": 3000.0},
             {"account_no": "VALID_MULE_001", "ifsc": "ICIC0001", "vpa": "mule1@icici", "volume_inr": 50000.0},
         ]
-        req = NcrpFreezeRequest(
+        req = NcrpFreezeRequest(acknowledgement_no="NCRP-TEST-001", 
             case_id="M5_NCRP_MALFORMED",
             complainant_account="VICTIM_MAIN",
             candidates=custom_candidates,
@@ -228,7 +228,7 @@ class TestM5ChallengerAdversarial(unittest.TestCase):
             {"account_no": "IRCTC_TICKETING_ESCROW", "ifsc": "SBIN0002", "vpa": "irctc@sbi", "volume_inr": 4500.0},
             {"account_no": "REAL_MULE_FRAUDULENT", "ifsc": "PUNB0001", "vpa": "fraud@pnb", "volume_inr": 250000.0},
         ]
-        req = NcrpFreezeRequest(
+        req = NcrpFreezeRequest(acknowledgement_no="NCRP-TEST-001", 
             case_id="M5_NCRP_UTILITY",
             complainant_account="VICTIM_ACCOUNT_99",
             candidates=custom_candidates,

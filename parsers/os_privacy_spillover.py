@@ -144,7 +144,7 @@ class OsPrivacySpilloverRecovery:
                             'Source_Table': target_tbl,
                             'Row_ID': row_id,
                             'Page_Number': 0,
-                            'Byte_Offset': f"0x{row_id * 64:08X}",
+                            'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                             'Recovery_Method': 'OS Notification Spillover'
                         })
 
@@ -194,7 +194,7 @@ class OsPrivacySpilloverRecovery:
                                         'Source_File': source_file_label,
                                         'Source_Table': tbl,
                                         'Row_ID': row_id,
-                                        'Byte_Offset': f"0x{row_id * 32:08X}",
+                                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                                         'Recovery_Method': 'Keyboard Cache Spillover'
                                     })
                     except Exception:

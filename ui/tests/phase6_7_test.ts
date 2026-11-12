@@ -96,9 +96,9 @@ assert(usage !== undefined && usage.snippet.includes('AnyDesk'), 'UsageStats for
 const testProv = activeWA!.provenance;
 useWorkbenchStore.getState().fetchHexWindowForOffset(testProv).then(() => {
   const hexState = useWorkbenchStore.getState().hexWindow;
-  assert(hexState !== null, 'Hex window data generated for selected artifact');
-  assert(hexState!.targetOffset === testProv.byteOffset, 'Hex window target offset matches artifact byte offset (0x00066000)');
-  assert(hexState!.rows.length > 0, 'Hex viewer rows constructed with address, hex bytes, and ASCII representation');
+  // REVIEW C-04: the fixture's evidence file is not on disk, so no bytes may be invented.
+  assert(hexState === null, 'No hex window is fabricated when the evidence file cannot be read');
+  assert(!!useWorkbenchStore.getState().hexError, 'Hex viewer reports why bytes are unavailable');
 
   // Verify view mode toggle
   useWorkbenchStore.getState().setChatViewMode('BUBBLE');

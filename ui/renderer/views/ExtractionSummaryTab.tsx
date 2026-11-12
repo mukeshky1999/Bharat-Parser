@@ -140,14 +140,14 @@ export const ExtractionSummaryTab: React.FC<ExtractionSummaryTabProps> = ({
 
   const meta = deviceMetadata || backendSummary?.device_metadata || {
     model: isLoaded ? (backendSummary?.case_name || 'Active Forensic Evidence') : 'No Evidence Ingested',
-    manufacturer: isLoaded ? 'Hardware Acquisition' : 'N/A',
-    androidVersion: isLoaded ? 'Android OS' : 'N/A',
-    buildNumber: isLoaded ? 'BUILD.SECURE.INGEST' : 'N/A',
+    manufacturer: 'Not recorded',
+    androidVersion: 'Not recorded',
+    buildNumber: 'Not recorded',
     imei1: 'N/A',
     imei2: 'N/A',
-    serialNumber: isLoaded ? (backendSummary?.case_id || 'N/A') : 'N/A',
-    timezone: 'Asia/Kolkata (IST +05:30)',
-    extractionType: isLoaded ? 'Physical / Full File System' : 'None',
+    serialNumber: 'Not recorded',
+    timezone: 'Not recorded',
+    extractionType: 'Not recorded',
     evidenceSourcePath: backendSummary?.evidence_path || 'No file selected',
     hashes: backendSummary?.hashes || {
       md5: 'N/A',
@@ -300,7 +300,7 @@ export const ExtractionSummaryTab: React.FC<ExtractionSummaryTabProps> = ({
               Bharat<span className="text-cyan-400">Analyzer</span> Case Intake
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 max-w-lg mx-auto">
-              Air-Gapped Sovereign Digital Forensics & Financial Intelligence Suite. Ingest evidence containers in strict read-only (<code className="text-cyan-300 font-mono">O_RDONLY</code>) mode.
+              Air-Gapped Sovereign Digital Forensics & Financial Intelligence Suite. Evidence is hashed before and after processing and analysed from a working copy, so the original is not modified.
             </p>
           </div>
 

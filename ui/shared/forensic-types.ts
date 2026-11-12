@@ -35,8 +35,8 @@ export interface UnifiedUPITransaction {
   ifscCode: string | null;
   amountInr: number;
   currency: 'INR' | string;
-  direction: 'DEBIT' | 'CREDIT' | 'COLLECT_REQUEST' | 'GHOST_INTENT';
-  status: 'SUCCESS' | 'FAILED' | 'PENDING' | 'ABANDONED_INTENT';
+  direction: 'DEBIT' | 'CREDIT' | 'COLLECT_REQUEST' | 'GHOST_INTENT' | 'UNKNOWN';
+  status: 'SUCCESS' | 'FAILED' | 'PENDING' | 'ABANDONED_INTENT' | 'UNKNOWN';
   timestamp: TimestampTriplet;
   embeddedIdTimestamp?: TimestampTriplet; // Decoded from PhonePe TxID to detect device clock manipulation
   clockTamperDetected?: boolean;
@@ -337,6 +337,34 @@ export interface Section63BsaCertificate {
 }
 
 /**
+ * Parses backend timestamp strings without depending on the examiner's machine timezone:
+ *   "2024-01-15 10:30:00 UTC", "2024-01-15 16:00:00 IST (+05:30)", "2024-01-15T10:30:00+05:30",
+ *   "2024-01-15 10:30:00" (unlabelled: treated as UTC, never as local time).
+ * Returns NaN when the text is not a date.
+ */
+export function parseLabelledTimestamp(text: string): number {
+  const t = text.trim();
+  const m = t.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?\s*(UTC|Z|IST(?:\s*\(\+05:30\))?|[+-]\d{2}:?\d{2})?$/i);
+  if (!m) {
+    const fallback = Date.parse(t);
+    return isNaN(fallback) ? NaN : fallback;
+  }
+  const [, y, mo, d, h, mi, sec, frac, zone] = m;
+  const ms = frac ? Math.floor(parseFloat('0.' + frac) * 1000) : 0;
+  let epoch = Date.UTC(+y, +mo - 1, +d, +h, +mi, sec ? +sec : 0, ms);
+  const z = (zone || 'UTC').toUpperCase();
+  if (z.startsWith('IST')) {
+    epoch -= 5.5 * 3600 * 1000;
+  } else if (/^[+-]\d{2}:?\d{2}$/.test(z)) {
+    const sign = z[0] === '-' ? -1 : 1;
+    const hh = +z.slice(1, 3);
+    const mm = +z.slice(-2);
+    epoch -= sign * (hh * 60 + mm) * 60 * 1000;
+  }
+  return epoch;
+}
+
+/**
  * Universal Dual-Timezone Timestamp Normalizer.
  * Converts:
  * - Unix Seconds (10 digits)
@@ -377,8 +405,7 @@ export function normalizeTimestamp(
     const dateUtcAssumed = new Date(Date.UTC(fullYear, mm, dd, hh, min, ss));
     epochMs = dateUtcAssumed.getTime() - istOffsetMs;
   } else if (typeof rawVal === 'string' && (rawVal.includes('-') || rawVal.includes(':') || format === 'ISO_8601')) {
-    const isoCandidate = rawVal.includes(' ') && !rawVal.includes('T') ? rawVal.replace(' ', 'T') : rawVal;
-    const parsed = Date.parse(isoCandidate);
+    const parsed = parseLabelledTimestamp(rawVal);
     if (!isNaN(parsed)) {
       detectedFormat = 'ISO_8601';
       epochMs = parsed;
@@ -440,8 +467,13 @@ export function normalizeTimestamp(
     }
   }
 
+  // An empty or unparseable input is "unknown", never 1970-01-01.
+  if (!epochMs || isNaN(epochMs)) {
+    return { rawValue: rawVal, sourceFormat: detectedFormat, utcIso: '', istFormatted: 'Unknown', epochMs: 0 };
+  }
+
   const d = new Date(epochMs);
-  const utcIso = isNaN(d.getTime()) ? '1970-01-01T00:00:00.000Z' : d.toISOString();
+  const utcIso = isNaN(d.getTime()) ? '' : d.toISOString();
 
   // Strictly compute IST: UTC + 05:30
   const istOffsetMs = 5.5 * 60 * 60 * 1000;

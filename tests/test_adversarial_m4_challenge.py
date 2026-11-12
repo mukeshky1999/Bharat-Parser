@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from tests.legal_fixtures import ncrp_candidates, sec230_items
 import shutil
 import tempfile
 import unittest
@@ -183,7 +184,7 @@ class TestAdversarialM4Challenge(unittest.TestCase):
             }
         ]
 
-        req = NcrpFreezeRequest(
+        req = NcrpFreezeRequest(acknowledgement_no="NCRP-TEST-001", 
             case_id="CASE_ADV_NCRP",
             output_dir=out_dir,
             complainant_account="VICTIM_ACC_001",
@@ -290,7 +291,7 @@ class TestAdversarialM4Challenge(unittest.TestCase):
         
         # Name with brackets, asterisks, pluses, questions
         complex_victim_name = "Priya [Victim] (Witness) *Protected* +1?"
-        req = Sec230BnssRequest(
+        req = Sec230BnssRequest(items=sec230_items(self.workspace), 
             case_id="CASE_ADV_SEC230",
             output_dir=out_dir,
             anonymize_victim_identity=True,

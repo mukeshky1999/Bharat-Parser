@@ -673,9 +673,14 @@ def normalize_timestamp_value(
             if re.match(r'^-?\d+(\.\d+)?$', value):
                 numeric = float(value)
             else:
-                parsed = pd.to_datetime(value, errors='coerce')
+                # H-02: Indian formats are day-first (05/01/2024 is 5 January); ISO strings are
+                # unaffected. Offset-aware strings are converted to true UTC, not relabelled.
+                day_first = bool(re.match(r'^\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}', value))
+                parsed = pd.to_datetime(value, errors='coerce', dayfirst=day_first)
                 if pd.isna(parsed) or parsed.year < 2015 or parsed.year > 2035:
                     return None
+                if getattr(parsed, 'tzinfo', None) is not None:
+                    parsed = parsed.tz_convert('UTC').tz_localize(None)
                 return parsed.strftime('%Y-%m-%d %H:%M:%S')
         else:
             numeric = float(value)

@@ -6,6 +6,8 @@ Adheres strictly to AGENTS.md Forensic Invariants and Section 5 of Module 3.4 Sp
 """
 
 import re
+
+from src.core.amounts import AMOUNT_VALID_RE
 from typing import Optional
 
 from src.dlt.models import DLTHeaderInfo, FinancialSMSCategory, ParsedFinancialSMSFields
@@ -15,10 +17,7 @@ class FinancialSMSGrammarParser:
     """Deterministic parser for Indian banking, UPI, and regulatory SMS alerts."""
 
     # Regex for Indian Lakh/Crore currency amounts: e.g. Rs.1,25,000.00 or INR 45,000.00
-    AMOUNT_PATTERN = re.compile(
-        r"(?:Rs\.?|INR|₹|Amt\.?)\s*[:\-]?\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)",
-        re.IGNORECASE,
-    )
+    AMOUNT_PATTERN = AMOUNT_VALID_RE  # shared parser: handles lakh grouping, rejects fragments (C-10)
 
     # Regex for Available Balance clause
     BALANCE_PATTERN = re.compile(

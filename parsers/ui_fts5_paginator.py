@@ -35,6 +35,48 @@ TARGET_CHAT_APPS = {
 DATING_KEYWORDS = ('tinder', 'bumble', 'hinge', 'grindr', 'okcupid', 'badoo', 'happn')
 
 
+def adapt_legacy_chat_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Maps the 37-column messenger-parser schema onto the canonical 28-column chats table so
+    Telegram/Signal/Snapchat/... rows keep their body, sender and application (C-11).
+    Frames already in the canonical schema pass through unchanged.
+    """
+    if 'Message_Text' not in df.columns or 'Message_Body' in df.columns:
+        return df
+    out = pd.DataFrame(index=df.index)
+
+    def col(name: str) -> pd.Series:
+        return df[name] if name in df.columns else pd.Series([''] * len(df), index=df.index)
+
+    out['Application'] = col('Source_App')
+    out['Message_ID'] = col('Artifact_ID')
+    for src, dst in [
+        ('Thread_ID', 'Thread_ID'), ('Chat_Type', 'Chat_Type'), ('Direction', 'Direction'),
+        ('Message_Type', 'Message_Type'), ('Status', 'Delivery_Status'), ('Message_Text', 'Message_Body'),
+        ('Quoted_Message_Text', 'Quoted_Text'), ('Thread_Title', 'Thread_Title'),
+        ('Sender_Name', 'Sender_Name'), ('Sender_ID', 'Sender_Identifier'),
+        ('Recipient_Name', 'Recipient_Name'), ('Recipient_ID', 'Recipient_Identifier'),
+        ('Timestamp_Raw', 'Raw_Timestamp_Value'), ('Timestamp_UTC', 'Timestamp_UTC'),
+        ('Timestamp_IST', 'Timestamp_IST'), ('Attachment_Path', 'Attachment_Path_or_URL'),
+        ('Forwarding_Score', 'Forwarding_Score'),
+    ]:
+        out[dst] = col(src)
+    out['Is_View_Once'] = col('Is_Ephemeral')
+    out['Disappearing_TTL_Sec'] = col('Ephemeral_Duration_Seconds')
+    out['Is_Revoked_Deleted'] = col('Is_Deleted')
+    out['Attachment_MIME_Size'] = (col('Attachment_MIME').astype(str) + ' ' + col('Attachment_Size').astype(str)).str.strip()
+    lat, lon = col('Latitude').astype(str), col('Longitude').astype(str)
+    out['Geo_Coordinates'] = (lat + ', ' + lon).where(lat.str.strip().ne('') & lat.ne('nan') & lat.ne('None'), '')
+    prov = (
+        col('Source_File').astype(str) + ' :: ' + col('Source_Table').astype(str)
+        + ' :: RowID=' + col('Row_ID').astype(str)
+    )
+    rec = col('Recovery_Method').astype(str)
+    prov = prov + ' :: State=' + rec.where(rec.str.strip().ne(''), 'Allocated B-Tree')
+    out['Forensic_Provenance'] = prov
+    return out
+
+
 class CaseUIPaginatorStore:
     """
     On-disk high-throughput SQLite + FTS5 Paginated Data Store for 1 TB+ dumps.
@@ -43,6 +85,7 @@ class CaseUIPaginatorStore:
 
     def __init__(self, case_workspace: str, db_name: str = 'case_ui_store.db') -> None:
         self.case_workspace = case_workspace
+        self.last_dropped_columns: Dict[str, List[str]] = {}
         os.makedirs(self.case_workspace, exist_ok=True)
         self.db_path = os.path.join(self.case_workspace, db_name)
         self._init_database_schema()
@@ -417,7 +460,17 @@ class CaseUIPaginatorStore:
             cur.execute(f"PRAGMA table_info({target_table})")
             db_cols = [r['name'] for r in cur.fetchall() if r['name'] != 'id']
 
+            if target_table == 'chats':
+                df = adapt_legacy_chat_frame(df)
+
             common_cols = [c for c in db_cols if c in df.columns]
+            # C-11: never drop data silently. Columns the store cannot hold are reported.
+            dropped = [
+                c for c in df.columns
+                if c not in db_cols and c != 'id' and df[c].notna().any()
+                and df[c].astype(str).str.strip().ne('').any()
+            ]
+            self.last_dropped_columns[target_table] = dropped
             if not common_cols:
                 return 0
 
@@ -864,7 +917,8 @@ class CaseUIPaginatorStore:
         file_path = prov_parsed['file_path']
 
         # Determine 4KB window boundary aligned to 16 bytes
-        start_offset = max(0, (target_offset // 16) * 16 - 256)
+        pre_roll = min(256, (window_bytes // 4 // 16) * 16)
+        start_offset = max(0, (target_offset // 16) * 16 - pre_roll)
         raw_bytes = b''
 
         # If file exists on disk, open with mmap.ACCESS_READ
@@ -887,17 +941,23 @@ class CaseUIPaginatorStore:
             except Exception:
                 raw_bytes = b''
 
-        # If file is synthetic or offline test fixture, construct deterministic byte window
+        # Never synthesise bytes: if the real bytes cannot be read, say so.
         if not raw_bytes:
-            dummy_buf = bytearray(window_bytes)
-            for i in range(window_bytes):
-                addr = start_offset + i
-                if target_offset <= addr < target_offset + target_length:
-                    dummy_buf[i] = (addr * 31 + 7) % 256
-                else:
-                    noise = (addr * 19 + (addr >> 4)) % 256
-                    dummy_buf[i] = 0 if noise < 30 else noise
-            raw_bytes = bytes(dummy_buf)
+            if not resolved_file:
+                reason = f"File not found: {file_path}"
+            elif start_offset >= os.path.getsize(resolved_file):
+                reason = (f"Offset {target_offset} is beyond end of file "
+                          f"({os.path.getsize(resolved_file)} bytes)")
+            else:
+                reason = "File could not be read"
+            empty_res.update({
+                'file_path': resolved_file or file_path,
+                'target_offset': target_offset,
+                'start_offset': start_offset,
+                'provenance_parsed': prov_parsed,
+                'error': reason,
+            })
+            return empty_res
 
         # Format 16-byte Hex + ASCII lines
         hex_lines = []

@@ -3,7 +3,32 @@
 @layer base {
   body {
     @apply bg-slate-950 text-slate-100 font-sans;
+  }
+  /* Examiners must be able to select and copy evidence text; only controls are non-selectable. */
+  button,
+  [role='tab'],
+  [role='tablist'],
+  nav,
+  thead {
     user-select: none;
+  }
+}
+
+/* Visible keyboard focus everywhere (WCAG 2.4.7) */
+:focus-visible {
+  outline: 2px solid #22d3ee;
+  outline-offset: 2px;
+}
+
+/* Respect the OS reduced-motion setting */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

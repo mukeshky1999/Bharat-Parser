@@ -82,11 +82,9 @@ async function runPAWorkbenchPaginationTest() {
 
   const updatedState = useWorkbenchStore.getState();
   assert(updatedState.selectedArtifact?.id === sampleChat.id, 'Artifact selected in state');
-  assert(updatedState.hexWindow !== null, 'Hex window stream populated');
-  assert(updatedState.hexWindow?.targetOffset === sampleChat.provenance.byteOffset, 'Hex window target offset matches byte offset (0x00066000)');
-
-  const hasHighlighted = updatedState.hexWindow?.rows.some((r) => r.bytes.some((b) => b.isHighlighted));
-  assert(hasHighlighted === true, 'Hex viewer highlights exact record byte span');
+  // REVIEW C-04: no backend / unreadable file => no bytes are shown, and the reason is reported.
+  assert(updatedState.hexWindow === null, 'Hex window is empty when real bytes cannot be read (never fabricated)');
+  assert(typeof updatedState.hexError === 'string' && updatedState.hexError.length > 0, 'Hex viewer reports why bytes are unavailable');
 
   console.log('\n=== ALL WORKBENCH PAGINATION & 4-PANE UI TESTS PASSED (100% SUCCESS) ===\n');
 }

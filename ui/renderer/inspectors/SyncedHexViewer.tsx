@@ -26,6 +26,7 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
   const storeArtifact = useWorkbenchStore((state) => state.selectedArtifact);
   const hexWindow = useWorkbenchStore((state) => state.hexWindow);
   const isLoadingHex = useWorkbenchStore((state) => state.isLoadingHex);
+  const hexError = useWorkbenchStore((state) => state.hexError);
   const bottomDockTab = useWorkbenchStore((state) => state.bottomDockTab);
   const setBottomDockTab = useWorkbenchStore((state) => state.setBottomDockTab);
 
@@ -37,8 +38,9 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const prov = props.provenance || storeArtifact?.provenance;
-  const targetOffset = prov ? prov.byteOffset : 0x00066000;
-  const targetLength = prov ? prov.byteLength : 32;
+  const targetOffset = prov && prov.byteOffset >= 0 ? prov.byteOffset : 0;
+  const targetLength = prov && prov.byteOffset >= 0 ? prov.byteLength : 0;
+  const offsetRecorded = !!prov && prov.byteOffset >= 0;
 
   const rows = hexWindow?.rows || [];
 
@@ -154,7 +156,7 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
           <div className="flex items-center space-x-1 hidden sm:flex">
             <span className="text-slate-500">Physical Offset:</span>
             <span className="text-amber-400 font-bold">
-              0x{targetOffset.toString(16).toUpperCase().padStart(8, '0')}
+              {offsetRecorded ? `0x${targetOffset.toString(16).toUpperCase().padStart(8, '0')}` : 'not recorded'}
             </span>
           </div>
 
@@ -298,8 +300,14 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
                   </div>
                 </div>
               ) : (
-                <div className="p-6 text-center text-slate-500 font-mono text-xs">
-                  Select any forensic record to stream 4KB memory-mapped binary dump centered on record offset.
+                <div role="status" aria-live="polite" className="p-6 text-center font-mono text-xs">
+                  {isLoadingHex ? (
+                    <span className="text-slate-400">Reading bytes from evidence file…</span>
+                  ) : hexError ? (
+                    <span className="text-amber-400">{hexError}</span>
+                  ) : (
+                    <span className="text-slate-500">Select a record to view the bytes it was read from.</span>
+                  )}
                 </div>
               )}
             </div>

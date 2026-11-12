@@ -43,13 +43,18 @@ def build_transaction_graph(master_timeline: pd.DataFrame) -> nx.MultiDiGraph:
         if not cparty or cparty in ['Unknown', 'None', 'nan']:
             continue
 
+        # Only completed, directed movements of money belong in the graph (leads, not findings).
+        status = str(row.get('Status', '') or '').upper()
+        if re.search(r'FAIL|PEND|REVERS|DECLIN|CANCEL|EXPIR|REJECT|UNKNOWN|DELETED|CARV', status):
+            continue
+
         local_node = 'This Phone'
         if flow == 'DEBIT':
             u, v = local_node, cparty
         elif flow == 'CREDIT':
             u, v = cparty, local_node
         else:
-            u, v = local_node, cparty
+            continue  # direction unknown: never guess an outgoing edge
 
         g.add_node(u, entity=u, type='Local' if u == 'This Phone' else 'External')
         g.add_node(v, entity=v, type='Local' if v == 'This Phone' else 'External')

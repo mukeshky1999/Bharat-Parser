@@ -280,7 +280,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
         <div className="h-12 px-4 bg-[#141e2b] border-t border-[#2d4057] flex items-center justify-between">
           <div className="flex items-center space-x-1.5 text-emerald-400 font-mono text-[10.5px]">
             <ShieldCheck className="w-4 h-4" />
-            <span>Strict O_RDONLY Air-Gapped Mode</span>
+            <span>Original evidence is never modified; hashed before and after</span>
           </div>
 
           <div className="flex items-center space-x-2">

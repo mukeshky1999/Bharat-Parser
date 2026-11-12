@@ -30,7 +30,7 @@ export interface GridRowItem {
   index: number;
   isDeleted: boolean;
   hasAttachment: boolean;
-  direction: 'Incoming' | 'Outgoing';
+  direction: 'Incoming' | 'Outgoing' | 'Unknown';
   timestamp: string;
   deletionDate: string;
   application: string;
@@ -76,12 +76,12 @@ export const PATableWorkspace: React.FC<PATableWorkspaceProps> = ({ title, categ
         isDeleted: Boolean(c.isDeleted || c.provenance?.recoveryState === 'WAL_RECOVERED' || c.provenance?.recoveryState === 'CARVED_UNALLOCATED'),
         hasAttachment: Boolean(c.mediaPath || c.paymentAttachment),
         direction: c.isFromMe ? 'Outgoing' : 'Incoming',
-        timestamp: c.timestamp?.istFormatted || '2026-10-14 13:50:00 (IST)',
-        deletionDate: c.isDeleted ? '2026-10-14 14:02:11 (Freelist)' : '',
-        application: c.sourceApp || 'WhatsApp',
-        from: c.senderName || c.senderJid || 'Sender',
-        to: c.recipientName || c.recipientJid || 'Recipient',
-        status: c.isDeleted ? 'Recalled / WAL Carved' : (c.ephemeralDuration ? 'Disappearing' : (c.isViewOnce ? 'View-Once' : 'Delivered')),
+        timestamp: c.timestamp?.istFormatted || 'Unknown',
+        deletionDate: '',
+        application: c.sourceApp || 'Unknown',
+        from: c.senderName || c.senderJid || 'Unknown',
+        to: c.recipientName || c.recipientJid || 'Unknown',
+        status: c.isDeleted ? 'Recalled / WAL Carved' : (c.ephemeralDuration ? 'Disappearing' : (c.isViewOnce ? 'View-Once' : (c.messageStatus || 'Unknown'))),
         body: c.body || (c.paymentAttachment ? `UPI Payment: INR ${c.paymentAttachment.amountInr} (UTR: ${c.paymentAttachment.utrNumber || 'N/A'})` : ''),
         provenance: c.provenance,
         rawData: c
@@ -92,14 +92,14 @@ export const PATableWorkspace: React.FC<PATableWorkspaceProps> = ({ title, categ
         index: idx + 1,
         isDeleted: tx.provenance?.recoveryState === 'WAL_RECOVERED' || tx.provenance?.recoveryState === 'CARVED_UNALLOCATED',
         hasAttachment: Boolean(tx.provenance?.rawPayloadHex),
-        direction: tx.direction === 'DEBIT' ? 'Outgoing' : 'Incoming',
-        timestamp: tx.timestamp?.istFormatted || '2026-10-14 13:50:00 (IST)',
-        deletionDate: tx.provenance?.recoveryState !== 'ACTIVE' ? '2026-10-14 14:02:11' : '',
-        application: tx.sourceApp || 'PhonePe',
-        from: tx.payerVpa || 'suspect@ybl',
-        to: tx.payeeVpa || 'mule@ybl',
-        status: tx.status || (tx.clockTamperDetected ? 'Clock Tampered' : 'SUCCESS'),
-        body: `INR ${tx.amountInr?.toFixed(2) || '0.00'} | UTR: ${tx.utrNumber || 'N/A'} | Cpty: ${tx.payeeVpa || tx.payerVpa || 'Mule Account'}`,
+        direction: tx.direction === 'DEBIT' ? 'Outgoing' : (tx.direction === 'CREDIT' ? 'Incoming' : 'Unknown'),
+        timestamp: tx.timestamp?.istFormatted || 'Unknown',
+        deletionDate: '',
+        application: tx.sourceApp || 'Unknown',
+        from: tx.payerVpa || 'Unknown',
+        to: tx.payeeVpa || 'Unknown',
+        status: tx.status || 'UNKNOWN',
+        body: `INR ${tx.amountInr?.toFixed(2) || '0.00'} | UTR: ${tx.utrNumber || 'N/A'} | Cpty: ${tx.payeeVpa || tx.payerVpa || 'Unknown'}`,
         provenance: tx.provenance,
         rawData: tx
       }));
@@ -110,7 +110,7 @@ export const PATableWorkspace: React.FC<PATableWorkspaceProps> = ({ title, categ
         isDeleted: ct.provenance?.recoveryState !== 'ACTIVE',
         hasAttachment: Boolean(ct.profilePhotoVfsPath),
         direction: 'Incoming',
-        timestamp: '2026-10-14 13:50:00 (IST)',
+        timestamp: 'Unknown',
         deletionDate: '',
         application: ct.sourceApp || 'Contacts',
         from: ct.displayName || 'Contact',
@@ -127,7 +127,7 @@ export const PATableWorkspace: React.FC<PATableWorkspaceProps> = ({ title, categ
         isDeleted: cl.provenance?.recoveryState !== 'ACTIVE',
         hasAttachment: false,
         direction: cl.direction === 'OUTGOING' ? 'Outgoing' : 'Incoming',
-        timestamp: cl.timestamp?.istFormatted || '2026-10-14 13:50:00 (IST)',
+        timestamp: cl.timestamp?.istFormatted || 'Unknown',
         deletionDate: '',
         application: cl.sourceApp || 'Cellular',
         from: cl.callerNumberOrId || cl.callerName || 'Unknown',
@@ -416,6 +416,8 @@ export const PATableWorkspace: React.FC<PATableWorkspaceProps> = ({ title, categ
                           <span title="Outgoing">
                             <ArrowUpRight className="w-3 h-3 mx-auto text-blue-600" />
                           </span>
+                        ) : row.direction === 'Unknown' ? (
+                          <span title="Direction not established by the evidence" aria-label="Direction unknown" className="block text-center text-slate-400 font-bold">?</span>
                         ) : (
                           <span title="Incoming">
                             <ArrowDownLeft className="w-3 h-3 mx-auto text-green-600" />

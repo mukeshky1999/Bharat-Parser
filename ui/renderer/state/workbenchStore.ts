@@ -109,6 +109,7 @@ export interface WorkbenchStoreState {
   selectedArtifact: SelectedArtifactState | null;
   hexWindow: HexWindowData | null;
   isLoadingHex: boolean;
+  hexError: string | null;
   bottomDockTab: BottomDockTabType;
 
   // Actions
@@ -146,6 +147,59 @@ export interface WorkbenchStoreState {
 // Module-level abort controller to prevent torn reads and race conditions
 let activeHexAbortController: AbortController | null = null;
 
+
+type BackendRow = Record<string, any>;
+
+/** Fetches every row of a category, page by page (the UI must never silently show only page 1). */
+async function fetchAllArtifactRows(category: string): Promise<{ rows: BackendRow[] } | null> {
+  const PAGE = 500;
+  const rows: BackendRow[] = [];
+  for (let offset = 0; offset < 1_000_000; offset += PAGE) {
+    const res: any = await forensicClient.queryArtifacts(category, undefined, undefined, undefined, undefined, PAGE, offset);
+    if (!res || !Array.isArray(res.rows)) break;
+    rows.push(...res.rows);
+    const total = typeof res.total === 'number' ? res.total : (typeof res.total_count === 'number' ? res.total_count : null);
+    if (res.rows.length < PAGE || (total !== null && rows.length >= total)) break;
+  }
+  return { rows };
+}
+
+function mapTxDirection(v: unknown): 'DEBIT' | 'CREDIT' | 'UNKNOWN' {
+  const t = String(v ?? '').trim().toUpperCase();
+  if (t === 'DEBIT' || t === 'DR') return 'DEBIT';
+  if (t === 'CREDIT' || t === 'CR') return 'CREDIT';
+  return 'UNKNOWN'; // TRANSFER / empty: direction not established by the evidence
+}
+
+function mapTxStatus(v: unknown): 'SUCCESS' | 'FAILED' | 'PENDING' | 'UNKNOWN' {
+  const t = String(v ?? '').trim().toUpperCase();
+  if (/FAIL|DECLIN|REJECT|CANCEL|EXPIR/.test(t)) return 'FAILED';
+  if (/PEND|INITIAT|PROCESS/.test(t)) return 'PENDING';
+  if (/^(SUCCESS|SUCCESSFUL|COMPLETED|PAID)$/.test(t)) return 'SUCCESS';
+  return 'UNKNOWN';
+}
+
+/** Reads table/rowid/offset out of the backend provenance string. Missing parts stay unknown. */
+function parseProvenance(prov: unknown, summary: any, fallbackTable: string, vfsPath: string): any {
+  const text = String(prov ?? '');
+  const row = text.match(/RowID=([^\s:]+)/i)?.[1];
+  const off = text.match(/Offset=(0x[0-9a-f]+|\d+)/i)?.[1];
+  const table = text.split('::').map(x => x.trim()).find(x => /^[A-Za-z_][A-Za-z0-9_]*$/.test(x) && !/^(State|Offset)$/i.test(x)) || fallbackTable;
+  const upper = text.toUpperCase();
+  return {
+    evidenceId: summary.case_id || '',
+    archivePath: summary.evidence_path || '',
+    vfsInternalPath: vfsPath || text.split('::')[1]?.trim() || '',
+    containerType: 'SQLITE',
+    tableName: table,
+    rowId: row,
+    byteOffset: off ? (off.toLowerCase().startsWith('0x') ? parseInt(off, 16) : parseInt(off, 10)) : -1, // -1 = not recorded
+    byteLength: 0,
+    recoveryState: upper.includes('WAL') ? 'WAL_RECOVERED' : (upper.includes('CARVED') || upper.includes('FREELIST') || upper.includes('SLACK') ? 'CARVED_UNALLOCATED' : 'ACTIVE'),
+    rawPayloadHex: ''
+  };
+}
+
 export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
   caseManifest: null,
   dualHashes: null,
@@ -174,6 +228,7 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
   selectedArtifact: null,
   hexWindow: null,
   isLoadingHex: false,
+  hexError: null,
   bottomDockTab: 'HEX',
 
   toasts: [],
@@ -228,10 +283,12 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
     activeHexAbortController = new AbortController();
     const currentSignal = activeHexAbortController.signal;
 
-    set({ isLoadingHex: true });
+    set({ isLoadingHex: true, hexError: null });
 
-    const targetOffset = provenance.byteOffset;
-    const targetLength = provenance.byteLength || 32;
+    // byteOffset < 0 means the parser did not record a physical offset: show the file start, highlight nothing.
+    const offsetKnown = provenance.byteOffset >= 0;
+    const targetOffset = offsetKnown ? provenance.byteOffset : 0;
+    const targetLength = offsetKnown ? (provenance.byteLength || 32) : 0;
 
     // Stream 4KB (4096 bytes) window centered around the physical byte offset
     const windowSize = 4096;
@@ -265,32 +322,14 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
 
       if (currentSignal.aborted) return;
 
-      // If not from API or Electron, construct deterministic 4KB binary page matching SQLite / WAL frame
+      // Never fabricate bytes (REVIEW C-04): if the file/offset cannot be read, say so.
       if (!rawHex) {
-        const seedBytes: number[] = [];
-        if (provenance.rawPayloadHex) {
-          for (let i = 0; i < provenance.rawPayloadHex.length; i += 2) {
-            seedBytes.push(parseInt(provenance.rawPayloadHex.substring(i, i + 2), 16) || 0);
-          }
-        }
-
-        const buf = new Uint8Array(windowSize);
-        for (let i = 0; i < windowSize; i++) {
-          const absAddr = startOffset + i;
-          if (absAddr >= targetOffset && absAddr < targetOffset + targetLength) {
-            const seedIdx = absAddr - targetOffset;
-            buf[i] = seedIdx < seedBytes.length ? seedBytes[seedIdx] : (absAddr * 31) % 256;
-          } else {
-            // Realistic SQLite B-Tree cell/page noise
-            const pattern = (absAddr * 19 + (absAddr >> 4)) % 256;
-            buf[i] = pattern < 25 ? 0 : pattern;
-          }
-        }
-        let hexStr = '';
-        for (let i = 0; i < buf.length; i++) {
-          hexStr += buf[i].toString(16).padStart(2, '0');
-        }
-        rawHex = hexStr;
+        set({
+          hexWindow: null,
+          hexError: 'These bytes could not be read from the evidence file (file missing, offset out of range, or no byte offset recorded).',
+          isLoadingHex: false
+        });
+        return;
       }
 
       // Parse 16-byte rows for virtualized Hex + ASCII view
@@ -330,6 +369,7 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
 
       if (!currentSignal.aborted) {
         set({
+          hexError: null,
           hexWindow: {
             startOffset,
             byteCount: totalBytes,
@@ -1034,50 +1074,45 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
 
         // Query real artifacts from backend store
         const [txRes, chatRes, contactRes, callRes] = await Promise.all([
-          forensicClient.queryArtifacts('upi_transactions', undefined, undefined, undefined, undefined, 200, 0),
-          forensicClient.queryArtifacts('chats', undefined, undefined, undefined, undefined, 200, 0),
-          forensicClient.queryArtifacts('contacts', undefined, undefined, undefined, undefined, 200, 0),
-          forensicClient.queryArtifacts('calls', undefined, undefined, undefined, undefined, 200, 0)
+          fetchAllArtifactRows('upi_transactions'),
+          fetchAllArtifactRows('chats'),
+          fetchAllArtifactRows('contacts'),
+          fetchAllArtifactRows('calls')
         ]);
 
         if (txRes && txRes.rows && txRes.rows.length > 0) {
           set({
-            upiTransactions: txRes.rows.map((r: any) => ({
-              id: r.Transaction_ID || `TX_${r.id}`,
-              utrNumber: r.Bank_Ref_No || r.Transaction_ID || '',
-              appTransactionId: r.Transaction_ID || '',
-              sourceApp: r.Application || 'UPI',
-              payerVpa: r.Direction === 'DEBIT' ? (r.VPA || '') : (r.Counterparty || ''),
-              payeeVpa: r.Direction === 'CREDIT' ? (r.VPA || '') : (r.Counterparty || ''),
-              accountMask: r.Account || '',
-              ifscCode: null,
-              amountInr: r.Amount || 0,
-              currency: 'INR',
-              direction: r.Direction || 'DEBIT',
-              status: r.Status || 'SUCCESS',
-              timestamp: normalizeTimestamp(r.Timestamp_IST || '', 'ISO_8601'),
-              clockTamperDetected: Boolean(r.Clock_Tamper_Detected),
-              corroboratedSources: ['APP_DB'],
-              provenance: {
-                evidenceId: summary.case_id || 'CASE_01',
-                archivePath: summary.evidence_path || '',
-                vfsInternalPath: r.Source_File || '',
-                containerType: 'SQLITE',
-                tableName: 'transactions',
-                pageNumber: 1,
-                byteOffset: 0,
-                byteLength: 64,
-                recoveryState: r.Forensic_Provenance?.includes('WAL') ? 'WAL_RECOVERED' : (r.Forensic_Provenance?.includes('CARVED') ? 'CARVED_UNALLOCATED' : 'ACTIVE'),
-                rawPayloadHex: '00'
-              }
-            }))
+            upiTransactions: txRes.rows.map((r: any) => {
+              const direction = mapTxDirection(r.Type ?? r.Direction);
+              const counterparty = String(r.VPA || r.Counterparty || '');
+              const owner = 'Device owner (account not resolved)';
+              const hasId = r.Transaction_ID && r.Transaction_ID !== 'N/A';
+              return {
+                id: hasId ? `${r.Transaction_ID}#${r.id}` : `TX_${r.id}`,
+                utrNumber: r.Bank_Ref_No || (hasId ? r.Transaction_ID : '') || '',
+                appTransactionId: hasId ? r.Transaction_ID : '',
+                sourceApp: r.Application || 'UPI',
+                payerVpa: direction === 'DEBIT' ? owner : counterparty,
+                payeeVpa: direction === 'CREDIT' ? owner : counterparty,
+                accountMask: r.Account || '',
+                ifscCode: null,
+                amountInr: Number(r.Amount) || 0,
+                currency: 'INR',
+                direction,
+                status: mapTxStatus(r.Status),
+                timestamp: normalizeTimestamp(r.Timestamp_IST || r.Date || '', 'ISO_8601'),
+                clockTamperDetected: Boolean(r.Clock_Tamper_Detected),
+                corroboratedSources: ['APP_DB'],
+                provenance: parseProvenance(r.Forensic_Provenance, summary, 'transactions', r.Source_File || '')
+              };
+            })
           });
         }
 
         if (chatRes && chatRes.rows && chatRes.rows.length > 0) {
           set({
             chats: chatRes.rows.map((r: any) => ({
-              id: r.Message_ID || `MSG_${r.id}`,
+              id: `${r.Message_ID || 'MSG'}#${r.id}`,
               threadId: r.Thread_ID || 'thread',
               threadTitle: r.Thread_Title || r.Recipient_Name || r.Sender_Name || 'Chat',
               chatType: r.Chat_Type || 'DIRECT_1ON1',
@@ -1087,24 +1122,13 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
               recipientJid: r.Recipient_Identifier || '',
               recipientName: r.Recipient_Name || 'Unknown',
               body: r.Message_Body || '',
-              isFromMe: r.Direction === 'OUTGOING',
-              timestamp: normalizeTimestamp(r.Timestamp_IST || r.Timestamp_UTC || '', 'ISO_8601'),
-              messageStatus: r.Delivery_Status || 'READ',
+              isFromMe: String(r.Direction || '').toUpperCase() === 'OUTGOING',
+              timestamp: normalizeTimestamp(r.Timestamp_UTC || r.Timestamp_IST || '', 'ISO_8601'),
+              messageStatus: r.Delivery_Status || 'Unknown',
               isViewOnce: Boolean(r.Is_View_Once),
               isRevoked: Boolean(r.Is_Revoked_Deleted),
               isDeleted: Boolean(r.Is_Revoked_Deleted),
-              provenance: {
-                evidenceId: summary.case_id || 'CASE_01',
-                archivePath: summary.evidence_path || '',
-                vfsInternalPath: r.Attachment_Path_or_URL || '',
-                containerType: 'SQLITE',
-                tableName: 'chats',
-                pageNumber: 1,
-                byteOffset: 0,
-                byteLength: 64,
-                recoveryState: r.Is_Revoked_Deleted ? 'CARVED_UNALLOCATED' : 'ACTIVE',
-                rawPayloadHex: '00'
-              }
+              provenance: parseProvenance(r.Forensic_Provenance, summary, 'chats', r.Attachment_Path_or_URL || '')
             }))
           });
         }

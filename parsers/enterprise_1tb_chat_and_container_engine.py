@@ -121,12 +121,8 @@ def _open_ro_sqlite(db_path: str) -> Optional[sqlite3.Connection]:
         conn.row_factory = sqlite3.Row
         return conn
     except Exception:
-        try:
-            conn = sqlite3.connect(db_path, timeout=15.0)
-            conn.row_factory = sqlite3.Row
-            return conn
-        except Exception:
-            return None
+        # Never fall back to a read-write open: evidence must not be modified.
+        return None
 
 
 def _get_tables(conn: sqlite3.Connection) -> Dict[str, str]:
@@ -158,22 +154,27 @@ def _empty_pa_row(
     source_file: str,
     table_name: str,
     row_id: Any,
-    offset_info: str = '0x00000000',
+    offset_info: str = '',
     recovery_state: str = 'Allocated B-Tree',
 ) -> Dict[str, Any]:
     """
-    Initializes a full 28-column Cellebrite PA schema row with strict forensic provenance.
+    Initializes a full 28-column PA schema row with forensic provenance.
+    A byte offset is only stated when a real one is known (C-09); otherwise table + rowid only.
     """
     bname = os.path.basename(source_file)
-    prov = f"{bname} :: {source_file} :: {table_name} :: RowID={row_id} :: Offset={offset_info} :: State={recovery_state}"
+    real_offset = offset_info if re.fullmatch(r'0x[0-9A-Fa-f]+', str(offset_info or '')) else ''
+    prov = f"{bname} :: {source_file} :: {table_name} :: RowID={row_id}"
+    if real_offset:
+        prov += f" :: Offset={real_offset}"
+    prov += f" :: State={recovery_state}"
     return {
         'Application': app,
         'Message_ID': str(row_id if row_id is not None else ''),
         'Thread_ID': '',
         'Chat_Type': 'Direct (1-on-1)',
-        'Direction': 'Incoming',
+        'Direction': 'Unknown',
         'Message_Type': 'Text',
-        'Delivery_Status': 'Delivered',
+        'Delivery_Status': 'Unknown',
         'Message_Body': '',
         'Quoted_Message_ID': '',
         'Quoted_Text': '',
@@ -295,9 +296,35 @@ class TerabyteForensicContainerEngine:
         self.on_demand_media_dir = os.path.join(self.workspace_dir, 'on_demand_media')
         self.catalog_db_path = os.path.join(self.workspace_dir, 'vfs_catalog.db')
 
+        self.rejected_entries: List[str] = []
+        self._used_targets: Dict[str, str] = {}
+
         os.makedirs(self.extracted_dbs_dir, exist_ok=True)
         os.makedirs(self.on_demand_media_dir, exist_ok=True)
         self._init_catalog_db()
+
+    def _safe_extract_target(self, vpath: str, idx: int) -> Optional[str]:
+        """
+        Maps an archive member path to a file under ``extracted_dbs``.
+        Rejects traversal (``..``, drive letters) and never reuses a stale file; names that
+        collide case-insensitively get a unique ``.<index>`` suffix.
+        """
+        parts = [p for p in vpath.replace('\\', '/').split('/') if p not in ('', '.')]
+        if not parts or any(p == '..' or ':' in p for p in parts):
+            return None
+        parts = [re.sub(r'[<>:"|?*]', '_', p) for p in parts]
+        base = os.path.abspath(self.extracted_dbs_dir)
+        target = os.path.abspath(os.path.join(base, *parts))
+        if os.path.commonpath([base, target]) != base:
+            return None
+        key = target.lower()
+        if key in self._used_targets and self._used_targets[key] != vpath:
+            target = f"{target}.{idx}"
+            key = target.lower()
+        self._used_targets[key] = vpath
+        if os.path.exists(target):
+            os.remove(target)
+        return target
 
     def _init_catalog_db(self) -> None:
         conn = sqlite3.connect(self.catalog_db_path)
@@ -350,13 +377,14 @@ class TerabyteForensicContainerEngine:
                         materialized = 0
 
                         if should_materialize_artifact(vpath, fsize):
-                            safe_rel = re.sub(r'[<>:"|?*]', '_', vpath.lstrip('/\\'))
-                            local_out = os.path.join(self.extracted_dbs_dir, safe_rel)
-                            os.makedirs(os.path.dirname(local_out), exist_ok=True)
-                            if not os.path.exists(local_out):
+                            local_out = self._safe_extract_target(vpath, idx) or ''
+                            if local_out:
+                                os.makedirs(os.path.dirname(local_out), exist_ok=True)
                                 with zf.open(info, 'r') as src, open(local_out, 'wb') as dst:
                                     shutil.copyfileobj(src, dst, length=8 * 1024 * 1024)
-                            materialized = 1
+                                materialized = 1
+                            else:
+                                self.rejected_entries.append(vpath)
 
                         batch.append((vpath, container_fmt, bname, fsize, info.header_offset, materialized, local_out))
                         if len(batch) >= 5000:
@@ -383,15 +411,16 @@ class TerabyteForensicContainerEngine:
                         materialized = 0
 
                         if should_materialize_artifact(vpath, fsize):
-                            safe_rel = re.sub(r'[<>:"|?*]', '_', vpath.lstrip('/\\'))
-                            local_out = os.path.join(self.extracted_dbs_dir, safe_rel)
-                            os.makedirs(os.path.dirname(local_out), exist_ok=True)
-                            if not os.path.exists(local_out):
+                            local_out = self._safe_extract_target(vpath, idx) or ''
+                            if local_out:
+                                os.makedirs(os.path.dirname(local_out), exist_ok=True)
                                 src = tf.extractfile(member)
                                 if src:
                                     with src, open(local_out, 'wb') as dst:
                                         shutil.copyfileobj(src, dst, length=8 * 1024 * 1024)
-                            materialized = 1
+                                materialized = 1
+                            else:
+                                self.rejected_entries.append(vpath)
 
                         batch.append((vpath, 'TAR', bname, fsize, member.offset, materialized, local_out))
                         if len(batch) >= 5000:
@@ -450,12 +479,13 @@ class TerabyteForensicContainerEngine:
                             materialized = 0
 
                             if should_materialize_artifact(vpath, fsize):
-                                safe_rel = re.sub(r'[<>:"|?*]', '_', vpath.lstrip('/\\'))
-                                local_out = os.path.join(self.extracted_dbs_dir, safe_rel)
-                                os.makedirs(os.path.dirname(local_out), exist_ok=True)
-                                if not os.path.exists(local_out):
+                                local_out = self._safe_extract_target(vpath, idx) or ''
+                                if local_out:
+                                    os.makedirs(os.path.dirname(local_out), exist_ok=True)
                                     stream_tsk_file_chunks(entry, local_out, chunk_size=8 * 1024 * 1024)
-                                materialized = 1
+                                    materialized = 1
+                                else:
+                                    self.rejected_entries.append(vpath)
 
                             batch.append((vpath, 'E01', bname, fsize, inode, materialized, local_out))
                             if len(batch) >= 5000:
@@ -1396,9 +1426,16 @@ def parse_whatsapp_full_forensics(
             if 'message_ephemeral' in tables:
                 join_clauses.append('LEFT JOIN message_ephemeral me ON m._id = me.message_row_id' if '_id' in m_cols else '')
                 select_cols.append('me.expire_timestamp AS ephemeral_expire')
-            if 'receipt_user' in tables:
-                join_clauses.append('LEFT JOIN receipt_user ru ON m._id = ru.message_row_id' if '_id' in m_cols else '')
-                select_cols.append('ru.receipt_timestamp AS read_ts')
+            if 'receipt_user' in tables and '_id' in m_cols:
+                # Aggregate per message with a subquery: a join would emit one row per group
+                # recipient. Only an actual read_timestamp counts as "read".
+                ru_cols = _get_columns(conn, tables['receipt_user'])
+                if 'read_timestamp' in ru_cols:
+                    select_cols.append(
+                        '(SELECT MIN(ru.read_timestamp) FROM receipt_user ru '
+                        'WHERE ru.message_row_id = m._id AND ru.read_timestamp IS NOT NULL '
+                        'AND ru.read_timestamp > 0) AS read_ts'
+                    )
 
             full_sql = f"SELECT {', '.join(select_cols)} {' '.join([j for j in join_clauses if j])} ORDER BY m.rowid DESC"
             try:
@@ -1440,6 +1477,9 @@ def parse_whatsapp_full_forensics(
                     sender = str(r.get('sender_jid_str') or r.get('key_remote_jid') or '')
                     chat_jid = str(r.get('chat_jid_str') or sender)
                     is_group = ('@g.us' in chat_jid)
+                    if not sender and not is_group:
+                        sender = chat_jid  # 1:1 chat: the counterpart is the chat JID
+                    wa_status = r.get('status')
 
                     # Geolocation
                     geo = ''
@@ -1458,7 +1498,20 @@ def parse_whatsapp_full_forensics(
                     row['Chat_Type'] = 'Group Chat' if is_group else 'Direct (1-on-1)'
                     row['Direction'] = 'Outgoing' if from_me == 1 else 'Incoming'
                     row['Message_Type'] = mtype_desc
-                    row['Delivery_Status'] = 'Read' if r.get('read_ts') else ('Delivered' if from_me == 1 else 'Received')
+                    if from_me == 1:
+                        if r.get('read_ts') or wa_status in (13, 14, 8):
+                            delivery = 'Read'
+                        elif wa_status == 5:
+                            delivery = 'Delivered'
+                        elif wa_status in (4, 6):
+                            delivery = 'Sent'
+                        elif wa_status == 0:
+                            delivery = 'Pending/Unsent'
+                        else:
+                            delivery = 'Unknown'
+                    else:
+                        delivery = 'Received'
+                    row['Delivery_Status'] = delivery
                     row['Message_Body'] = text or f"[{mtype_desc}]"
                     row['Quoted_Text'] = str(r.get('quoted_body') or '')
                     row['Thread_Title'] = chat_jid.split('@')[0]

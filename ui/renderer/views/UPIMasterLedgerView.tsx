@@ -24,6 +24,16 @@ interface UPIMasterLedgerViewProps {
   globalSearchQuery?: string;
 }
 
+/** CSV cell: escape quotes and neutralise spreadsheet formulas (=,+,-,@) coming from evidence text. */
+const csvCell = (v: unknown): string => {
+  let t = String(v ?? '');
+  if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`;
+  return `"${t.replace(/"/g, '""')}"`;
+};
+
+const formatOffset = (off?: number): string =>
+  typeof off === 'number' && off >= 0 ? `0x${off.toString(16).toUpperCase().padStart(8, '0')}` : 'not recorded';
+
 export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
   transactions: propTransactions,
   selectedTxId: propSelectedTxId,
@@ -159,23 +169,22 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
     ];
 
     const rows = filtered.map((tx, idx) => {
-      const hexOffset = `0x${(tx.provenance?.byteOffset || 0).toString(16).toUpperCase().padStart(8, '0')}`;
       return [
         idx + 1,
-        `"${tx.appTransactionId || tx.id || ''}"`,
-        `"${tx.sourceApp || ''}"`,
-        `"${tx.timestamp?.istFormatted || ''}"`,
-        `"${tx.utrNumber || ''}"`,
+        csvCell(tx.appTransactionId || tx.id || ''),
+        csvCell(tx.sourceApp || ''),
+        csvCell(tx.timestamp?.istFormatted || ''),
+        csvCell(tx.utrNumber || ''),
         tx.amountInr,
-        `"${tx.direction}"`,
-        `"${tx.status}"`,
-        `"${tx.payerVpa || ''}"`,
-        `"${tx.payeeVpa || ''}"`,
-        `"${tx.accountMask || ''}"`,
-        `"${tx.provenance?.recoveryState || 'ACTIVE'}"`,
+        csvCell(tx.direction),
+        csvCell(tx.status),
+        csvCell(tx.payerVpa || ''),
+        csvCell(tx.payeeVpa || ''),
+        csvCell(tx.accountMask || ''),
+        csvCell(tx.provenance?.recoveryState || 'ACTIVE'),
         tx.clockTamperDetected ? 'YES' : 'NO',
-        `"${hexOffset}"`,
-        `"${tx.provenance?.vfsInternalPath || tx.provenance?.archivePath || ''}"`
+        csvCell(formatOffset(tx.provenance?.byteOffset)),
+        csvCell(tx.provenance?.vfsInternalPath || tx.provenance?.archivePath || '')
       ].join(',');
     });
 
@@ -405,14 +414,23 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
               {visibleRows.map((tx, idx) => {
                 const actualIndex = startIndex + idx;
                 const isSelected = selectedTxId === tx.id || selectedTxId === tx.appTransactionId;
-                const hexOffset = `0x${(tx.provenance?.byteOffset || 0).toString(16).toUpperCase().padStart(8, '0')}`;
+                const hexOffset = formatOffset(tx.provenance?.byteOffset);
                 const isDebit = tx.direction === 'DEBIT';
+                const dirKnown = tx.direction === 'DEBIT' || tx.direction === 'CREDIT';
                 const isHighRisk = isHighRiskOrStructuring(tx);
 
                 return (
                   <tr
                     key={tx.id || actualIndex}
                     onClick={() => handleSelectRow(tx)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleSelectRow(tx);
+                      }
+                    }}
+                    tabIndex={0}
+                    aria-selected={isSelected}
                     style={{ height: `${ROW_HEIGHT}px` }}
                     className={`cursor-pointer transition-colors ${
                       isSelected
@@ -440,22 +458,21 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
                     </td>
                     <td className="py-2 px-3 text-right font-bold">
                       <span
-                        className={
-                          isDebit
-                            ? 'text-rose-400'
-                            : 'text-emerald-400'
-                        }
+                        className={!dirKnown ? 'text-slate-300' : isDebit ? 'text-rose-400' : 'text-emerald-400'}
                       >
-                        {isDebit ? '-' : '+'}₹{tx.amountInr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        {dirKnown ? (isDebit ? '-' : '+') : ''}₹{tx.amountInr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </span>
                     </td>
                     <td className="py-2 px-3 text-center">
                       <span
                         className={`text-[10px] px-1.5 py-0.5 rounded font-bold font-mono ${
-                          isDebit
-                            ? 'bg-rose-950/70 text-rose-300 border border-rose-800/60'
-                            : 'bg-emerald-950/70 text-emerald-300 border border-emerald-800/60'
+                          !dirKnown
+                            ? 'bg-slate-900 text-slate-400 border border-slate-700'
+                            : isDebit
+                              ? 'bg-rose-950/70 text-rose-300 border border-rose-800/60'
+                              : 'bg-emerald-950/70 text-emerald-300 border border-emerald-800/60'
                         }`}
+                        title={dirKnown ? undefined : 'Direction not established by the evidence'}
                       >
                         {tx.direction}
                       </span>

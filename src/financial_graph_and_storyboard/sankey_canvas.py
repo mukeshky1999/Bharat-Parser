@@ -242,3 +242,76 @@ class SankeyCanvasRenderer:
             '</svg>',
         ]
         return "\n".join(svg_parts)
+
+
+def render_layout_svg(
+    layout: SankeyLayoutResult,
+    labels: dict[str, str] | None = None,
+    width: int = 1280,
+    height: int = 520,
+) -> str:
+    """
+    Renders an SVG money trail strictly from a computed layout (i.e. from case data).
+    With no nodes it renders an explicit empty-state notice instead of any sample drawing.
+    """
+    from xml.sax.saxutils import escape
+
+    labels = labels or {}
+    nodes = [n for col in layout.stages.values() for n in col]
+    head = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+        f'viewBox="0 0 {width} {height}" role="img" aria-label="Money trail diagram" '
+        'style="background:#090d16; font-family:sans-serif; border-radius:8px;">'
+    )
+    if not nodes:
+        return (
+            head
+            + f'<text x="{width // 2}" y="{height // 2}" fill="#94a3b8" font-size="14" '
+            'text-anchor="middle">No money-trail data in this case.</text></svg>'
+        )
+
+    parts = [head]
+    stage_titles = {
+        0: "STAGE 1: SOURCE",
+        1: "STAGE 2: FIRST HOP",
+        2: "STAGE 3: ONWARD HOP",
+        3: "STAGE 4: ONWARD HOP",
+        4: "STAGE 5: TERMINAL",
+    }
+    for idx, col in enumerate(SankeyLaunderingCanvas.STAGE_ORDER):
+        if not layout.stages.get(col):
+            continue
+        x = SankeyLaunderingCanvas.STAGE_X_COORDINATES[col]
+        parts.append(
+            f'<text x="{x + 60}" y="22" fill="#94a3b8" font-size="11" text-anchor="middle" '
+            f'font-weight="bold">{stage_titles[idx]}</text>'
+        )
+    for r in layout.ribbons:
+        if not r.rendered_svg_path:
+            continue
+        parts.append(
+            f'<path d="{r.rendered_svg_path}" stroke="#ef4444" stroke-opacity="0.45" '
+            f'stroke-width="{r.thickness_px}" fill="none"/>'
+        )
+    for n in nodes:
+        label = escape(labels.get(n.node_id, n.label or n.node_id))[:28]
+        parts.append(
+            f'<g><rect x="{n.x}" y="{n.y}" width="120" height="{n.height}" rx="6" '
+            'fill="#1e293b" stroke="#64748b" stroke-width="1.5"/>'
+            f'<text x="{n.x + 60}" y="{n.y + n.height / 2 + 4}" fill="#f8fafc" font-size="11" '
+            f'text-anchor="middle">{label}</text></g>'
+        )
+    for r in layout.ribbons:
+        if r.rendered_svg_path and not r.is_circular_return:
+            # Label near the ribbon midpoint taken from the path control points.
+            try:
+                nums = [float(t) for t in r.rendered_svg_path.replace("M", " ").replace("C", " ").replace(",", " ").split()]
+                mx, my = (nums[0] + nums[-2]) / 2.0, (nums[1] + nums[-1]) / 2.0
+            except (ValueError, IndexError):
+                continue
+            parts.append(
+                f'<text x="{mx}" y="{my - 6}" fill="#e2e8f0" font-size="10" font-family="monospace" '
+                f'text-anchor="middle">₹{r.amount_inr:,.2f}</text>'
+            )
+    parts.append("</svg>")
+    return "\n".join(parts)

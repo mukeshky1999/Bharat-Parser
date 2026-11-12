@@ -48,7 +48,22 @@ CANONICAL_GROUPS = [
 ]
 
 
+
+def _safe_join(base: Path, member_name: str) -> Path | None:
+    """Joins an archive member name under base; returns None if it would escape base."""
+    parts = [p for p in member_name.replace("\\", "/").split("/") if p not in ("", ".")]
+    if not parts or any(p == ".." or ":" in p for p in parts):
+        return None
+    target = (base / Path(*parts)).resolve()
+    try:
+        target.relative_to(base.resolve())
+    except ValueError:
+        return None
+    return target
+
+
 @dataclass
+
 class IngestedFileRecord:
     """Represents a single ingested forensic file with cryptographic provenance."""
     file_path: str
@@ -407,28 +422,41 @@ class LiveForensicIngestEngine:
 
         files_to_process: list[tuple[str, Path]] = []
 
+        # Evidence is never opened in place. Everything is analysed from a staged copy so SQLite
+        # cannot checkpoint, delete a WAL, or create -shm files beside the original.
         if path_obj.is_file():
             if zipfile.is_zipfile(path_obj):
                 with zipfile.ZipFile(path_obj, "r") as z:
-                    z.extractall(staging_dir)
-                for root, _, files in os.walk(staging_dir):
-                    for f in files:
-                        p = Path(root) / f
-                        files_to_process.append((f, p))
+                    for info in z.infolist():
+                        target = _safe_join(staging_dir, info.filename)
+                        if target is None or info.is_dir():
+                            continue
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        with z.open(info) as src, open(target, "wb") as dst:
+                            shutil.copyfileobj(src, dst)
             elif tarfile.is_tarfile(path_obj):
                 with tarfile.open(path_obj, "r") as t:
-                    t.extractall(staging_dir)
-                for root, _, files in os.walk(staging_dir):
-                    for f in files:
-                        p = Path(root) / f
-                        files_to_process.append((f, p))
+                    for member in t:
+                        target = _safe_join(staging_dir, member.name)
+                        if target is None or not member.isfile():
+                            continue
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        src = t.extractfile(member)
+                        if src:
+                            with src, open(target, "wb") as dst:
+                                shutil.copyfileobj(src, dst)
             else:
-                files_to_process.append((path_obj.name, path_obj))
+                for sibling in path_obj.parent.iterdir():
+                    if sibling.name == path_obj.name or sibling.name in (
+                        path_obj.name + "-wal", path_obj.name + "-shm", path_obj.name + "-journal"
+                    ):
+                        shutil.copy2(sibling, staging_dir / sibling.name)
         else:
-            for root, _, files in os.walk(path_obj):
-                for f in files:
-                    p = Path(root) / f
-                    files_to_process.append((f, p))
+            shutil.copytree(path_obj, staging_dir / "evidence", dirs_exist_ok=True)
+
+        for root, _, files in os.walk(staging_dir):
+            for f in files:
+                files_to_process.append((f, Path(root) / f))
 
         return self._process_files_into_case(files_to_process, case_name)
 

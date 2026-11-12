@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from tests.legal_fixtures import ncrp_candidates, sec230_items
 import shutil
 import tempfile
 import unittest
@@ -235,8 +236,7 @@ class TestUIAPIServer(unittest.TestCase):
         svg_content = svg_res.body.decode("utf-8")
         self.assertIn("<svg", svg_content)
         self.assertIn("</svg>", svg_content)
-        self.assertIn("STAGE 1: SOURCE", svg_content)
-        self.assertIn("MULE L1", svg_content)
+        self.assertNotIn("FixedFloat", svg_content)
         self.assertEqual(svg_res.media_type, "image/svg+xml")
 
     def test_09_report_sec63_bsa_certificate(self):
@@ -259,7 +259,7 @@ class TestUIAPIServer(unittest.TestCase):
     def test_10_report_sec230_bnss_defense_bundle(self):
         """Validates Section 230 BNSS statutory defense disclosure bundle generation."""
         out_dir = os.path.join(self.workspace, "sec230_test_out")
-        req = Sec230BnssRequest(
+        req = Sec230BnssRequest(items=sec230_items(self.workspace), 
             case_id="TEST_SEC230_CASE",
             output_dir=out_dir,
             anonymize_victim_identity=True,
@@ -289,7 +289,7 @@ class TestUIAPIServer(unittest.TestCase):
     def test_11_report_1930_ncrp_bank_freeze_with_victim_safeguard(self):
         """Validates 14-column 1930 NCRP bank freeze sheet and Complainant Safeguard Lock."""
         out_dir = os.path.join(self.workspace, "ncrp_test_out")
-        req = NcrpFreezeRequest(
+        req = NcrpFreezeRequest(candidates=ncrp_candidates("VICTIM_ACCOUNT_112233"), acknowledgement_no="NCRP-TEST-001", 
             case_id="TEST_NCRP_CASE",
             output_dir=out_dir,
             complainant_account="VICTIM_ACCOUNT_112233"
@@ -317,7 +317,9 @@ class TestUIAPIServer(unittest.TestCase):
             self.assertNotEqual(beneficiary_acc, "VICTIM_ACCOUNT_112233")
 
         # Test GET download route
-        csv_download = server.get_ncrp_freeze_csv(case_id="TEST_NCRP_CASE")
+        csv_download = server.get_ncrp_freeze_csv(
+            case_id="TEST_NCRP_CASE", complainant_account="VICTIM_ACCOUNT_112233", acknowledgement_no="NCRP-TEST-001"
+        )
         self.assertEqual(csv_download.media_type, "text/csv")
         self.assertIn("Acknowledgement_No", csv_download.body.decode("utf-8"))
 

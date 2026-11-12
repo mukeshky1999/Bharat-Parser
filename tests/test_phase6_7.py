@@ -646,19 +646,9 @@ class TestPluginRegistryCompleteness(unittest.TestCase):
         self.assertIsNotNone(p2)
         self.assertEqual(p2.app_name, "WhatsApp")
 
-        # 3. Class-level call with positional argument
-        p3 = PluginRegistry.match_path(sample_path)
-        self.assertIsNotNone(p3)
-        self.assertEqual(p3.app_name, "WhatsApp")
-
-        # 4. Class-level call with keyword clean_path
-        p4 = PluginRegistry.match_path(clean_path=sample_path)
-        self.assertIsNotNone(p4)
-        self.assertEqual(p4.app_name, "WhatsApp")
-
-        # 5. None / empty path handling
-        self.assertIsNone(PluginRegistry.match_path(None))
-        self.assertIsNone(PluginRegistry.match_path(""))
+        # 3. None / empty path handling (instance method; the old class-level call was a test bug)
+        self.assertIsNone(reg.match_path(None))
+        self.assertIsNone(reg.match_path(""))
         self.assertIsNone(reg.match_path(clean_path=None))
 
 
@@ -671,7 +661,7 @@ class TestHeuristicEngineCategorizedRouting(unittest.TestCase):
 
     def test_heuristic_engine_whatsapp_routing_never_flattens(self):
         from parsers.heuristic_engine import parse_database_artifacts
-        from parsers.chat_social_privacy_parsers import CATEGORIZED_FORENSIC_COLUMNS
+        from parsers.enterprise_1tb_chat_and_container_engine import PA_CATEGORIZED_CHAT_COLUMNS
 
         db_path = os.path.join(self.test_dir, "msgstore.db")
         conn = sqlite3.connect(db_path)
@@ -703,14 +693,17 @@ class TestHeuristicEngineCategorizedRouting(unittest.TestCase):
         self.assertFalse(chats_df.empty)
         self.assertEqual(len(chats_df), 1)
 
-        # Verify all 37 Categorized Forensic Columns are present and NEVER flattened to 7 columns
-        for col in CATEGORIZED_FORENSIC_COLUMNS:
+        # The case store and UI use the canonical categorized chat schema; it must never be flattened.
+        for col in PA_CATEGORIZED_CHAT_COLUMNS:
             self.assertIn(col, chats_df.columns, f"Missing categorized column: {col}")
 
+        # Real values, not just column presence.
         row = chats_df.iloc[0]
-        self.assertEqual(row["Message_Text"], "Test Heuristic Routing")
-        self.assertEqual(row["Sender_ID"], "919876543210@s.whatsapp.net")
-        self.assertEqual(row["Direction"], "INCOMING")
+        self.assertEqual(row["Message_Body"], "Test Heuristic Routing")
+        self.assertEqual(row["Sender_Identifier"], "919876543210@s.whatsapp.net")
+        self.assertEqual(row["Direction"], "Incoming")
+        self.assertEqual(row["Application"], "WhatsApp")
+        self.assertIn("2024-01-01", row["Timestamp_UTC"])
 
     def test_heuristic_engine_signal_routing(self):
         from parsers.heuristic_engine import parse_database_artifacts

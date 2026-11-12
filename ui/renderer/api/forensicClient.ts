@@ -239,6 +239,15 @@ export interface Sec230BnssResponse {
   status?: number;
 }
 
+export interface NcrpCandidate {
+  account_no: string;
+  ifsc: string;
+  vpa: string;
+  is_complainant_victim: boolean;
+  volume_inr: number;
+  counterparty_name?: string;
+}
+
 export interface NcrpFreezeResponse {
   success: boolean;
   csv_path: string;
@@ -1078,7 +1087,8 @@ class ForensicClient {
     outputDir?: string,
     anonymize: boolean = true,
     victimName?: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    items?: Array<{ path: string; redaction_tag: string | null }>
   ): Promise<Sec230BnssResponse> {
     try {
       const res = await this.fetchApi<Sec230BnssResponse>('/api/report/sec230-bnss', {
@@ -1088,7 +1098,8 @@ class ForensicClient {
           case_id: caseId,
           output_dir: outputDir,
           anonymize_victim_identity: anonymize,
-          victim_name: victimName
+          victim_name: victimName,
+          items
         })
       });
       if (res.data && res.data.success) {
@@ -1124,9 +1135,33 @@ class ForensicClient {
   /**
    * Generates 14-column 1930 NCRP bank freeze sheet and enforces Complainant Safeguard Lock.
    */
+  /** Media files of the loaded case that can be packaged for a Section 230 disclosure copy. */
+  public async getMediaCandidates(
+    signal?: AbortSignal
+  ): Promise<{ items: Array<{ path: string; vfs_path: string; file_name: string; file_size: number }>; error?: string }> {
+    const res = await this.fetchApi<{ items: any[] }>('/api/case/media-candidates', { signal });
+    if (res.data) return { items: res.data.items || [] };
+    return { items: [], error: res.error || 'Could not list case media' };
+  }
+
+  /** Candidate beneficiary accounts derived from the loaded case (never sample data). */
+  public async getNcrpCandidates(
+    complainantAccount: string,
+    signal?: AbortSignal
+  ): Promise<{ candidates: NcrpCandidate[]; error?: string }> {
+    const res = await this.fetchApi<{ candidates: NcrpCandidate[] }>(
+      `/api/report/ncrp-candidates?complainant_account=${encodeURIComponent(complainantAccount)}`,
+      { signal }
+    );
+    if (res.data) return { candidates: res.data.candidates || [] };
+    return { candidates: [], error: res.error || 'Could not load candidate accounts' };
+  }
+
   public async exportNcrpFreezePacket(
-    candidates?: any[],
-    outputDir?: string,
+    candidates: any[] | undefined,
+    outputDir: string | undefined,
+    complainantAccount: string,
+    acknowledgementNo: string,
     signal?: AbortSignal
   ): Promise<NcrpFreezeResponse> {
     try {
@@ -1135,7 +1170,9 @@ class ForensicClient {
         signal,
         body: JSON.stringify({
           candidates,
-          output_dir: outputDir
+          output_dir: outputDir,
+          complainant_account: complainantAccount,
+          acknowledgement_no: acknowledgementNo
         })
       });
       if (res.data && res.data.success) {

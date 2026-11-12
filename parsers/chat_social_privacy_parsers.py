@@ -367,7 +367,7 @@ class WhatsAppDeepParser:
                         'Source_Table': 'message',
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -419,7 +419,7 @@ class WhatsAppDeepParser:
                         'Source_Table': 'ZWAMESSAGE',
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -460,7 +460,7 @@ class WhatsAppDeepParser:
                         'Source_Table': 'call_log',
                         'Row_ID': r['_id'],
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(r['_id'] * 64),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -638,7 +638,7 @@ class TelegramTLDeserializer:
                         'Source_Table': 'messages_v2',
                         'Row_ID': mid,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(mid * 96),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -729,7 +729,7 @@ class SignalDeepParser:
                         'Source_Table': 'message',
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -767,7 +767,7 @@ class SignalDeepParser:
                         'Source_Table': 'model_TSInteraction',
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(hash(str(row_id)) & 0x7FFFFFFF),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -847,7 +847,7 @@ class ZangiDeepParser:
                         'Source_Table': msg_tbl,
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -897,7 +897,7 @@ class ZangiDeepParser:
                         'Source_Table': 'ZMESSAGE',
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -936,7 +936,7 @@ class ZangiDeepParser:
                         'Source_Table': call_tbl,
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 64),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -1028,7 +1028,7 @@ class ElementMatrixDeepParser:
                         'Source_Table': ev_tbl,
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -1112,7 +1112,7 @@ class SessionDeepParser:
                         'Source_Table': msg_tbl,
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -1175,7 +1175,7 @@ class PrivacyNicheDeepParsers:
                         'Source_Table': 'message',
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -1237,7 +1237,7 @@ class PrivacyNicheDeepParsers:
                         'Source_Table': 'messages',
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -1377,7 +1377,7 @@ class SnapchatDeepParser:
                         'Source_Table': 'conversation_message',
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -1421,7 +1421,7 @@ class SnapchatDeepParser:
                         'Source_Table': friend_tbl,
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 64),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -1494,7 +1494,7 @@ class InstagramDirectDeepParser:
                         'Source_Table': 'messages',
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -1559,7 +1559,7 @@ class DatingAppsDeepParser:
                         'Source_Table': msg_tbl,
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -1615,7 +1615,7 @@ class DatingAppsDeepParser:
                         'Source_Table': msg_tbl,
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -1670,7 +1670,7 @@ class DatingAppsDeepParser:
                         'Source_Table': 'messages',
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 
@@ -1725,7 +1725,7 @@ class DatingAppsDeepParser:
                         'Source_Table': 'chat_messages',
                         'Row_ID': row_id,
                         'Page_Number': 0,
-                        'Byte_Offset': format_hex_offset(row_id * 128),
+                        'Byte_Offset': '',  # no B-tree walk: offset unknown (C-09)
                         'Recovery_Method': 'Allocated B-Tree'
                     })
 

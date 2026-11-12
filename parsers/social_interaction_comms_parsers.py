@@ -210,7 +210,7 @@ def parse_facebook_messenger_database(
                     "Source_Table": msg_tbl,
                     "Row_ID": row["_rowid"],
                     "Page_Number": int(row["_rowid"]) // 32 + 1,
-                    "Byte_Offset": int(row["_rowid"]) * 256,
+                    "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "RECALLED_FREELIST" if is_unsent else "ACTIVE_SQLITE",
                 })
 
@@ -287,7 +287,7 @@ def parse_facebook_messenger_database(
                     "Source_Table": tname,
                     "Row_ID": row["_rowid"],
                     "Page_Number": int(row["_rowid"]) // 32 + 1,
-                    "Byte_Offset": int(row["_rowid"]) * 256,
+                    "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "E2EE_SQLITE",
                 })
 
@@ -420,7 +420,7 @@ def parse_discord_database(db_path_or_dir: str) -> pd.DataFrame:
                             "Source_Table": t,
                             "Row_ID": r["_rowid"],
                             "Page_Number": int(r["_rowid"]) // 32 + 1,
-                            "Byte_Offset": int(r["_rowid"]) * 256,
+                            "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                             "Recovery_Method": "ROOM_SQLITE",
                         })
 
@@ -469,7 +469,7 @@ def parse_discord_database(db_path_or_dir: str) -> pd.DataFrame:
                                 "Source_Table": t,
                                 "Row_ID": r["_rowid"],
                                 "Page_Number": int(r["_rowid"]) // 32 + 1,
-                                "Byte_Offset": int(r["_rowid"]) * 256,
+                                "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                                 "Recovery_Method": "KV_CACHE_SQLITE",
                             })
             conn.close()
@@ -575,7 +575,7 @@ def parse_skype_teams_database(db_path: str) -> pd.DataFrame:
                     "Source_Table": skype_msg_tbl,
                     "Row_ID": r["_rowid"],
                     "Page_Number": int(r["_rowid"]) // 32 + 1,
-                    "Byte_Offset": int(r["_rowid"]) * 256,
+                    "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "SKYPE_SQLITE",
                 })
 
@@ -635,7 +635,7 @@ def parse_skype_teams_database(db_path: str) -> pd.DataFrame:
                     "Source_Table": teams_tbl,
                     "Row_ID": r["_rowid"],
                     "Page_Number": int(r["_rowid"]) // 32 + 1,
-                    "Byte_Offset": int(r["_rowid"]) * 256,
+                    "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "TEAMS_SQLITE",
                 })
 
@@ -734,7 +734,7 @@ def parse_viber_database(db_path: str) -> pd.DataFrame:
                     "Source_Table": msg_tbl,
                     "Row_ID": r["_rowid"],
                     "Page_Number": int(r["_rowid"]) // 32 + 1,
-                    "Byte_Offset": int(r["_rowid"]) * 256,
+                    "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "VIBER_SQLITE",
                 })
 
@@ -821,7 +821,7 @@ def parse_wechat_database(db_path: str) -> pd.DataFrame:
                     "Source_Table": msg_tbl,
                     "Row_ID": r["_rowid"],
                     "Page_Number": int(r["_rowid"]) // 32 + 1,
-                    "Byte_Offset": int(r["_rowid"]) * 256,
+                    "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "WECHAT_SQLITE",
                 })
 
@@ -906,7 +906,7 @@ def parse_line_database(db_path: str) -> pd.DataFrame:
                     "Source_Table": ch_tbl,
                     "Row_ID": r["_rowid"],
                     "Page_Number": int(r["_rowid"]) // 32 + 1,
-                    "Byte_Offset": int(r["_rowid"]) * 256,
+                    "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "LINE_SQLITE",
                 })
 
@@ -979,7 +979,7 @@ def parse_imo_kakaotalk_database(db_path: str) -> pd.DataFrame:
                     "Source_Table": tbl,
                     "Row_ID": r["_rowid"],
                     "Page_Number": int(r["_rowid"]) // 32 + 1,
-                    "Byte_Offset": int(r["_rowid"]) * 256,
+                    "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "IMO_SQLITE",
                 })
 
@@ -1032,7 +1032,7 @@ def parse_imo_kakaotalk_database(db_path: str) -> pd.DataFrame:
                     "Source_Table": tbl,
                     "Row_ID": r["_rowid"],
                     "Page_Number": int(r["_rowid"]) // 32 + 1,
-                    "Byte_Offset": int(r["_rowid"]) * 256,
+                    "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "KAKAOTALK_SQLITE",
                 })
 
@@ -1126,7 +1126,7 @@ def parse_twitter_threads_reddit_linkedin(db_path: str) -> pd.DataFrame:
                     "Source_Table": t,
                     "Row_ID": r["_rowid"],
                     "Page_Number": int(r["_rowid"]) // 32 + 1,
-                    "Byte_Offset": int(r["_rowid"]) * 256,
+                    "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "TWITTER_SQLITE",
                 })
 
@@ -1181,7 +1181,7 @@ def parse_twitter_threads_reddit_linkedin(db_path: str) -> pd.DataFrame:
                         "Source_Table": t,
                         "Row_ID": r["_rowid"],
                         "Page_Number": int(r["_rowid"]) // 32 + 1,
-                        "Byte_Offset": int(r["_rowid"]) * 256,
+                        "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                         "Recovery_Method": "LINKEDIN_SQLITE",
                     })
 
@@ -1273,7 +1273,7 @@ def parse_truecaller_database(db_path: str) -> pd.DataFrame:
                     "Source_Table": msg_tbl,
                     "Row_ID": r["_rowid"],
                     "Page_Number": int(r["_rowid"]) // 32 + 1,
-                    "Byte_Offset": int(r["_rowid"]) * 256,
+                    "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "TRUECALLER_SQLITE",
                 })
 
@@ -1330,7 +1330,7 @@ def parse_truecaller_database(db_path: str) -> pd.DataFrame:
                         "Source_Table": contact_tbl,
                         "Row_ID": r["_rowid"],
                         "Page_Number": int(r["_rowid"]) // 32 + 1,
-                        "Byte_Offset": int(r["_rowid"]) * 256,
+                        "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                         "Recovery_Method": "TRUECALLER_CALLER_ID",
                     })
 
@@ -1416,7 +1416,7 @@ def parse_olx_database(db_path: str) -> pd.DataFrame:
                     "Source_Table": t,
                     "Row_ID": r["_rowid"],
                     "Page_Number": int(r["_rowid"]) // 32 + 1,
-                    "Byte_Offset": int(r["_rowid"]) * 256,
+                    "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "OLX_CYBERCRIME_SQLITE",
                 })
 
@@ -1489,7 +1489,7 @@ def parse_sharechat_moj_database(db_path: str) -> pd.DataFrame:
                     "Source_Table": t,
                     "Row_ID": r["_rowid"],
                     "Page_Number": int(r["_rowid"]) // 32 + 1,
-                    "Byte_Offset": int(r["_rowid"]) * 256,
+                    "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "SHARECHAT_SQLITE",
                 })
 

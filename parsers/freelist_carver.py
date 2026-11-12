@@ -37,10 +37,7 @@ VPA_VALID_RE = re.compile(
     re.IGNORECASE,
 )
 # Mandatory currency symbol (Rs / INR / ₹) so random numbers are never matched
-AMOUNT_VALID_RE = re.compile(
-    r'(?:rs\.?\s*|inr\s*|₹\s*)([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)\b',
-    re.IGNORECASE,
-)
+from src.core.amounts import AMOUNT_VALID_RE  # noqa: E402  (single shared parser, C-10)
 
 
 def read_varint(data: bytes, offset: int) -> Tuple[int, int]:

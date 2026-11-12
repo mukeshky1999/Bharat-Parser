@@ -291,7 +291,7 @@ export const BankCdrFusionView: React.FC = () => {
               <div>
                 <span className="text-[10px] text-emerald-400 uppercase tracking-wider block font-semibold flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                  Verified on Both Phone & Bank
+                  Matched by Reference
                 </span>
                 <span className="text-base font-extrabold text-emerald-400 font-mono">
                   {bankResults?.matchedCount ?? 0}
@@ -303,7 +303,7 @@ export const BankCdrFusionView: React.FC = () => {
               <div>
                 <span className="text-[10px] text-rose-400 uppercase tracking-wider block font-semibold flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3 text-rose-400" />
-                  In Bank ONLY (Wiped from Phone)
+                  Not Found on Phone
                 </span>
                 <span className="text-base font-extrabold text-rose-400 font-mono">
                   {bankResults?.unmatchedBankCount ?? 0}

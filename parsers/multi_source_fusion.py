@@ -131,6 +131,14 @@ def parse_bank_statement(
     return pd.DataFrame(columns=standard_cols)
 
 
+def _epoch_or_none(value: Any) -> Optional[float]:
+    try:
+        t = pd.to_datetime(value, errors='coerce', dayfirst=bool(re.match(r'^\s*\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}', str(value))))
+        return None if pd.isna(t) else float(t.timestamp())
+    except Exception:
+        return None
+
+
 def reconcile_bank_statement_with_device(
     bank_df: pd.DataFrame,
     master_timeline: pd.DataFrame,
@@ -170,9 +178,11 @@ def reconcile_bank_statement_with_device(
                 'app': str(r.get('Application', 'Phone App')),
                 'txid': tid,
                 'type': str(r.get('Type', '')).upper(),
+                'epoch': _epoch_or_none(r.get('Date')),
             })
 
     rows: List[Dict[str, Any]] = []
+    used_phone_rows: set = set()
     for _, brow in bank_df.iterrows():
         ref = str(brow.get('Ref_UTR', 'N/A')).strip()
         try:
@@ -189,25 +199,32 @@ def reconcile_bank_statement_with_device(
         direction = '💸 Debit' if debit > 0 else '💰 Credit'
         cparty = brow.get('Extracted_VPA') or str(brow.get('Narration', ''))[:60]
 
+        # H-07: a reference match is the only strong evidence. Without one, amount alone proves
+        # nothing, so require amount + direction + same-day-or-adjacent date, and use each phone
+        # row at most once. No "wiped from phone" inference is made for unmatched rows.
         matched_app = None
+        status = 'NOT_FOUND_ON_PHONE'
         if ref != 'N/A' and ref in phone_refs:
-            for item in phone_amts_by_app:
+            for idx_p, item in enumerate(phone_amts_by_app):
                 if item['txid'] == ref:
                     matched_app = item['app']
+                    status = 'MATCHED_REFERENCE'
+                    used_phone_rows.add(idx_p)
                     break
         else:
             expected_type = 'DEBIT' if debit > 0 else 'CREDIT'
-            for item in phone_amts_by_app:
-                if abs(item['amt'] - amt) < 0.05:
-                    item_type = item.get('type', '')
-                    if not item_type or item_type == expected_type or item_type == 'TRANSFER':
+            bank_t = _epoch_or_none(brow.get('Date'))
+            if bank_t is not None:
+                for idx_p, item in enumerate(phone_amts_by_app):
+                    if idx_p in used_phone_rows or item['epoch'] is None:
+                        continue
+                    if abs(item['amt'] - amt) >= 0.05 or item.get('type') != expected_type:
+                        continue
+                    if abs(item['epoch'] - bank_t) <= 36 * 3600:
                         matched_app = item['app']
+                        status = 'PROBABLE_AMOUNT_DATE'
+                        used_phone_rows.add(idx_p)
                         break
-
-        if matched_app:
-            status = '✅ Verified on Both Phone & Bank Statement'
-        else:
-            status = '⚠️ In Bank Statement ONLY (Wiped from Phone / Other Device)'
 
         rows.append({
             'Reconciliation_Status': status,

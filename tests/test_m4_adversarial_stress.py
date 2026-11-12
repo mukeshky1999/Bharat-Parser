@@ -13,6 +13,7 @@ Probes and stress-tests:
 from __future__ import annotations
 
 import os
+from tests.legal_fixtures import ncrp_candidates, sec230_items
 import shutil
 import tempfile
 import unittest
@@ -154,8 +155,10 @@ class TestM4AdversarialStress(unittest.TestCase):
         try:
             res = server.get_graph_mule_network()
             self.assertTrue(res["success"])
-            self.assertGreater(len(res["nodes"]), 0)
-            self.assertGreater(len(res["edges"]), 0)
+            # C-03: no case data -> explicit empty result, never a built-in sample network.
+            self.assertTrue(res["empty"])
+            self.assertEqual(res["nodes"], [])
+            self.assertEqual(res["edges"], [])
             self.assertIn("sankey_layout", res)
             self.assertIn("stages", res["sankey_layout"])
             self.assertIn("ribbons", res["sankey_layout"])
@@ -163,7 +166,7 @@ class TestM4AdversarialStress(unittest.TestCase):
             server._case_state["loaded"] = prev_loaded
 
     def test_graph_mule_network_with_empty_transactions_table(self):
-        """When transactions table has 0 rows, must return fallback topology without 500."""
+        """When transactions table has 0 rows, must return an explicit empty result without 500."""
         conn = self.store._get_connection()
         cur = conn.cursor()
         cur.execute("DELETE FROM transactions")
@@ -171,8 +174,8 @@ class TestM4AdversarialStress(unittest.TestCase):
 
         res = server.get_graph_mule_network()
         self.assertTrue(res["success"])
-        self.assertGreater(len(res["nodes"]), 0)
-        self.assertGreater(len(res["edges"]), 0)
+        self.assertTrue(res["empty"])
+        self.assertEqual(res["nodes"], [])
 
     def test_graph_mule_network_with_cyclic_mule_transactions(self):
         """Stress: Directed circular smurfing transactions must not cause infinite loop or crash."""
@@ -209,12 +212,30 @@ class TestM4AdversarialStress(unittest.TestCase):
 
     def test_graph_sankey_svg_vector_rendering(self):
         """Endpoint /api/graph/sankey-svg must return valid SVG markup with image/svg+xml."""
+        conn = self.store._get_connection()
+        conn.execute("DELETE FROM transactions")
+        conn.execute(
+            "INSERT INTO transactions (Application, Transaction_ID, Amount, Type, Date, Counterparty, Status)"
+            " VALUES ('PhonePe','T1',1234.5,'DEBIT','2026-11-08 10:00:00','Real_Payee','SUCCESS')"
+        )
+        conn.commit()
         res = server.get_graph_sankey_svg()
         self.assertEqual(res.media_type, "image/svg+xml")
         svg_content = res.body.decode("utf-8")
-        self.assertTrue(svg_content.startswith("<svg") or "<svg" in svg_content)
         self.assertIn("</svg>", svg_content)
         self.assertIn("STAGE 1", svg_content.upper())
+        self.assertIn("Real_Payee", svg_content)
+        self.assertIn("1,234.50", svg_content)
+        self.assertNotIn("FixedFloat", svg_content)
+        self.assertNotIn("1,50,000", svg_content)
+
+    def test_graph_sankey_svg_empty_case_has_no_sample_drawing(self):
+        conn = self.store._get_connection()
+        conn.execute("DELETE FROM transactions")
+        conn.commit()
+        svg_content = server.get_graph_sankey_svg().body.decode("utf-8")
+        self.assertIn("No money-trail data", svg_content)
+        self.assertNotIn("FixedFloat", svg_content)
 
     # =========================================================================
     # 3. NCRP 1930 Bank Lien & Complainant Safeguard Lock
@@ -223,7 +244,7 @@ class TestM4AdversarialStress(unittest.TestCase):
     def test_ncrp_freeze_safeguard_lock_prevents_victim_freezing(self):
         """Complainant account must be locked and NEVER appear in freeze rows."""
         victim_acc = "VICTIM_ACCOUNT_778899"
-        req = NcrpFreezeRequest(
+        req = NcrpFreezeRequest(candidates=ncrp_candidates(victim_acc), acknowledgement_no="NCRP-TEST-001", 
             case_id="ADV_NCRP_CASE",
             complainant_account=victim_acc,
             output_dir=os.path.join(self.workspace, "ncrp_adv_out")
@@ -261,7 +282,7 @@ class TestM4AdversarialStress(unittest.TestCase):
             {"account_no": complainant_acc, "ifsc": "HDFC0001", "vpa": "victim@okhdfc", "volume_inr": 100000.0, "is_complainant_victim": True},
             {"account_no": "MULE_BENEFICIARY_99", "ifsc": "SBIN0001", "vpa": "mule@oksbi", "volume_inr": 95000.0, "is_complainant_victim": False},
         ]
-        req = NcrpFreezeRequest(
+        req = NcrpFreezeRequest(acknowledgement_no="NCRP-TEST-001", 
             complainant_account=complainant_acc,
             candidates=candidates,
             output_dir=os.path.join(self.workspace, "ncrp_match_out")
@@ -299,7 +320,7 @@ class TestM4AdversarialStress(unittest.TestCase):
             {"account_no": complainant_acc, "ifsc": "HDFC0001", "vpa": "victim@okhdfc", "volume_inr": 100000.0},
             {"account_no": "MULE_BENEFICIARY_99", "ifsc": "SBIN0001", "vpa": "mule@oksbi", "volume_inr": 95000.0},
         ]
-        req = NcrpFreezeRequest(
+        req = NcrpFreezeRequest(acknowledgement_no="NCRP-TEST-001", 
             complainant_account=complainant_acc,
             candidates=candidates,
             output_dir=os.path.join(self.workspace, "ncrp_vuln_out")
@@ -343,7 +364,7 @@ class TestM4AdversarialStress(unittest.TestCase):
 
     def test_sec230_bnss_non_existent_case_id(self):
         """Non-existent case ID must generate standalone defense bundle cleanly without 500."""
-        req = Sec230BnssRequest(
+        req = Sec230BnssRequest(items=sec230_items(self.workspace), 
             case_id="CASE_TOTALLY_NON_EXISTENT_99999",
             victim_name="Smt. Ananya Sharma",
             anonymize_victim_identity=True
@@ -357,7 +378,7 @@ class TestM4AdversarialStress(unittest.TestCase):
 
     def test_sec230_bnss_multi_victim_anonymization(self):
         """Multiple victim names in string must be handled without crash."""
-        req = Sec230BnssRequest(
+        req = Sec230BnssRequest(items=sec230_items(self.workspace), 
             case_id="CASE_MULTI_VICTIM_001",
             victim_name="Rajesh Gupta & Priya Gupta",
             anonymize_victim_identity=True
@@ -426,11 +447,12 @@ class TestM4AdversarialStress(unittest.TestCase):
             f.write(b"SHORT_DATA_128_BYTES" * 5)
 
         # Query offset at 50,000 (well beyond file size of ~100 bytes)
-        res = server.get_inspector_hex(file_path=test_file, offset=50000, window_size=4096)
-        self.assertTrue(res["success"])
-        self.assertEqual(res["target_offset"], 50000)
-        # Synthetic fallback generates deterministic dummy hex buffer for offline viewing
-        self.assertGreater(len(res["hex_lines"]), 0)
+        # C-04: bytes are never fabricated; an unreadable offset is a 404 error.
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as ctx:
+            server.get_inspector_hex(file_path=test_file, offset=50000, window_size=4096)
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertIn("beyond end of file", ctx.exception.detail)
 
 
 if __name__ == "__main__":

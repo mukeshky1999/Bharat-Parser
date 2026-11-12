@@ -30,10 +30,7 @@ VPA_VALID_RE = re.compile(
     r'\b[a-zA-Z0-9.\-_]{3,64}@(' + '|'.join(KNOWN_UPI_SUFFIXES) + r')\b',
     re.IGNORECASE,
 )
-AMOUNT_VALID_RE = re.compile(
-    r'(?:rs\.?\s*|inr\s*|₹\s*)([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)\b',
-    re.IGNORECASE,
-)
+from src.core.amounts import AMOUNT_VALID_RE  # noqa: E402  (single shared parser, C-10)
 UTR_VALID_RE = re.compile(
     r'^(?:[0-9]{12}|T\d{18,24}|(?:YBL|IBL|AXL|OKH|OKI|OKA|OKS|PTM|UPI)[a-zA-Z0-9]{18,32})$'
 )

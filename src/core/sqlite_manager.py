@@ -18,11 +18,16 @@ def connect_forensic_sqlite(
     WAL mode, busy timeouts, and foreign key constraints enabled.
     """
     path_str = str(db_path)
-    conn = sqlite3.connect(
-        path_str,
-        timeout=timeout,
-        check_same_thread=False,
-    )
+    if read_only and path_str != ":memory:":
+        # True read-only open: no journal-mode change, no checkpoint-on-close, no WAL deletion.
+        uri = Path(path_str).resolve().as_uri() + "?mode=ro"
+        conn = sqlite3.connect(uri, uri=True, timeout=timeout, check_same_thread=False)
+    else:
+        conn = sqlite3.connect(
+            path_str,
+            timeout=timeout,
+            check_same_thread=False,
+        )
     conn.row_factory = sqlite3.Row
 
     # Enforce database constraints and concurrency safeguards

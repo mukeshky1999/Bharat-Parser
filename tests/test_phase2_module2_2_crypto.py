@@ -91,6 +91,27 @@ def create_synthetic_sqlcipher_v4_db_and_wal(
     if temp_sqlite.exists():
         temp_sqlite.unlink()
 
+    # SQLCipher reserves the last 80 bytes of every page (IV + HMAC). A plain SQLite file fills
+    # the whole page, so shift each leaf page's cell content down by 80 bytes (and fix the cell
+    # pointers) so nothing lives in the reserved area. Otherwise the encrypted payload would
+    # silently drop the schema cell on page 1 and the first rows on page 2.
+    def shift_into_usable_area(page: bytearray, hdr_off: int) -> None:
+        ncells = struct.unpack(">H", page[hdr_off + 3:hdr_off + 5])[0]
+        content_start = struct.unpack(">H", page[hdr_off + 5:hdr_off + 7])[0] or 65536
+        ptr_base = hdr_off + 8  # leaf page header is 8 bytes
+        assert ptr_base + 2 * ncells <= content_start - 80
+        cells = bytes(page[content_start:4096])
+        page[content_start - 80:4096 - 80] = cells
+        page[4096 - 80:4096] = bytes(80)
+        for n in range(ncells):
+            off = ptr_base + 2 * n
+            ptr = struct.unpack(">H", page[off:off + 2])[0]
+            page[off:off + 2] = struct.pack(">H", ptr - 80)
+        page[hdr_off + 5:hdr_off + 7] = struct.pack(">H", content_start - 80)
+
+    shift_into_usable_area(orig_page1, 100)
+    shift_into_usable_area(orig_page2, 0)
+
     # Set Header Byte 20 (reserved_bytes_per_page) = 80 in Page 1
     orig_page1[20] = 80
 

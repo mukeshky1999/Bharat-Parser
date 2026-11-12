@@ -781,9 +781,9 @@ def clean_amount_series(series: pd.Series) -> pd.Series:
     if series.empty:
         return series
     if pd.api.types.is_string_dtype(series) or pd.api.types.is_object_dtype(series):
-        cleaned = series.astype(str).str.replace(r'[^\d.\-]', '', regex=True)
-        cleaned = cleaned.str.replace(r'\.(?=.*\.)', '', regex=True)
-        return pd.to_numeric(cleaned, errors='coerce')
+        # Strict: only a whole-value amount parses; "500 for 2 items" -> NaN, never 5002 (C-10).
+        from src.core.amounts import parse_amount
+        return pd.to_numeric(series.map(lambda v: parse_amount(v) if pd.notna(v) else None), errors='coerce')
     return pd.to_numeric(series, errors='coerce')
 
 
@@ -829,11 +829,16 @@ def _infer_transaction_type(
 
     s_str = status_series.astype(str).str.upper()
     direction = direction.mask(
-        s_str.str.contains('DEBIT|SENT|PAID|WITHDRAW', na=False), 'DEBIT'
+        s_str.str.contains(r'(?:DEBIT|DEBITED|SENT|PAID|WITHDRAWN?|WITHDRAWAL)', na=False, regex=True), 'DEBIT'
     )
     direction = direction.mask(
-        s_str.str.contains('CREDIT|RECEIVED|REFUND', na=False), 'CREDIT'
+        s_str.str.contains(r'(?:CREDIT|CREDITED|RECEIVED|REFUND|REFUNDED)', na=False, regex=True), 'CREDIT'
     )
+    # An explicit type column wins over status keywords (C-12: "CREDIT" + "UNPAID" stays CREDIT).
+    if type_series is not None:
+        t_str = type_series.astype(str).str.upper().str.strip()
+        direction = direction.mask(t_str.isin(['DEBIT', 'DR']), 'DEBIT')
+        direction = direction.mask(t_str.isin(['CREDIT', 'CR']), 'CREDIT')
 
     if counterparty_series is not None:
         c_str = counterparty_series.astype(str).str.upper()
@@ -845,6 +850,29 @@ def _infer_transaction_type(
         )
 
     return direction
+
+
+def _db_has_payment_table(db_path: str) -> bool:
+    """True if any table has an amount-like column plus a payee/reference/status-like column."""
+    try:
+        uri = "file:" + os.path.abspath(db_path).replace("\\", "/") + "?mode=ro"
+        conn = sqlite3.connect(uri, uri=True, timeout=5.0)
+    except Exception:
+        return False
+    try:
+        for (tname,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall():
+            if tname.startswith("sqlite_"):
+                continue
+            cols = [r[1].lower() for r in conn.execute(f'PRAGMA table_info("{tname}")').fetchall()]
+            has_amt = any(re.search(r'amount|amt|paise|value', c) for c in cols)
+            has_ref = any(re.search(r'vpa|upi|payee|payer|beneficiar|txn|transaction|utr|rrn|merchant|status', c) for c in cols)
+            if has_amt and has_ref:
+                return True
+    except Exception:
+        return False
+    finally:
+        conn.close()
+    return False
 
 
 def _carve_rkstorage_kv(raw_df: pd.DataFrame, owner_identifiers: Optional[Set[str]] = None) -> List[Dict[str, Any]]:
@@ -879,7 +907,7 @@ def _carve_rkstorage_kv(raw_df: pd.DataFrame, owner_identifiers: Optional[Set[st
                 'Transaction_ID': str(txid) if is_valid_txid(txid) else 'N/A',
                 'Amount': amt,
                 'Counterparty': str(cparty) if is_valid_counterparty(cparty) else 'Unknown',
-                'Status': str(extracted.get('Status') or 'SUCCESS'),
+                'Status': str(extracted.get('Status') or 'UNKNOWN'),
                 'Type': str(extracted.get('Type') or 'TRANSFER'),
             })
     return tx_rows
@@ -1055,7 +1083,7 @@ def synthesize_and_deduplicate_records(
         txid = row.get('Transaction_ID')
         linked = row.get('Linked_Reference_IDs')
         dt = row.get('Date')
-        st_val = str(row.get('Status', 'SUCCESS')).strip()
+        st_val = str(row.get('Status', 'UNKNOWN')).strip()
         tp_val = str(row.get('Type', 'TRANSFER')).strip().upper()
 
         cparty_str = format_counterparty_display(str(cparty).strip()) if is_valid_counterparty(cparty) else 'Unknown'
@@ -1099,28 +1127,20 @@ def synthesize_and_deduplicate_records(
         if cparty_str == 'Unknown' and len(txid_str) >= 15 and txid_str.isdigit():
             continue
 
+        # C-12: a missing status is UNKNOWN, never SUCCESS; an undetermined direction stays
+        # TRANSFER (= "direction unknown") instead of being guessed from IDs or merchant names.
         if st_val.lower() in ('none', 'nan', 'null', '', 'true', '0.0', '0'):
-            st_val = 'SUCCESS'
+            st_val = 'UNKNOWN'
         if tp_val not in ('DEBIT', 'CREDIT', 'TRANSFER'):
             tp_val = 'TRANSFER'
-
-        # Outgoing merchant/bill/workflow rows default to DEBIT rather than ambiguous TRANSFER
-        if tp_val == 'TRANSFER' and (
-            re.match(r'^(?:T|NB)\d{18,24}$', txid_str)
-            or any(m in cparty_str.lower() for m in ('swiggy', 'zomato', 'blinkit', 'zepto', 'flipkart', 'amazon', 'store qr', 'credit card', 'bill'))
-        ):
-            tp_val = 'DEBIT'
 
         if cparty_str == 'Unknown' and st_val.isdigit() and len(txid_str) >= 15 and txid_str.isdigit():
             continue
 
         if st_val.lower() in ('none', 'nan', 'null', '', 'true'):
-            st_val = 'SUCCESS'
+            st_val = 'UNKNOWN'
         if tp_val not in ('DEBIT', 'CREDIT', 'TRANSFER'):
             tp_val = 'TRANSFER'
-
-        if tp_val == 'TRANSFER' and re.match(r'^T\d{18,24}$', txid_str):
-            tp_val = 'DEBIT'
 
         cleaned_records.append({
             'Date': dt_str,
@@ -1185,7 +1205,9 @@ def synthesize_and_deduplicate_records(
                     or r_cparty.startswith('Self / Own Account')
                 )
 
-                if same_txid or (txid_ok and date_ok and cparty_ok):
+                # C-08: records merge only on an identical reference ID. Amount/time/party
+                # similarity must never fuse distinct transactions into one that never existed.
+                if same_txid:
                     if cl['Date'] is None and r_dt is not None:
                         cl['Date'] = r_dt
                     if r_cparty != 'Unknown':
@@ -1263,21 +1285,7 @@ def synthesize_and_deduplicate_records(
             final_df.at[idx, 'Counterparty'] = name_to_vpa_map[cp.lower()]
             cp = final_df.at[idx, 'Counterparty']
 
-        # Ensure every valid VPA-anchored row has a concrete Reference ID if UTR column was absent
-        if tid == 'N/A' and '@' in cp:
-            dt_compact = re.sub(r'\D', '', str(row.get('Date') or ''))[:12] or f"{int(float(row['Amount']) * 100)}"
-            synth_id = f"UPI_REF_{dt_compact}"
-            final_df.at[idx, 'Transaction_ID'] = synth_id
-            final_df.at[idx, 'Linked_Reference_IDs'] = synth_id
-            tid = synth_id
-
-        if cp == 'Unknown':
-            if re.match(r'^(?:T|NB)\d{18,24}$', tid):
-                final_df.at[idx, 'Counterparty'] = 'PhonePe Merchant / Bill Payment'
-            elif re.match(r'^[0-9]{12}$', tid):
-                final_df.at[idx, 'Counterparty'] = f'UPI / Bank Counterparty (UTR: {tid})'
-            elif NPCI_TXID_REGEX.match(tid):
-                final_df.at[idx, 'Counterparty'] = f'UPI Counterparty (NPCI ID: {tid[:10]}...)'
+        # C-12: never synthesise reference IDs or counterparties in evidential columns.
 
     anchored_mask = (
         final_df['Counterparty'].astype(str).str.contains('@', na=False)
@@ -1293,15 +1301,6 @@ def synthesize_and_deduplicate_records(
     final_df = final_df[anchored_mask]
     final_df = final_df[~(final_df['Date'].isna() & (final_df['Counterparty'] == 'Unknown'))].reset_index(drop=True)
 
-    for idx, row in final_df.iterrows():
-        if row['Counterparty'] == 'Unknown':
-            tid = str(row['Transaction_ID'])
-            if re.match(r'^T\d{18,24}$', tid):
-                final_df.at[idx, 'Counterparty'] = 'PhonePe Merchant / Bill Payment'
-            elif re.match(r'^[0-9]{12}$', tid):
-                final_df.at[idx, 'Counterparty'] = f'UPI / Bank Counterparty (UTR: {tid})'
-            elif NPCI_TXID_REGEX.match(tid):
-                final_df.at[idx, 'Counterparty'] = f'UPI Counterparty (NPCI ID: {tid[:10]}...)'
 
     final_df['Risk_Level'] = compute_transaction_risk_badges(final_df)
     return final_df[std_cols]
@@ -1961,9 +1960,9 @@ def parse_database_artifacts(
                         )
 
                     tx_df['Status'] = (
-                        raw_tx[status_col].fillna('SUCCESS').astype(str).replace({'None': 'SUCCESS', 'nan': 'SUCCESS'})
+                        raw_tx[status_col].fillna('UNKNOWN').astype(str).replace({'None': 'UNKNOWN', 'nan': 'UNKNOWN', '': 'UNKNOWN'})
                         if status_col
-                        else 'SUCCESS'
+                        else 'UNKNOWN'
                     )
 
                     if amt_col and tx_df['Amount'].notna().any():
@@ -2076,9 +2075,12 @@ def parse_database_artifacts(
     db_size = os.path.getsize(db_path) if os.path.exists(db_path) else 0
     if not (is_whatsapp and db_size > 40 * 1024 * 1024):
         try:
-            freelist_df = carve_sqlite_freelists(db_path)
-            if not freelist_df.empty:
-                all_tx_fragments.append(freelist_df)
+            # C-07: deleted free text is not a deleted payment. Only promote carved cells to
+            # transactions when this database actually has a payment-shaped table.
+            if _db_has_payment_table(db_path):
+                freelist_df = carve_sqlite_freelists(db_path)
+                if not freelist_df.empty:
+                    all_tx_fragments.append(freelist_df)
         except Exception:
             pass
 

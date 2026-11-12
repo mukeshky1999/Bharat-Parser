@@ -10,20 +10,24 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 import hashlib
 import html
+import html as html_lib
 import json
 import os
 import re
+import shutil
 import sqlite3
 import sys
 import tempfile
+import zipfile
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import uvicorn
@@ -67,7 +71,7 @@ from parsers.ui_fts5_paginator import CaseUIPaginatorStore
 from tools.forensic_benchmark_recorder import ForensicBenchmarkRecorder
 from src.chat_reconstructor_and_redline.myers_redline_engine import MyersRedlineEngine
 from src.chat_reconstructor_and_redline.models import DiffTokenType
-from src.financial_graph_and_storyboard.sankey_canvas import SankeyCanvasRenderer, SankeyLaunderingCanvas
+from src.financial_graph_and_storyboard.sankey_canvas import SankeyCanvasRenderer, SankeyLaunderingCanvas, render_layout_svg
 from src.financial_graph_and_storyboard.models import SankeyNode, SankeyFlowRibbon, SankeyStageColumn
 from src.dossier_and_exhibits.exhibit_packager import ExhibitAndDefensePackager
 from src.dossier_and_exhibits.models import SensitiveMediaItem, RedactionTag, MuleTransactionEntry
@@ -104,12 +108,25 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# The API only serves the local desktop shell. Restrict origins (a web page the examiner happens
+# to have open must not be able to read workstation files) and reject foreign Host headers
+# (DNS rebinding). "null" is the origin of file:// pages loaded by Electron.
+_ALLOWED_ORIGINS = [
+    "http://localhost:3000", "http://127.0.0.1:3000",
+    "http://localhost:5173", "http://127.0.0.1:5173",
+    "http://localhost:4173", "http://127.0.0.1:4173",
+    "null",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["127.0.0.1", "localhost", "testserver"],
 )
 
 DEFAULT_WORKSPACE_ROOT = os.path.abspath(
@@ -203,18 +220,24 @@ class ChatRedlineResponse(BaseModel):
     has_financial_or_crypto_token: bool
 
 
+class Sec230MediaInput(BaseModel):
+    path: str
+    redaction_tag: Optional[str] = None  # a RedactionTag value, or None for disclosable material
+
+
 class Sec230BnssRequest(BaseModel):
     case_id: Optional[str] = None
     output_dir: Optional[str] = None
     anonymize_victim_identity: bool = True
-    victim_name: Optional[str] = "Complainant Victim"
+    victim_name: Optional[str] = None
+    items: Optional[List[Sec230MediaInput]] = None
 
 
 class NcrpFreezeRequest(BaseModel):
     case_id: Optional[str] = None
     output_dir: Optional[str] = None
-    complainant_account: Optional[str] = "COMPLAINANT_ACCOUNT_9999"
-    acknowledgement_no: Optional[str] = "NCRP-2026-DEFAULT"
+    complainant_account: Optional[str] = None
+    acknowledgement_no: Optional[str] = None
     candidates: Optional[List[Dict[str, Any]]] = None
     transactions: Optional[List[Dict[str, Any]]] = None
 
@@ -239,42 +262,64 @@ class Sec63BsaRequest(BaseModel):
 # Hashing & File Utilities
 # ------------------------------------------------------------------------------
 
+def _hash_stream(path: str, md5_h, sha_h) -> int:
+    total = 0
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(8 * 1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            md5_h.update(chunk)
+            sha_h.update(chunk)
+    return total
+
+
 def compute_hashes_streaming(file_path: str) -> Dict[str, Any]:
-    """Computes SHA-256 and MD5 hashes in strict read-only 8 MB streaming chunks."""
+    """
+    Computes SHA-256 and MD5 in read-only 8 MB streaming chunks.
+
+    Files hash their bytes. Directories hash a manifest of sorted, relative
+    ``path\0sha256\0size`` lines, so renaming/adding/removing a file changes the digest.
+    Unreadable files raise (the hash would otherwise silently describe less than the evidence).
+    A missing path raises FileNotFoundError; an empty input is reported, never "verified".
+    """
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"Cannot hash missing path: {file_path}")
+
     md5_hasher = hashlib.md5()
     sha256_hasher = hashlib.sha256()
     total_bytes = 0
+    file_count = 1
 
     if os.path.isfile(file_path):
-        with open(file_path, "rb") as f:
-            while True:
-                chunk = f.read(8 * 1024 * 1024)
-                if not chunk:
-                    break
-                total_bytes += len(chunk)
-                md5_hasher.update(chunk)
-                sha256_hasher.update(chunk)
-    elif os.path.isdir(file_path):
-        for root, _, files in os.walk(file_path):
-            for file in sorted(files):
-                full_p = os.path.join(root, file)
-                try:
-                    with open(full_p, "rb") as f:
-                        while True:
-                            chunk = f.read(8 * 1024 * 1024)
-                            if not chunk:
-                                break
-                            total_bytes += len(chunk)
-                            md5_hasher.update(chunk)
-                            sha256_hasher.update(chunk)
-                except Exception:
-                    continue
+        total_bytes = _hash_stream(file_path, md5_hasher, sha256_hasher)
+    else:
+        entries: List[Tuple[str, str, int]] = []
+        for root, dirs, files in os.walk(file_path):
+            dirs.sort()
+            for name in sorted(files):
+                full_p = os.path.join(root, name)
+                rel = os.path.relpath(full_p, file_path).replace("\\", "/")
+                f_sha = hashlib.sha256()
+                f_md5 = hashlib.md5()
+                size = _hash_stream(full_p, f_md5, f_sha)
+                total_bytes += size
+                entries.append((rel, f_sha.hexdigest(), size))
+        entries.sort()
+        file_count = len(entries)
+        for rel, digest, size in entries:
+            line = f"{rel}\0{digest}\0{size}\n".encode("utf-8")
+            md5_hasher.update(line)
+            sha256_hasher.update(line)
 
     return {
         "md5": md5_hasher.hexdigest(),
         "sha256": sha256_hasher.hexdigest(),
         "fileSizeBytes": total_bytes,
-        "verified": True,
+        "fileCount": file_count,
+        "method": "file-bytes" if os.path.isfile(file_path) else "sorted-path-sha256-manifest",
+        "verified": file_count > 0 and total_bytes > 0,
         "calculatedAt": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -331,6 +376,56 @@ def _run_native_folder_dialog() -> str:
 
 
 # ------------------------------------------------------------------------------
+# File access sandbox
+# ------------------------------------------------------------------------------
+
+def _is_within(path: str, root: str) -> bool:
+    try:
+        return os.path.commonpath([os.path.abspath(path), os.path.abspath(root)]) == os.path.abspath(root)
+    except ValueError:  # different drives
+        return False
+
+
+def _resolve_case_file(requested: str, *, for_sqlite: bool = False) -> str:
+    """
+    Resolves a client-supplied path to a file the active case may read.
+
+    Only the case workspace and the evidence source are allowed. When SQLite is going to open the
+    file, a path inside the original evidence folder is redirected to the identical file in the
+    case working copy, so the original is never touched.
+    """
+    if not requested or not isinstance(requested, str):
+        raise HTTPException(status_code=400, detail="A file path is required.")
+    ws = os.path.abspath(_active_store.case_workspace)
+    ev = _case_state.get("evidence_path") if _case_state.get("loaded") else None
+
+    candidates = [os.path.abspath(requested), os.path.abspath(os.path.join(ws, requested))]
+    allowed_missing = False
+    for cand in candidates:
+        in_ws = _is_within(cand, ws)
+        in_ev = bool(ev) and _is_within(cand, ev)
+        if not (in_ws or in_ev):
+            continue
+        if not os.path.isfile(cand):
+            allowed_missing = True
+            continue
+        if for_sqlite and in_ev and not in_ws:
+            wc = os.path.join(ws, "working_copy")
+            rel = os.path.relpath(cand, ev if os.path.isdir(ev) else os.path.dirname(ev))
+            mapped = os.path.join(wc, rel)
+            if not os.path.isfile(mapped):
+                raise HTTPException(status_code=404, detail="No working copy exists for this evidence file.")
+            return mapped
+        return cand
+    if allowed_missing:
+        raise HTTPException(status_code=404, detail=f"File not found: {requested}")
+    raise HTTPException(
+        status_code=403,
+        detail="Access denied: path is outside the active case workspace and evidence source.",
+    )
+
+
+# ------------------------------------------------------------------------------
 # Core Ingestion Pipeline Implementation
 # ------------------------------------------------------------------------------
 
@@ -360,6 +455,23 @@ def _execute_ingestion_pipeline(
     is_archive = p_low.endswith((".ufdr", ".ufd", ".tar", ".tar.gz", ".tgz", ".zip", ".xry", ".ofb", ".e01", ".ex01", ".l01"))
 
     catalog_entries: List[Dict[str, Any]] = []
+    working_copy_dir: Optional[str] = None
+    processing_log: List[Dict[str, str]] = []
+
+    def _log_failure(stage: str, path: str, exc: BaseException) -> None:
+        processing_log.append({
+            "stage": stage,
+            "file": os.path.basename(path),
+            "status": "FAILED",
+            "error": f"{type(exc).__name__}: {exc}",
+        })
+
+    if p_low.endswith((".ufd", ".xry", ".ofb")) and not zipfile.is_zipfile(abs_evidence):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported container: {os.path.basename(abs_evidence)} is not a ZIP-based "
+                   "extraction. Nothing was ingested.",
+        )
 
     if is_archive:
         container_engine = TerabyteForensicContainerEngine(abs_evidence, workspace_dir)
@@ -370,13 +482,19 @@ def _execute_ingestion_pipeline(
             for f in files:
                 discovered_files.append(os.path.join(root, f))
     elif os.path.isdir(abs_evidence):
+        # Evidence is never opened in place: SQLite creates -shm/-wal side files and may
+        # checkpoint. Parse a byte-identical working copy instead.
+        working_copy_dir = os.path.join(workspace_dir, "working_copy")
+        if os.path.isdir(working_copy_dir):
+            shutil.rmtree(working_copy_dir)
+        shutil.copytree(abs_evidence, working_copy_dir)
         discovered_files = []
-        for root, _, files in os.walk(abs_evidence):
+        for root, _, files in os.walk(working_copy_dir):
             for f in files:
                 f_path = os.path.join(root, f)
                 discovered_files.append(f_path)
                 catalog_entries.append({
-                    "vfs_path": os.path.relpath(f_path, abs_evidence).replace("\\", "/"),
+                    "vfs_path": os.path.relpath(f_path, working_copy_dir).replace("\\", "/"),
                     "container_format": "RAW_FOLDER",
                     "file_name": f,
                     "file_size": os.path.getsize(f_path),
@@ -385,15 +503,28 @@ def _execute_ingestion_pipeline(
                     "local_disk_path": f_path,
                 })
     else:
-        discovered_files = [abs_evidence]
+        working_copy_dir = os.path.join(workspace_dir, "working_copy")
+        if os.path.isdir(working_copy_dir):
+            shutil.rmtree(working_copy_dir)
+        os.makedirs(working_copy_dir)
+        # Bring sibling -wal/-shm/-journal along so WAL content is parsed from the copy.
+        src_dir, src_name = os.path.split(abs_evidence)
+        for sibling in os.listdir(src_dir):
+            if sibling == src_name or (
+                sibling.startswith(src_name)
+                and sibling[len(src_name):] in ("-wal", "-shm", "-journal")
+            ):
+                shutil.copy2(os.path.join(src_dir, sibling), os.path.join(working_copy_dir, sibling))
+        copied = os.path.join(working_copy_dir, src_name)
+        discovered_files = [copied]
         catalog_entries.append({
-            "vfs_path": os.path.basename(abs_evidence),
+            "vfs_path": src_name,
             "container_format": "FILE",
-            "file_name": os.path.basename(abs_evidence),
-            "file_size": os.path.getsize(abs_evidence),
+            "file_name": src_name,
+            "file_size": os.path.getsize(copied),
             "archive_offset": 0,
             "is_materialized": 1,
-            "local_disk_path": abs_evidence,
+            "local_disk_path": copied,
         })
 
     # 3. Discovery & Parsing Pipeline
@@ -411,22 +542,22 @@ def _execute_ingestion_pipeline(
     all_spillover_list: List[pd.DataFrame] = []
 
     device_meta = {
-        "model": "Generic Evidence Device",
-        "manufacturer": "OEM Vendor",
-        "androidVersion": "Android (Forensic Analysis)",
-        "buildNumber": "BUILD.SECURE.INGEST",
-        "imei1": "N/A",
-        "imei2": "N/A",
-        "serialNumber": case_id,
-        "timezone": "Asia/Kolkata (IST +05:30)",
-        "extractionType": "PHYSICAL_OR_LOGICAL",
+        "model": "Not recorded",
+        "manufacturer": "Not recorded",
+        "androidVersion": "Not recorded",
+        "buildNumber": "Not recorded",
+        "imei1": "Not recorded",
+        "imei2": "Not recorded",
+        "serialNumber": "Not recorded",
+        "timezone": "Not recorded",
+        "extractionType": "Not recorded",
         "evidenceSourcePath": abs_evidence,
         "hashes": hashes,
         "acquisitionTimestamp": {
             "rawValue": int(datetime.now(timezone.utc).timestamp() * 1000),
             "sourceFormat": "UNIX_MS",
             "utcIso": datetime.now(timezone.utc).isoformat(),
-            "istFormatted": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S IST"),
+            "istFormatted": (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d %H:%M:%S IST"),
             "epochMs": int(datetime.now(timezone.utc).timestamp() * 1000),
         },
     }
@@ -454,8 +585,8 @@ def _execute_ingestion_pipeline(
         # Determine relative / virtual file system path for accurate plugin matching
         if is_archive and file_path.startswith(extracted_dbs_dir):
             vfs_path = os.path.relpath(file_path, extracted_dbs_dir).replace("\\", "/")
-        elif os.path.isdir(abs_evidence) and file_path.startswith(abs_evidence):
-            vfs_path = os.path.relpath(file_path, abs_evidence).replace("\\", "/")
+        elif working_copy_dir and file_path.startswith(working_copy_dir):
+            vfs_path = os.path.relpath(file_path, working_copy_dir).replace("\\", "/")
         else:
             vfs_path = file_path.replace("\\", "/")
 
@@ -470,16 +601,16 @@ def _execute_ingestion_pipeline(
             prof1 = extract_account_profile(file_path)
             if prof1:
                 profiles[f"{app_label}_{os.path.basename(file_path)}"] = prof1
-        except Exception:
-            pass
+        except Exception as exc:
+            _log_failure("account_profile", file_path, exc)
 
         if f_low.endswith((".db", ".sqlite", ".sqlite3")):
             try:
                 prof2 = extract_profile_from_sqlite(file_path)
                 if prof2:
                     profiles[f"{app_label}_sqlite_{os.path.basename(file_path)}"] = prof2
-            except Exception:
-                pass
+            except Exception as exc:
+                _log_failure("sqlite_profile", file_path, exc)
 
             # Corroboration signals
             try:
@@ -488,14 +619,39 @@ def _execute_ingestion_pipeline(
                     corroboration_signals.extend(sigs)
                 if hints:
                     account_hints.extend(hints)
-            except Exception:
-                pass
+            except Exception as exc:
+                _log_failure("corroboration_signals", file_path, exc)
 
             # Heuristic database parsing
             try:
                 arts = parse_database_artifacts(file_path, os_type="android", app_label=app_label)
                 if arts:
-                    app_artifacts[app_label] = arts
+                    # H-08: stamp every record with its application and source file at parse time.
+                    for frame_name in ("chats", "transactions", "contacts", "calls", "locations"):
+                        fr = arts.get(frame_name)
+                        if fr is None or fr.empty:
+                            continue
+                        if frame_name != "chats":
+                            if "Application" not in fr.columns:
+                                fr["Application"] = app_label
+                            else:
+                                fr["Application"] = fr["Application"].where(
+                                    fr["Application"].astype(str).str.strip().ne("") & fr["Application"].notna(),
+                                    app_label,
+                                )
+                            if "Source_File" not in fr.columns:
+                                fr["Source_File"] = vfs_path
+                            else:
+                                fr["Source_File"] = fr["Source_File"].where(
+                                    fr["Source_File"].astype(str).str.strip().ne("") & fr["Source_File"].notna(),
+                                    vfs_path,
+                                )
+                    key = app_label
+                    n = 2
+                    while key in app_artifacts:
+                        key = f"{app_label}#{n}"
+                        n += 1
+                    app_artifacts[key] = arts
                     if "chats" in arts and not arts["chats"].empty:
                         all_chats_list.append(arts["chats"])
                     if "transactions" in arts and not arts["transactions"].empty:
@@ -508,16 +664,17 @@ def _execute_ingestion_pipeline(
                         all_locations_list.append(arts["locations"])
                     if "os_spillover" in arts and not arts["os_spillover"].empty:
                         all_spillover_list.append(arts["os_spillover"])
-            except Exception:
-                pass
+                processing_log.append({"stage": "parse_database", "file": os.path.basename(file_path), "status": "OK", "error": ""})
+            except Exception as exc:
+                _log_failure("parse_database", file_path, exc)
 
             # Crypto P2P parsing
             try:
                 crypto_df = parse_crypto_p2p_artifacts(file_path, app_name=app_label)
                 if crypto_df is not None and not crypto_df.empty:
                     crypto_p2p_records.append(crypto_df)
-            except Exception:
-                pass
+            except Exception as exc:
+                _log_failure("crypto_p2p", file_path, exc)
 
     # 4. Reconciliation and Cross-App Enrichment
     try:
@@ -631,6 +788,26 @@ def _execute_ingestion_pipeline(
         catalog_df = pd.DataFrame(catalog_entries)
         store.ingest_dataframe_chunked("vfs_files", catalog_df)
 
+    for tbl, cols in store.last_dropped_columns.items():
+        if cols:
+            processing_log.append({
+                "stage": "ingest_schema", "file": tbl, "status": "WARNING",
+                "error": f"Columns with data not stored: {', '.join(cols)}",
+            })
+
+    # Post-ingestion integrity check: re-hash the original evidence and compare.
+    post_hashes = compute_hashes_streaming(abs_evidence)
+    hashes["postIngestionSha256"] = post_hashes["sha256"]
+    hashes["postIngestionMd5"] = post_hashes["md5"]
+    hashes["integrityMatch"] = (
+        post_hashes["sha256"] == hashes["sha256"] and post_hashes["md5"] == hashes["md5"]
+    )
+    if not hashes["integrityMatch"]:
+        processing_log.append({
+            "stage": "integrity", "file": os.path.basename(abs_evidence), "status": "FAILED",
+            "error": "Evidence hash changed during ingestion",
+        })
+
     # Update active store and state
     _active_store = store
     counts = _active_store.get_pa_project_tree_counts()
@@ -669,6 +846,7 @@ def _execute_ingestion_pipeline(
         "counts": counts,
         "owner_dossier": serializable_dossier,
         "hashes": hashes,
+        "processing_log": processing_log,
         "mule_alerts": mule_alerts,
         "syndicate_roles": roles_df.to_dict("records") if not roles_df.empty else [],
         "device_metadata": device_meta,
@@ -690,6 +868,9 @@ def _execute_ingestion_pipeline(
         "workspace_dir": workspace_dir,
         "db_path": _active_store.db_path,
         "hashes": hashes,
+        "integrity_match": hashes["integrityMatch"],
+        "processing_log": processing_log,
+        "failed_files": [e for e in processing_log if e["status"] == "FAILED"],
         "counts": counts,
         "owner_dossier": serializable_dossier,
         "device_metadata": device_meta,
@@ -992,16 +1173,7 @@ def analyze_image_ocr(req: OcrAnalyzeRequest):
     """
     Performs bilingual Hindi + English OCR and extracts financial entities (VPA, UTR, PAN, IFSC, INR Amount).
     """
-    abs_path = os.path.abspath(req.image_path)
-    if not os.path.exists(abs_path):
-        if _case_state["loaded"] and _active_store is not None:
-            cand = os.path.join(_active_store.case_workspace, req.image_path)
-            if os.path.exists(cand):
-                abs_path = cand
-            else:
-                raise HTTPException(status_code=404, detail=f"Image file not found: {req.image_path}")
-        else:
-            raise HTTPException(status_code=404, detail=f"Image file not found: {req.image_path}")
+    abs_path = _resolve_case_file(req.image_path)
 
     with open(abs_path, "rb") as f:
         file_bytes = f.read()
@@ -1108,14 +1280,15 @@ def fuse_bank_statement(req: FusionBankRequest):
 
         reconciliation_df = reconcile_bank_statement_with_device(bank_df, device_tx_df)
 
-        matched_count = len(reconciliation_df[reconciliation_df["Reconciliation_Status"] == "MATCHED"]) if "Reconciliation_Status" in reconciliation_df.columns else 0
-        unmatched_bank = len(reconciliation_df[reconciliation_df["Reconciliation_Status"] == "UNMATCHED_BANK"]) if "Reconciliation_Status" in reconciliation_df.columns else 0
+        matched_count = len(reconciliation_df[reconciliation_df["Reconciliation_Status"] == "MATCHED_REFERENCE"]) if "Reconciliation_Status" in reconciliation_df.columns else 0
+        unmatched_bank = len(reconciliation_df[reconciliation_df["Reconciliation_Status"] == "NOT_FOUND_ON_PHONE"]) if "Reconciliation_Status" in reconciliation_df.columns else 0
 
         return {
             "success": True,
             "bank_records_count": len(bank_df),
             "matched_count": matched_count,
             "unmatched_bank_count": unmatched_bank,
+            "probable_count": int((reconciliation_df["Reconciliation_Status"] == "PROBABLE_AMOUNT_DATE").sum()) if "Reconciliation_Status" in reconciliation_df.columns else 0,
             "reconciliation_rows": reconciliation_df.to_dict("records")[:200],
         }
     except Exception as e:
@@ -1213,7 +1386,7 @@ def get_graph_mule_network():
                 "inflow": total_in,
                 "outflow": total_out,
                 "apps_used": data.get("apps_used", []),
-                "role": "Mule Candidate" if total_in > 50000 and total_out > 40000 else "Standard Entity",
+                "role": "Pass-through lead (in > Rs 50,000 and out > Rs 40,000)" if total_in > 50000 and total_out > 40000 else "Unclassified",
             })
         for u, v, data in g.edges(data=True):
             edges.append({
@@ -1226,36 +1399,38 @@ def get_graph_mule_network():
                 "txid": data.get("txid", ""),
             })
 
-    if not nodes:
-        nodes = [
-            {"id": "Victim Source", "entity": "Victim Source", "type": "Victim", "inflow": 0.0, "outflow": 250000.0, "role": "Complainant Victim"},
-            {"id": "Mule Layer 1", "entity": "Mule Layer 1", "type": "Mule", "inflow": 250000.0, "outflow": 235000.0, "role": "Layer-1 Smurfing Mule"},
-            {"id": "Mule Layer 2", "entity": "Mule Layer 2", "type": "Mule", "inflow": 235000.0, "outflow": 220000.0, "role": "Layer-2 Consolidator"},
-            {"id": "Binance P2P Escrow", "entity": "Binance P2P Escrow", "type": "Crypto", "inflow": 220000.0, "outflow": 220000.0, "role": "P2P FIU On-Ramp"},
-            {"id": "Tron TRC-20 Escrow", "entity": "Tron TRC-20 Escrow", "type": "Crypto", "inflow": 220000.0, "outflow": 0.0, "role": "Offshore Boss Cold Wallet"},
+    sankey_nodes: List[SankeyNode] = []
+    sankey_flows: List[SankeyFlowRibbon] = []
+    if edges:
+        # Stage = hop distance from sources (nodes with no inflow), capped at the 5 columns.
+        incoming = {n["id"] for n in nodes if n["inflow"] > 0}
+        depth: Dict[str, int] = {n["id"]: 0 for n in nodes if n["id"] not in incoming}
+        if not depth:
+            depth = {nodes[0]["id"]: 0}
+        changed = True
+        guard = 0
+        while changed and guard < 50:
+            changed = False
+            guard += 1
+            for e in edges:
+                if e["source"] in depth and e["target"] not in depth:
+                    depth[e["target"]] = min(4, depth[e["source"]] + 1)
+                    changed = True
+        stage_cols = SankeyLaunderingCanvas.STAGE_ORDER
+        for n in nodes:
+            sankey_nodes.append(SankeyNode(
+                node_id=n["id"], stage=stage_cols[depth.get(n["id"], 0)], label=n["id"],
+            ))
+        pair_amounts: Dict[Tuple[str, str], float] = {}
+        for e in edges:
+            pair_amounts[(e["source"], e["target"])] = pair_amounts.get((e["source"], e["target"]), 0.0) + e["amount"]
+        sankey_flows = [
+            SankeyFlowRibbon(source_node_id=u, target_node_id=v, amount_inr=amt)
+            for (u, v), amt in pair_amounts.items()
         ]
-        edges = [
-            {"source": "Victim Source", "target": "Mule Layer 1", "amount": 250000.0, "app": "PhonePe", "flow": "DEBIT", "timestamp": "2026-11-08 14:20:00", "txid": "UTR412345678901"},
-            {"source": "Mule Layer 1", "target": "Mule Layer 2", "amount": 235000.0, "app": "GPay", "flow": "TRANSFER", "timestamp": "2026-11-08 14:35:12", "txid": "UTR412345678902"},
-            {"source": "Mule Layer 2", "target": "Binance P2P Escrow", "amount": 220000.0, "app": "IMPS", "flow": "TRANSFER", "timestamp": "2026-11-08 15:02:40", "txid": "UTR412345678903"},
-            {"source": "Binance P2P Escrow", "target": "Tron TRC-20 Escrow", "amount": 220000.0, "app": "TRC20", "flow": "CRYPTO_TRANSFER", "timestamp": "2026-11-08 15:15:00", "txid": "TXID_TRC20_001"},
-        ]
-
-    sankey_nodes = [
-        SankeyNode(node_id="Victim Source", stage=SankeyStageColumn.STAGE_1_EXTERNAL_INFLOW_SOURCES, label="Victim Source"),
-        SankeyNode(node_id="Mule Layer 1", stage=SankeyStageColumn.STAGE_2_LOCAL_MULE_ACCOUNTS_AND_VPAS, label="Mule Layer 1"),
-        SankeyNode(node_id="Mule Layer 2", stage=SankeyStageColumn.STAGE_3_P2P_ESCROW_AND_DOMESTIC_FIU_ONRAMPS, label="Mule Layer 2"),
-        SankeyNode(node_id="Binance P2P Escrow", stage=SankeyStageColumn.STAGE_4_SELF_CUSTODY_AND_CEX_WALLETS, label="Binance P2P"),
-        SankeyNode(node_id="Tron TRC-20 Escrow", stage=SankeyStageColumn.STAGE_5_OFFSHORE_BOSS_AND_PRIVACY_SWAPS, label="Tron TRC20"),
-    ]
-    sankey_flows = [
-        SankeyFlowRibbon(source_node_id="Victim Source", target_node_id="Mule Layer 1", amount_inr=250000.0),
-        SankeyFlowRibbon(source_node_id="Mule Layer 1", target_node_id="Mule Layer 2", amount_inr=235000.0),
-        SankeyFlowRibbon(source_node_id="Mule Layer 2", target_node_id="Binance P2P Escrow", amount_inr=220000.0),
-        SankeyFlowRibbon(source_node_id="Binance P2P Escrow", target_node_id="Tron TRC-20 Escrow", amount_inr=220000.0),
-    ]
     canvas = SankeyLaunderingCanvas()
     layout_res = canvas.compute_layout(sankey_nodes, sankey_flows)
+    _case_state["_last_sankey_layout"] = layout_res
 
     serialized_stages = {}
     for st, snodes in layout_res.stages.items():
@@ -1285,6 +1460,8 @@ def get_graph_mule_network():
 
     return {
         "success": True,
+        "empty": not nodes,
+        "message": "" if nodes else "No successful, directed transactions in this case to graph.",
         "nodes": nodes,
         "edges": edges,
         "mule_alerts": _case_state.get("mule_alerts", []),
@@ -1299,9 +1476,12 @@ def get_graph_mule_network():
 
 @app.get("/api/graph/sankey-svg")
 def get_graph_sankey_svg():
-    """Returns standalone 4-Stage / 5-Stage SVG vector money trail markup."""
-    renderer = SankeyCanvasRenderer()
-    svg_markup = renderer.render_svg()
+    """Returns an SVG money trail built from the loaded case's transactions (empty-state SVG if none)."""
+    get_graph_mule_network()  # refreshes the layout from the case store
+    layout = _case_state.get("_last_sankey_layout")
+    svg_markup = render_layout_svg(layout) if layout is not None else render_layout_svg(
+        SankeyLaunderingCanvas().compute_layout([], [])
+    )
     return Response(content=svg_markup, media_type="image/svg+xml")
 
 
@@ -1310,14 +1490,7 @@ def inspect_sqlite_db(req: SqliteInspectRequest):
     """Inspects any SQLite database from the case or disk, returns tables, schema, rows, and KV pairs."""
     try:
         from parsers.deep_sqlite import dump_sqlite_tables, extract_kv_pairs
-        target_path = req.db_path
-        if not target_path or not os.path.exists(target_path):
-            ws = _case_state.get("workspace_dir") or "."
-            cand = os.path.join(ws, target_path or "")
-            if os.path.exists(cand):
-                target_path = cand
-            else:
-                return {"success": False, "message": "Database file not found", "tables": [], "rows": []}
+        target_path = _resolve_case_file(req.db_path, for_sqlite=True)
 
         table_dfs = dump_sqlite_tables(target_path, max_rows_per_table=req.limit)
         tables_meta = []
@@ -1363,6 +1536,7 @@ def get_inspector_hex(
 
     if _active_store is None:
         raise HTTPException(status_code=412, detail="Precondition Failed: No forensic case is currently loaded.")
+    clean_path = _resolve_case_file(clean_path)
 
     try:
         hex_data = _active_store.read_provenance_hex_window(
@@ -1370,6 +1544,8 @@ def get_inspector_hex(
             byte_offset=clean_offset,
             window_size=clean_window,
         )
+        if hex_data.get("error"):
+            raise HTTPException(status_code=404, detail=hex_data["error"])
         raw_hex = hex_data.get("raw_hex", "")
         raw_bytes = bytes.fromhex(raw_hex) if raw_hex else b""
         chunk_sha256 = hashlib.sha256(raw_bytes).hexdigest()
@@ -1385,25 +1561,54 @@ def get_inspector_hex(
             "hex_lines": hex_data.get("hex_lines", []),
             "raw_hex": raw_hex,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/report/sec63-bsa")
-def generate_sec63_bsa_certificate():
+def _build_sec63_response(officer: Optional[Dict[str, Any]] = None):
+    officer = officer or {}
     """
     Generates statutory Certificate under Section 63(4)(c)
     Bharatiya Sakshya Adhiniyam, 2023 (BSA).
     Returns clean printable court-admissible HTML.
     """
-    case_id = _case_state.get("case_id") or "CASE-UNASSIGNED"
-    case_name = _case_state.get("case_name") or "Forensic Evidence Dump"
+    if not _case_state.get("loaded"):
+        raise HTTPException(
+            status_code=412,
+            detail="Precondition Failed: load a case before generating a certificate.",
+        )
+    e = html_lib.escape  # all evidence-derived strings are escaped before entering HTML
+    case_id = e(str(officer.get("case_id") or _case_state.get("case_id") or "Not recorded"))
+    case_name = e(str(officer.get("case_name") or _case_state.get("case_name") or "Not recorded"))
     hashes = _case_state.get("hashes", {})
-    sha256_hash = hashes.get("sha256", "N/A")
-    md5_hash = hashes.get("md5", "N/A")
-    size_bytes = hashes.get("fileSizeBytes", 0)
+    sha256_hash = e(str(hashes.get("sha256", "Not recorded")))
+    md5_hash = e(str(hashes.get("md5", "Not recorded")))
+    post_sha256 = hashes.get("postIngestionSha256")
+    post_md5 = hashes.get("postIngestionMd5")
+    size_bytes = int(hashes.get("fileSizeBytes", 0) or 0)
     dev_meta = _case_state.get("device_metadata") or {}
-    counts = _active_store.get_pa_project_tree_counts() if _case_state["loaded"] else {}
+    counts = _active_store.get_pa_project_tree_counts()
+    processing_log = _case_state.get("processing_log") or []
+    failed_files = [x for x in processing_log if x.get("status") == "FAILED"]
+
+    if post_sha256 is None:
+        integrity_line = "NOT RECORDED - no post-ingestion hash exists for this case."
+        integrity_class = "warn"
+    elif hashes.get("integrityMatch"):
+        integrity_line = "MATCH - the evidence hashed identically before and after processing."
+        integrity_class = "ok"
+    else:
+        integrity_line = "MISMATCH - the evidence hash CHANGED during processing. Do not rely on this output."
+        integrity_class = "bad"
+
+    def _off(key: str) -> str:
+        val = str(officer.get(key) or "").strip()
+        return e(val) if val else "<em>Not provided</em>"
+
+    def _dev(key: str) -> str:
+        return e(str(dev_meta.get(key, "Not recorded")))
 
     total_chats = counts.get("chats_all", {}).get("total", 0)
     total_upi = counts.get("upi_all", {}).get("total", 0)
@@ -1471,6 +1676,9 @@ def generate_sec63_bsa_certificate():
         text-align: justify;
         font-size: 11pt;
     }}
+    .ok {{ color: #065f46; }}
+    .warn {{ color: #92400e; }}
+    .bad {{ color: #991b1b; }}
     .signatures {{
         margin-top: 50px;
         display: flex;
@@ -1499,19 +1707,32 @@ def generate_sec63_bsa_certificate():
     <tr><th colspan="2">1. PARTICULARS OF ELECTRONIC EVIDENCE RECORD</th></tr>
     <tr><td width="35%">Case Reference ID:</td><td><strong>{case_id}</strong></td></tr>
     <tr><td>Case Name / Title:</td><td>{case_name}</td></tr>
-    <tr><td>Source Evidence File / Path:</td><td class="mono">{dev_meta.get("evidenceSourcePath", "N/A")}</td></tr>
+    <tr><td>Source Evidence File / Path:</td><td class="mono">{_dev("evidenceSourcePath")}</td></tr>
     <tr><td>Evidence File Size:</td><td>{size_bytes:,} Bytes ({size_bytes / (1024*1024):.2f} MB)</td></tr>
     <tr><td>Pre-Ingestion SHA-256 Hash:</td><td class="mono"><strong>{sha256_hash}</strong></td></tr>
     <tr><td>Pre-Ingestion MD5 Hash:</td><td class="mono">{md5_hash}</td></tr>
-    <tr><td>Target Hardware Model:</td><td>{dev_meta.get("model", "N/A")} ({dev_meta.get("manufacturer", "N/A")})</td></tr>
-    <tr><td>Android OS / Build:</td><td>{dev_meta.get("androidVersion", "N/A")} / {dev_meta.get("buildNumber", "N/A")}</td></tr>
-    <tr><td>Device Serial / IMEI:</td><td>{dev_meta.get("serialNumber", "N/A")} / {dev_meta.get("imei1", "N/A")}</td></tr>
+    <tr><td>Post-Ingestion SHA-256 Hash:</td><td class="mono">{e(str(post_sha256)) if post_sha256 else "Not recorded"}</td></tr>
+    <tr><td>Post-Ingestion MD5 Hash:</td><td class="mono">{e(str(post_md5)) if post_md5 else "Not recorded"}</td></tr>
+    <tr><td>Hash Comparison:</td><td class="{integrity_class}"><strong>{integrity_line}</strong></td></tr>
+    <tr><td>Target Hardware Model:</td><td>{_dev("model")} ({_dev("manufacturer")})</td></tr>
+    <tr><td>OS / Build:</td><td>{_dev("androidVersion")} / {_dev("buildNumber")}</td></tr>
+    <tr><td>Device Serial / IMEI:</td><td>{_dev("serialNumber")} / {_dev("imei1")}</td></tr>
+</table>
+
+<table>
+    <tr><th colspan="2">1A. OFFICER AND CASE PARTICULARS (as entered by the examiner)</th></tr>
+    <tr><td width="35%">FIR Number:</td><td>{_off("fir_number")}</td></tr>
+    <tr><td>Police Station:</td><td>{_off("police_station")}</td></tr>
+    <tr><td>Court:</td><td>{_off("court_name")}</td></tr>
+    <tr><td>Examiner:</td><td>{_off("examiner_name")}, {_off("designation")}</td></tr>
+    <tr><td>Laboratory:</td><td>{_off("fsl_lab")}</td></tr>
+    <tr><td>Investigating Officer / Custodian:</td><td>{_off("io_name")}</td></tr>
 </table>
 
 <table>
     <tr><th colspan="4">2. PARSED DIGITAL ARTIFACT SUMMARY</th></tr>
     <tr>
-        <th>Category</th><th>Total Active</th><th>Recovered (WAL / Carved)</th><th>Total Verified</th>
+        <th>Category</th><th>Active</th><th>Recovered (WAL / Carved)</th><th>Total Records</th>
     </tr>
     <tr>
         <td>UPI & Banking Transactions</td>
@@ -1540,11 +1761,12 @@ def generate_sec63_bsa_certificate():
 </table>
 
 <div class="declaration">
-    <p><strong>3. STATUTORY DECLARATION:</strong></p>
-    <p>(a) The electronic record mentioned above was produced by a computer system / forensic workstation during the ordinary course of official investigation.</p>
-    <p>(b) Throughout the extraction and processing period, the evidence container remained in strict read-only mode (<span class="mono">O_RDONLY</span>) without alteration, deletion, or tampering.</p>
-    <p>(c) The cryptographic checksums (SHA-256 and MD5) were calculated using 8 MB chunked streaming verification before ingestion and verified against post-ingestion state, establishing bit-for-bit forensic integrity.</p>
-    <p>(d) The computer system used for extraction, decoding, and parsing operated properly at all material times, and there were no operational errors affecting the integrity of the electronic output.</p>
+    <p><strong>3. PROCESSING FACTS RECORDED BY THE SOFTWARE:</strong></p>
+    <p>(a) Evidence was not opened in place. Folders and single files were copied to a case working copy, and archives were extracted into the case workspace, before any database was opened.</p>
+    <p>(b) SHA-256 and MD5 were computed over the original evidence before processing and again after processing. Result: <strong>{integrity_line}</strong></p>
+    <p>(c) Files processed: {len([x for x in processing_log if x.get("stage") == "parse_database" and x.get("status") == "OK"])} database(s) parsed without error; <strong>{len(failed_files)}</strong> processing step(s) failed{"" if not failed_files else " (see list below)"}.</p>
+    <p>(d) The examiner must personally confirm, by signature, that the forensic workstation operated properly and that the details above are correct. The software does not make that declaration.</p>
+    {"".join(f'<p class="mono">FAILED: {e(str(x.get("stage")))} / {e(str(x.get("file")))} - {e(str(x.get("error")))}</p>' for x in failed_files[:50])}
 </div>
 
 <div class="signatures">
@@ -1567,7 +1789,7 @@ def generate_sec63_bsa_certificate():
         "X-Frame-Options": "DENY",
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
         "Pragma": "no-cache",
-        "Content-Disposition": f'inline; filename="sec63_certificate_{case_id}.html"',
+        "Content-Disposition": 'inline; filename="sec63_certificate.html"',
     }
     return Response(
         content=html,
@@ -1576,16 +1798,45 @@ def generate_sec63_bsa_certificate():
     )
 
 
+@app.get("/api/report/sec63-bsa")
+def generate_sec63_bsa_certificate():
+    """Section 63(4)(c) BSA certificate generated only from facts recorded for the loaded case."""
+    return _build_sec63_response()
+
+
 @app.post("/api/report/sec63-bsa")
 def generate_sec63_bsa_certificate_post(req: Sec63BsaRequest):
-    """Generates statutory Section 63(4)(c) BSA Certificate with custom officer parameters."""
-    if req.examiner_name:
-        _case_state["examiner_name"] = req.examiner_name
-    if req.case_id:
-        _case_state["case_id"] = req.case_id
-    if req.case_name:
-        _case_state["case_name"] = req.case_name
-    return generate_sec63_bsa_certificate()
+    """Same certificate, with the officer/court particulars supplied by the examiner (all escaped)."""
+    return _build_sec63_response(req.model_dump(exclude_none=True))
+
+
+_MEDIA_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".bmp", ".mp4", ".mov", ".3gp", ".avi", ".mkv")
+
+
+@app.get("/api/case/media-candidates")
+def get_media_candidates(limit: int = Query(500, ge=1, le=5000)):
+    """Media files of the loaded case that exist on disk and can be packaged (empty list if none)."""
+    if not _case_state.get("loaded"):
+        return {"success": True, "items": [], "message": "No case loaded."}
+    conn = _active_store._get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT vfs_path, file_name, file_size, local_disk_path FROM vfs_files "
+            "WHERE is_materialized = 1 AND local_disk_path <> '' ORDER BY vfs_path LIMIT ?", (limit * 4,)
+        ).fetchall()
+    finally:
+        conn.close()
+    items = [
+        {
+            "path": r["local_disk_path"],
+            "vfs_path": r["vfs_path"],
+            "file_name": r["file_name"],
+            "file_size": r["file_size"],
+        }
+        for r in rows
+        if str(r["file_name"]).lower().endswith(_MEDIA_EXTS) and os.path.isfile(r["local_disk_path"])
+    ][:limit]
+    return {"success": True, "items": items}
 
 
 @app.post("/api/report/sec230-bnss")
@@ -1600,28 +1851,36 @@ def generate_sec230_bnss_report(req: Sec230BnssRequest):
     out_dir = req.output_dir or os.path.join(DEFAULT_WORKSPACE_ROOT, case_id, "sec230_bnss_bundle")
     os.makedirs(out_dir, exist_ok=True)
 
+    if not req.items:
+        raise HTTPException(
+            status_code=422,
+            detail="No media items supplied. Select the case media files to package; "
+                   "nothing is generated from built-in samples.",
+        )
+
     packager = ExhibitAndDefensePackager()
 
-    sample_items = [
-        SensitiveMediaItem(
-            canonical_path="/storage/emulated/0/WhatsApp/Media/WhatsApp Images/payment_receipt_01.jpg",
-            file_name="payment_receipt_01.jpg",
-            sha256_hex="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-            md5_hex="d41d8cd98f00b204e9800998ecf8427e",
-            raw_bytes=b"SAFE_PAYMENT_RECEIPT_IMAGE_PAYLOAD_EVIDENCE",
-            redaction_tag=RedactionTag.UNRELIED_PRIVATE_DATA,
-            timestamps_utc="2026-11-08 14:22:00 UTC",
-        ),
-        SensitiveMediaItem(
-            canonical_path="/storage/emulated/0/DCIM/Camera/withheld_sensitive_stream_02.mp4",
-            file_name="withheld_sensitive_stream_02.mp4",
-            sha256_hex="f1d2d2f924e986ac86fdf7b36c94bcdf32beec15defc6d2f707f2710a840bd40",
-            md5_hex="098f6bcd4621d373cade4e832627b4f6",
-            raw_bytes=b"SENSITIVE_POCSO_PROTECTED_STREAM_DO_NOT_DISCLOSE",
-            redaction_tag=RedactionTag.CSAM_POCSO,
-            timestamps_utc="2026-11-08 14:25:00 UTC",
-        ),
-    ]
+    valid_tags = {t.value: t for t in RedactionTag}
+    sample_items = []
+    for item in req.items:
+        if item.redaction_tag and item.redaction_tag not in valid_tags:
+            raise HTTPException(status_code=422, detail=f"Unknown redaction tag: {item.redaction_tag}")
+        real_path = _resolve_case_file(item.path)
+        with open(real_path, "rb") as fh:
+            raw = fh.read()
+        sample_items.append(
+            SensitiveMediaItem(
+                canonical_path=real_path,
+                file_name=os.path.basename(real_path),
+                sha256_hex=hashlib.sha256(raw).hexdigest(),
+                md5_hex=hashlib.md5(raw).hexdigest(),
+                raw_bytes=raw,
+                redaction_tag=valid_tags[item.redaction_tag] if item.redaction_tag else None,
+                timestamps_utc=datetime.fromtimestamp(os.path.getmtime(real_path), timezone.utc).strftime(
+                    "%Y-%m-%d %H:%M:%S UTC"
+                ) + " (file modification time)",
+            )
+        )
 
     result = packager.package_section_230_defense_bundle(
         case_id=case_id,
@@ -1641,6 +1900,42 @@ def generate_sec230_bnss_report(req: Sec230BnssRequest):
     }
 
 
+def _derive_ncrp_candidates(complainant_account: str = "") -> List[Dict[str, Any]]:
+    """Beneficiary accounts/VPAs of successful outgoing transactions in the loaded case."""
+    if not _case_state.get("loaded") or _active_store is None:
+        return []
+    conn = _active_store._get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT COALESCE(NULLIF(Account,''), NULLIF(VPA,''), Counterparty) AS acct, "
+            "VPA, Counterparty, SUM(Amount) AS vol FROM transactions "
+            "WHERE UPPER(COALESCE(Type,'')) = 'DEBIT' "
+            "AND UPPER(COALESCE(Status,'')) NOT GLOB '*FAIL*' AND UPPER(COALESCE(Status,'')) NOT GLOB '*PEND*' "
+            "AND UPPER(COALESCE(Status,'')) NOT GLOB '*UNKNOWN*' AND UPPER(COALESCE(Status,'')) NOT GLOB '*DELETED*' "
+            "GROUP BY acct HAVING acct IS NOT NULL AND acct <> '' ORDER BY vol DESC"
+        ).fetchall()
+    finally:
+        conn.close()
+    return [
+        {
+            "account_no": str(r["acct"]),
+            "ifsc": "",
+            "vpa": str(r["VPA"] or ""),
+            "is_complainant_victim": bool(complainant_account) and str(r["acct"]).strip() == complainant_account,
+            "volume_inr": float(r["vol"] or 0.0),
+            "counterparty_name": str(r["Counterparty"] or ""),
+        }
+        for r in rows
+    ]
+
+
+@app.get("/api/report/ncrp-candidates")
+def get_ncrp_candidates(complainant_account: str = Query("")):
+    """Candidate beneficiary accounts derived from the loaded case (empty list if none)."""
+    cands = _derive_ncrp_candidates(complainant_account.strip())
+    return {"success": True, "candidates": cands, "count": len(cands)}
+
+
 @app.post("/api/report/ncrp-freeze")
 @app.post("/api/report/1930-ncrp")
 def generate_ncrp_freeze_report(req: NcrpFreezeRequest):
@@ -1652,38 +1947,20 @@ def generate_ncrp_freeze_report(req: NcrpFreezeRequest):
     out_dir = req.output_dir or os.path.join(DEFAULT_WORKSPACE_ROOT, case_id, "ncrp_1930_exports")
     os.makedirs(out_dir, exist_ok=True)
 
-    candidates = req.candidates
+    complainant_account = str(req.complainant_account or "").strip()
+    acknowledgement_no = str(req.acknowledgement_no or "").strip()
+    if not complainant_account or not acknowledgement_no:
+        raise HTTPException(
+            status_code=422,
+            detail="Complainant account and NCRP acknowledgement number are required.",
+        )
+
+    candidates = req.candidates or _derive_ncrp_candidates(complainant_account)
     if not candidates:
-        candidates = [
-            {
-                "account_no": req.complainant_account or "COMPLAINANT_ACCOUNT_9999",
-                "ifsc": "HDFC0000001",
-                "vpa": "victim@okhdfcbank",
-                "is_complainant_victim": True,
-                "volume_inr": 250000.0,
-            },
-            {
-                "account_no": "987654321012",
-                "ifsc": "SBIN0001234",
-                "vpa": "mule1@oksbi",
-                "is_complainant_victim": False,
-                "volume_inr": 235000.0,
-            },
-            {
-                "account_no": "BESCOM_UTILITY_ESCROW",
-                "ifsc": "SBIN0000002",
-                "vpa": "bescom.billdesk@icici",
-                "is_complainant_victim": False,
-                "volume_inr": 1500.0,
-            },
-            {
-                "account_no": "112233445566",
-                "ifsc": "ICIC0005678",
-                "vpa": "mule2@icici",
-                "is_complainant_victim": False,
-                "volume_inr": 220000.0,
-            },
-        ]
+        raise HTTPException(
+            status_code=422,
+            detail="No candidate accounts: the case has no successful outgoing transactions to freeze against.",
+        )
 
     comp_acc = str(req.complainant_account or "").strip()
     for c in candidates:
@@ -1695,8 +1972,8 @@ def generate_ncrp_freeze_report(req: NcrpFreezeRequest):
 
     csv_text = center.generate_1930_ncrp_csv(
         evaluated_candidates=evaluated,
-        complainant_account=req.complainant_account or "COMPLAINANT_ACCOUNT_9999",
-        acknowledgement_no=req.acknowledgement_no or "NCRP-2026-DEFAULT",
+        complainant_account=complainant_account,
+        acknowledgement_no=acknowledgement_no,
     )
 
     csv_filename = "ncrp_1930_bank_freeze_packet.csv"
@@ -1734,9 +2011,15 @@ def generate_ncrp_freeze_report(req: NcrpFreezeRequest):
 
 
 @app.get("/api/report/ncrp-freeze")
-def get_ncrp_freeze_csv(case_id: Optional[str] = Query(None)):
-    """Returns the generated 14-column 1930 NCRP Bank Lien CSV for download."""
-    req = NcrpFreezeRequest(case_id=case_id)
+def get_ncrp_freeze_csv(
+    case_id: Optional[str] = Query(None),
+    complainant_account: str = Query(...),
+    acknowledgement_no: str = Query(...),
+):
+    """Returns the 14-column 1930 NCRP Bank Lien CSV derived from the loaded case's transactions."""
+    req = NcrpFreezeRequest(
+        case_id=case_id, complainant_account=complainant_account, acknowledgement_no=acknowledgement_no
+    )
     res = generate_ncrp_freeze_report(req)
     csv_content = res.get("csv_content", "")
     return Response(
