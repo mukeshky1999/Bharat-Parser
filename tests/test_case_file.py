@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from parsers import api_server, examination_report
-from parsers.case_file import CaseFile, list_cases, safe_case_dir_name
+from parsers.case_file import CaseFile, case_dir_name, list_cases, resolve_case_dir, safe_case_dir_name
 
 
 def _phone(root, name, rows, wallet_name="payments.db"):
@@ -173,7 +173,7 @@ def test_recent_cases_lists_saved_cases_newest_first(client, tmp_path):
     b = _phone(tmp_path, "phoneB", PHONE_B)
     client.post("/api/case/ingest", json={"evidence_path": str(a), "case_id": "OLD-1", "case_name": "old"})
     client.post("/api/case/ingest", json={"evidence_path": str(b), "case_id": "NEW-1", "case_name": "new"})
-    CaseFile(str(tmp_path / "cases" / "OLD-1")).set_info(last_opened_utc="2020-01-01 00:00:00")
+    CaseFile(str(tmp_path / "cases" / case_dir_name("OLD-1"))).set_info(last_opened_utc="2020-01-01 00:00:00")
     cases = client.get("/api/cases/recent").json()["cases"]
     assert [c["case_id"] for c in cases] == ["NEW-1", "OLD-1"]
     assert cases[0]["evidence_items"][0]["item_id"] == "EV-001"
@@ -181,7 +181,7 @@ def test_recent_cases_lists_saved_cases_newest_first(client, tmp_path):
     (tmp_path / "cases" / "stray").mkdir()
     assert len(client.get("/api/cases/recent").json()["cases"]) == 2
     # opening a case moves it to the top
-    client.post("/api/case/open", json={"workspace_dir": str(tmp_path / "cases" / "OLD-1"), "db_name": "bharat_case_store.db"})
+    client.post("/api/case/open", json={"workspace_dir": str(tmp_path / "cases" / case_dir_name("OLD-1")), "db_name": "bharat_case_store.db"})
     assert client.get("/api/cases/recent").json()["cases"][0]["case_id"] == "OLD-1"
 
 
@@ -248,3 +248,53 @@ def test_case_file_round_trips_unknowns_as_none(tmp_path):
     with pytest.raises(ValueError):
         cf.upsert_item("EV-001", bogus=1)
     assert list_cases(str(tmp_path / "missing")) == []
+
+
+# ---------------------------------------------------------------- review step 2: identity and location
+def test_case_ids_that_sanitise_alike_get_separate_folders(client, tmp_path):
+    a = _phone(tmp_path, "phoneA", PHONE_A)
+    b = _phone(tmp_path, "phoneB", PHONE_B)
+    ra = client.post("/api/case/ingest", json={"evidence_path": str(a), "case_id": "FIR 12/2026"}).json()
+    rb = client.post("/api/case/ingest", json={"evidence_path": str(b), "case_id": "FIR_12_2026"}).json()
+    assert ra["workspace_dir"] != rb["workspace_dir"]
+    ids = sorted(c["case_id"] for c in client.get("/api/cases/recent").json()["cases"])
+    assert ids == ["FIR 12/2026", "FIR_12_2026"]
+
+
+def test_old_layout_folder_is_found_only_for_its_own_id(tmp_path):
+    root = tmp_path / "cases"
+    old = root / safe_case_dir_name("FIR 12/2026")
+    CaseFile(str(old)).set_info(case_id="FIR 12/2026")
+    assert resolve_case_dir(str(root), "FIR 12/2026") == str(old)
+    assert resolve_case_dir(str(root), "FIR_12_2026") == str(root / case_dir_name("FIR_12_2026"))
+
+
+def test_ingest_refuses_a_folder_that_belongs_to_another_case(client, tmp_path):
+    a = _phone(tmp_path, "phoneA", PHONE_A)
+    forged = tmp_path / "cases" / case_dir_name("MINE")
+    CaseFile(str(forged)).set_info(case_id="SOMEONE-ELSE")
+    r = client.post("/api/case/ingest", json={"evidence_path": str(a), "case_id": "MINE"})
+    assert r.status_code == 409
+
+
+def test_open_refuses_folders_outside_the_cases_folder(client, tmp_path):
+    ev = tmp_path / "evidence"
+    ev.mkdir()
+    db = ev / "bharat_case_store.db"
+    import sqlite3
+    sqlite3.connect(str(db)).close()
+    before = db.read_bytes()
+    r = client.post("/api/case/open", json={"workspace_dir": str(ev), "db_name": "bharat_case_store.db"})
+    assert r.status_code == 403
+    assert db.read_bytes() == before
+    r2 = client.post("/api/case/open", json={"workspace_dir": str(tmp_path / "cases"), "db_name": "msgstore.db"})
+    assert r2.status_code in (400, 403)
+
+
+def test_workspace_root_follows_env_and_frozen_build(monkeypatch, tmp_path):
+    monkeypatch.setenv("BHARAT_WORKSPACE_ROOT", str(tmp_path / "x"))
+    assert api_server._default_workspace_root() == str(tmp_path / "x")
+    monkeypatch.delenv("BHARAT_WORKSPACE_ROOT")
+    monkeypatch.setattr(api_server.sys, "frozen", True, raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "lad"))
+    assert api_server._default_workspace_root() == str(tmp_path / "lad" / "BharatAnalyzer" / "cases")

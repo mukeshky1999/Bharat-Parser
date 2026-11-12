@@ -77,7 +77,7 @@ from parsers.plugin_loader import PluginRegistry
 from parsers import examination_report, review_package
 from parsers import encrypted_db
 from parsers.keychain_decryptor import extract_app_keys_and_decrypt
-from parsers.case_file import CaseFile, FILE_NAME as CASE_FILE_NAME, list_cases, safe_case_dir_name
+from parsers.case_file import CaseFile, FILE_NAME as CASE_FILE_NAME, case_dir_name, list_cases, resolve_case_dir, safe_case_dir_name
 from src.audit.ledger import AuditLedger, AuditTamperError
 from parsers.ui_fts5_paginator import CaseUIPaginatorStore
 from tools.forensic_benchmark_recorder import ForensicBenchmarkRecorder
@@ -153,9 +153,19 @@ app.add_middleware(
     allowed_hosts=["127.0.0.1", "localhost", "testserver"],
 )
 
-DEFAULT_WORKSPACE_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "scratch", "active_case")
-)
+def _default_workspace_root() -> str:
+    """Where cases live. BHARAT_WORKSPACE_ROOT wins; an installed (frozen) build uses the user's own application data,
+    because the install folder is read-only for a normal user and is deleted when a portable build exits."""
+    env = os.environ.get("BHARAT_WORKSPACE_ROOT", "").strip()
+    if env:
+        return os.path.abspath(env)
+    if getattr(sys, "frozen", False):
+        base = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local")
+        return os.path.abspath(os.path.join(base, "BharatAnalyzer", "cases"))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scratch", "active_case"))
+
+
+DEFAULT_WORKSPACE_ROOT = _default_workspace_root()
 os.makedirs(DEFAULT_WORKSPACE_ROOT, exist_ok=True)
 
 # Active Case Store instance
@@ -198,8 +208,12 @@ def _get_audit():
     cid = str(_case_state.get("case_id") or "").strip()
     if not cid:
         return None, "No case is loaded."
-    safe = re.sub(r"[^A-Za-z0-9._-]", "_", cid)[:80]
-    path = os.path.join(os.path.dirname(os.path.abspath(_active_store.db_path)), f"audit_{safe}.jsonl")
+    folder = os.path.dirname(os.path.abspath(_active_store.db_path))
+    old_safe = re.sub(r"[^A-Za-z0-9._-]", "_", cid)[:80]
+    path = os.path.join(folder, f"audit_{case_dir_name(cid)}.jsonl")
+    old_path = os.path.join(folder, f"audit_{old_safe}.jsonl")
+    if not os.path.exists(path) and os.path.exists(old_path):
+        path = old_path  # a log started before ids were hashed keeps its name
     led = _audit_cache.get(path)
     if led is None:
         try:
@@ -589,7 +603,8 @@ def _run_native_folder_dialog() -> str:
 
 def _is_within(path: str, root: str) -> bool:
     try:
-        return os.path.commonpath([os.path.abspath(path), os.path.abspath(root)]) == os.path.abspath(root)
+        a, r = os.path.realpath(path), os.path.realpath(root)
+        return os.path.commonpath([a, r]) == r
     except ValueError:  # different drives
         return False
 
@@ -796,9 +811,12 @@ def _execute_ingestion_pipeline(
         raise HTTPException(status_code=404, detail=f"Evidence path not found: {abs_evidence}")
 
     mode = "add" if mode == "add" else "replace"
-    workspace_dir = os.path.abspath(os.path.join(DEFAULT_WORKSPACE_ROOT, safe_case_dir_name(case_id)))
+    workspace_dir = os.path.abspath(resolve_case_dir(DEFAULT_WORKSPACE_ROOT, case_id))
     os.makedirs(workspace_dir, exist_ok=True)
     cfile = CaseFile(workspace_dir)
+    recorded_id = cfile.info().get("case_id")
+    if recorded_id and recorded_id != case_id:
+        raise HTTPException(status_code=409, detail=f"This folder belongs to case {recorded_id}, not {case_id}. Nothing was changed.")
     if mode == "replace":
         # The case starts again from this one item. Folders of earlier items (and the pre-5B.2 layout) go.
         item_id, reprocess = "EV-001", False
@@ -1686,7 +1704,7 @@ async def ingest_evidence_case(req: IngestCaseRequest):
     if mode == "add":
         if not req.case_id:
             raise HTTPException(status_code=400, detail="case_id is required to add evidence to an existing case.")
-        ws_existing = os.path.join(DEFAULT_WORKSPACE_ROOT, safe_case_dir_name(req.case_id))
+        ws_existing = resolve_case_dir(DEFAULT_WORKSPACE_ROOT, req.case_id)
         if not os.path.isfile(os.path.join(ws_existing, CASE_FILE_NAME)):
             raise HTTPException(status_code=404, detail=f"No case {req.case_id} to add evidence to.")
         existing_info = CaseFile(ws_existing).info()
@@ -2933,6 +2951,11 @@ async def open_case_workspace(req: CaseOpenRequest):
 
     # 1. Path canonicalization and directory validation
     ws = os.path.abspath(req.workspace_dir)
+    if not _is_within(ws, DEFAULT_WORKSPACE_ROOT) or os.path.normcase(ws) == os.path.normcase(os.path.abspath(DEFAULT_WORKSPACE_ROOT)):
+        raise HTTPException(
+            status_code=403,
+            detail="Only a case folder inside the cases folder can be opened. A folder of evidence is never opened as a case.",
+        )
     if not os.path.isdir(ws):
         raise HTTPException(
             status_code=404,
@@ -2941,10 +2964,10 @@ async def open_case_workspace(req: CaseOpenRequest):
 
     # 2. Strict db_name sanitization (prohibit path traversal)
     clean_db_name = os.path.basename(req.db_name or "bharat_case_store.db")
-    if not clean_db_name.endswith((".db", ".sqlite", ".sqlite3")):
+    if clean_db_name != "bharat_case_store.db":
         raise HTTPException(
             status_code=400,
-            detail="Invalid database file format. Must end with .db, .sqlite, or .sqlite3",
+            detail="Only the case store written by this tool (bharat_case_store.db) can be opened as a case.",
         )
     target_db_path = os.path.join(ws, clean_db_name)
     if not os.path.isfile(target_db_path):

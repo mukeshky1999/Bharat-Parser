@@ -10,6 +10,7 @@ recorded is stored as NULL and reported as "Not recorded" by the callers.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import sqlite3
@@ -36,6 +37,29 @@ def safe_case_dir_name(case_id: str) -> str:
     """A case id becomes a folder name. Nothing that could leave the cases folder survives."""
     clean = re.sub(r"[^A-Za-z0-9._-]", "_", str(case_id)).strip("._")
     return clean[:80] or "case"
+
+
+def case_dir_name(case_id: str) -> str:
+    """Folder name for a case: readable prefix plus a hash of the exact id, so "FIR 12/2026" and "FIR_12_2026" (or two
+    ids sharing their first 80 characters) never share a folder."""
+    digest = hashlib.sha256(str(case_id).encode("utf-8")).hexdigest()[:12]
+    clean = re.sub(r"[^A-Za-z0-9._-]", "_", str(case_id)).strip("._")[:60] or "case"
+    return f"{clean}-{digest}"
+
+
+def resolve_case_dir(root: str, case_id: str) -> str:
+    """The folder of a case. A folder made before ids were hashed is used only if its case file records this exact id."""
+    new = os.path.join(root, case_dir_name(case_id))
+    if os.path.isdir(new):
+        return new
+    old = os.path.join(root, safe_case_dir_name(case_id))
+    if os.path.isfile(os.path.join(old, FILE_NAME)):
+        try:
+            if (CaseFile(old).info().get("case_id") or "") == str(case_id):
+                return old
+        except sqlite3.Error:
+            pass
+    return new
 
 
 class CaseFile:
