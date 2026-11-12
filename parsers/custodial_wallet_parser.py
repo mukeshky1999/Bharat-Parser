@@ -315,7 +315,14 @@ def _safe_tables(conn: sqlite3.Connection) -> List[str]:
 def _safe_sample(conn: sqlite3.Connection, table: str, limit: int = 500) -> pd.DataFrame:
     try:
         safe_table = table.replace('"', '""')
-        return pd.read_sql_query(f'SELECT * FROM "{safe_table}" LIMIT {int(limit)}', conn)
+        df = pd.read_sql_query(f'SELECT * FROM "{safe_table}" LIMIT {int(limit)}', conn)
+        if len(df) >= int(limit):
+            total = _safe_rowcount(conn, table)
+            if total > len(df):
+                # Never truncate silently: the examiner must know rows were not read.
+                logging.getLogger("parsers.wallet").warning(
+                    "TRUNCATED: table %s has %d rows, only the first %d were read", table, total, len(df))
+        return df
     except Exception as e:
         _log_forensic_error(f"wallet.sample.{table}", e)
         return pd.DataFrame()

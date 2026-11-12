@@ -978,14 +978,17 @@ def app_genie_classify_table(
             raw_body = str(r.get(body_col) or '') if body_col else ''
             ts_val = r.get(ts_col) if ts_col else None
             sender_val = str(r.get(sender_col) or '') if sender_col else ''
+            # Direction is only stated when the table has a from-me style column; otherwise it is unknown.
             is_out = False
+            direction_label = 'Unknown'
             if from_me_col:
                 dir_raw = r.get(from_me_col)
                 is_out = bool(dir_raw in (1, '1', True, 'true', 'OUTGOING', 'outgoing', 'out'))
+                direction_label = 'Outgoing' if is_out else 'Incoming'
 
             row = _empty_pa_row('Generic App Genie', db_path, table_name, row_id, f"RowID={row_id}")
             row['Message_Body'] = raw_body
-            row['Direction'] = 'Outgoing' if is_out else 'Incoming'
+            row['Direction'] = direction_label
             row['Sender_Identifier'] = sender_val or ('Owner' if is_out else 'Unknown')
             row['Thread_Title'] = sender_val or f"Chat {table_name}"
             raw_ts, utc_ts, ist_ts = format_timestamp_triplet(ts_val, epoch_hint='auto')
@@ -1012,10 +1015,14 @@ def app_genie_classify_table(
                 'Timestamp': utc_ts,
                 'Timestamp_IST': ist_ts,
                 'Peer_Number': peer,
-                'Direction': 'Outgoing' if (from_me_col and r.get(from_me_col) in (1, True, 'out')) else 'Incoming',
+                'Direction': ('Unknown' if not from_me_col
+                              else ('Outgoing' if r.get(from_me_col) in (1, '1', True, 'true', 'out') else 'Incoming')),
                 'Duration_Sec': dur,
-                'Call_Type': 'VoIP Call' if any(k in table_name.lower() for k in ('voip', 'app')) else 'Cellular Call',
-                'Call_Result': 'Connected Call' if dur > 0 else 'Missed Call',
+                'Call_Type': 'VoIP Call' if 'voip' in table_name.lower() else 'Unknown',
+                # Zero duration is not proof of a missed call (an outgoing call can ring out).
+                'Call_Result': ('Connected Call' if dur > 0 else
+                                ('Missed Call' if (from_me_col and r.get(from_me_col) not in (1, '1', True, 'true', 'out'))
+                                 else 'Zero duration')),
                 'Forensic_Provenance': f"{bname} :: {table_name} :: Row={idx} :: AppGenie",
             })
         extracted_df = pd.DataFrame(rows)
@@ -1029,8 +1036,15 @@ def app_genie_classify_table(
         }
         rows = []
         for idx, r in df.iterrows():
-            lat = float(r.get(lat_col) or 0.0) if lat_col else 0.0
-            lon = float(r.get(lon_col) or 0.0) if lon_col else 0.0
+            try:
+                lat = float(r.get(lat_col)) if lat_col else None
+                lon = float(r.get(lon_col)) if lon_col else None
+            except (TypeError, ValueError):
+                lat = lon = None
+            # A missing coordinate must not become a (0, 0) pin in the Gulf of Guinea.
+            if lat is None or lon is None or lat != lat or lon != lon or (lat == 0.0 and lon == 0.0) \
+                    or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                continue
             ts_val = r.get(ts_col) if ts_col else None
             raw_ts, utc_ts, ist_ts = format_timestamp_triplet(ts_val, epoch_hint='auto')
             rows.append({
@@ -1098,16 +1112,21 @@ def app_genie_classify_table(
         }
         rows = []
         for idx, r in df.iterrows():
-            amt = float(r.get(amount_col) or 0.0) if amount_col else 0.0
+            try:
+                amt = float(r.get(amount_col)) if amount_col else None
+            except (TypeError, ValueError):
+                amt = None
+            if amt is None or amt != amt or amt <= 0:
+                continue  # no amount, no transaction
             vpa = str(r.get(vpa_col) or r.get(sender_col) or '')
             ts_val = r.get(ts_col) if ts_col else None
             raw_ts, utc_ts, ist_ts = format_timestamp_triplet(ts_val, epoch_hint='auto')
             rows.append({
                 'Date': ist_ts or utc_ts,
-                'Transaction_ID': str(r.get('txid') or r.get('utr') or f"GEN_{idx}"),
+                'Transaction_ID': str(r.get('txid') or r.get('utr') or 'N/A'),
                 'Amount': amt,
-                'Counterparty': vpa or 'AppGenie Counterparty',
-                'Status': 'COMPLETED',
+                'Counterparty': vpa or 'Unknown',
+                'Status': str(r.get('status') or 'UNKNOWN').upper(),
                 'Type': 'TRANSFER',
             })
         extracted_df = pd.DataFrame(rows, columns=STANDARD_TX_COLUMNS)
@@ -1195,11 +1214,11 @@ def _classify_and_record(
                 text_found = s_clean
 
     # 1. TRANSACTION
-    if vpa_found and (amt_found is not None or ts_found is not None):
+    if vpa_found and amt_found is not None:
         tx_list.append({
             'Date': str(ts_found or ''),
             'Transaction_ID': f"CARVED_PG{page_num}_{hex_off}",
-            'Amount': amt_found or 0.0,
+            'Amount': amt_found,
             'Counterparty': vpa_found,
             'Status': 'CARVED',
             'Type': 'TRANSFER',
@@ -1217,7 +1236,7 @@ def _classify_and_record(
             'Timestamp_IST': ist_ts,
             'Peer': phone_found,
             'Duration_Sec': duration_found,
-            'Direction': 'Incoming',
+            'Direction': 'Unknown',
             'Forensic_Provenance': prov_str,
         })
         return True

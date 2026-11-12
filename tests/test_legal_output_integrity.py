@@ -384,3 +384,29 @@ def test_truncated_column_does_not_shift_following_values():
     payload = bytes([4, 7, 13 + 6, 13 + 4]) + b"\x40\x00\x00"
     vals = decode_record_payload(payload)
     assert len(vals) == 3 and vals[0] is None
+
+
+# ---------------- generic ("AppGenie") classifier must not invent facts ----------------
+def test_generic_classifier_does_not_invent_direction_status_counterparty_or_coordinates():
+    import pandas as pd
+
+    from parsers.commercial_parity_engine import app_genie_classify_table
+
+    chat = pd.DataFrame({"msg_id": [1, 2], "message_text": ["hello there", "ok fine"],
+                         "sender": ["a", "b"], "msg_time": [1700000000, 1700000100]})
+    res = app_genie_classify_table(chat, "messages", "x.db")
+    assert set(res["extracted_records"]["Direction"]) == {"Unknown"}
+
+    geo = pd.DataFrame({"point_id": [1, 2], "geo_lat": [12.97, None], "geo_lon": [77.59, None],
+                        "timestamp": [1700000000, 1700002000]})
+    out = app_genie_classify_table(geo, "waypoints", "g.db")["extracted_records"]
+    assert len(out) == 1 and out.iloc[0]["Latitude"] == 12.97  # the empty row is not a (0, 0) pin
+
+    pay = pd.DataFrame({"txn_id": [1, 2], "amount": [250.0, None], "payee_vpa": ["a@ybl", "b@ybl"],
+                        "txn_time": [1700000000, 1700000100]})
+    res = app_genie_classify_table(pay, "payments", "p.db")
+    if res["extracted_records"] is not None and len(res["extracted_records"]):
+        recs = res["extracted_records"]
+        assert (recs["Amount"] > 0).all()
+        assert not recs["Status"].eq("COMPLETED").any()
+        assert not recs["Transaction_ID"].astype(str).str.startswith("GEN_").any()

@@ -106,7 +106,12 @@ class WalletProvenance:
         out["Evidence_Weight"] = out["Recovery_Method"].map(
             lambda m: _RECOVERY_WEIGHT.get(str(m), "LOW")
         )
-        out["Chain_Of_Custody_ID"] = [str(uuid.uuid4()).upper() for _ in range(len(out))]
+        # A random UUID per run is not a custody chain and changes on every export. This is a stable
+        # record identifier derived from the case, the source file hash and the row itself.
+        out["Chain_Of_Custody_ID"] = [
+            str(uuid.uuid5(uuid.NAMESPACE_URL, f"{self.case_id}|{meta['sha256']}|{i}|{row_repr}")).upper()
+            for i, row_repr in enumerate(out.astype(str).agg("|".join, axis=1))
+        ]
         return out
 
     @staticmethod
