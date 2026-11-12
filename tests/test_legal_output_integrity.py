@@ -427,3 +427,14 @@ def test_ios_signal_rows_without_a_direction_column_are_not_labelled_incoming(tm
     df = parse_signal_database(str(db))
     assert len(df) == 1
     assert df.iloc[0]["Direction"] == "UNKNOWN" and df.iloc[0]["Status"] == "UNKNOWN"
+
+
+def test_bank_narration_direction_uses_whole_token_cues():
+    from src.banking.narration_parser import direction_from_cues
+
+    assert direction_from_cues("NEFT-HDFC000123-CRED CLUB-PAYMENT") == "UNKNOWN"      # 'CRED' is not 'CR'
+    assert direction_from_cues("NEFT SCRIPT MICRO ACCOUNT") == "UNKNOWN"
+    assert direction_from_cues("NEFT CR-SBIN0001-RAVI") == "CREDIT"
+    assert direction_from_cues("BY TRANSFER NEFT 123") == "CREDIT"
+    assert direction_from_cues("NEFT DR RAVI") == "DEBIT"
+    assert direction_from_cues("NEFT CR DR AMBIGUOUS") == "UNKNOWN"

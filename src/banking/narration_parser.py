@@ -11,6 +11,25 @@ from typing import Optional
 from src.banking.models import ParsedNarration, PaymentRail, TxDirection
 
 
+_CREDIT_CUE = re.compile(r"(?<![A-Z0-9])(CR|CREDIT)(?![A-Z0-9])")
+_DEBIT_CUE = re.compile(r"(?<![A-Z0-9])(DR|DEBIT)(?![A-Z0-9])")
+
+
+def direction_from_cues(narration: str) -> str:
+    """Direction from whole-token cues only. 'CRED' (the app), 'SCRIPT' or 'MICRO' are not credits.
+
+    Returns UNKNOWN when there is no cue or the cues conflict; it never defaults to DEBIT.
+    """
+    t = narration.upper().strip()
+    credit = bool(_CREDIT_CUE.search(t)) or t.startswith("BY ")
+    debit = bool(_DEBIT_CUE.search(t)) or t.startswith("TO ")
+    if credit and not debit:
+        return TxDirection.CREDIT.value
+    if debit and not credit:
+        return TxDirection.DEBIT.value
+    return TxDirection.UNKNOWN.value
+
+
 class CoreBankingNarrationParser:
     """Parses Indian Core Banking Solution (CBS) transaction narration strings."""
 
@@ -113,7 +132,7 @@ class CoreBankingNarrationParser:
         if "NEFT" in narration.upper():
             utr_match = self.UTR_12_REGEX.search(narration)
             utr = utr_match.group(1) if utr_match else None
-            direction = TxDirection.CREDIT.value if "CR" in narration.upper() or "BY " in narration.upper() else TxDirection.DEBIT.value
+            direction = direction_from_cues(narration)
             return ParsedNarration(
                 utr_or_rrn=utr,
                 direction=direction,
@@ -128,7 +147,7 @@ class CoreBankingNarrationParser:
         if "RTGS" in narration.upper():
             utr_match = self.UTR_12_REGEX.search(narration)
             utr = utr_match.group(1) if utr_match else None
-            direction = TxDirection.CREDIT.value if "CR" in narration.upper() or "BY " in narration.upper() else TxDirection.DEBIT.value
+            direction = direction_from_cues(narration)
             return ParsedNarration(
                 utr_or_rrn=utr,
                 direction=direction,
@@ -145,7 +164,7 @@ class CoreBankingNarrationParser:
         utr = utr_match.group(1) if utr_match else None
         vpa_match = self.VPA_REGEX.search(narration)
         vpa = vpa_match.group(1) if vpa_match else None
-        direction = TxDirection.CREDIT.value if "CR" in narration.upper() or "CREDIT" in narration.upper() else TxDirection.DEBIT.value
+        direction = direction_from_cues(narration)
         rail = PaymentRail.UPI.value if vpa or "UPI" in narration.upper() else PaymentRail.INTERNAL_TRANSFER.value
 
         return ParsedNarration(

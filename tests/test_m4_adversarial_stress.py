@@ -327,11 +327,12 @@ class TestM4AdversarialStress(unittest.TestCase):
         )
         res = server.generate_ncrp_freeze_report(req)
 
-        # Empirical observation: victim entry was NOT locked because is_complainant_victim was omitted
+        # The complainant's own account must be locked even though the caller omitted the flag.
         victim_entry = next(s for s in res["safeguards"] if s["account_no"] == complainant_acc)
-        # Note: If this is False, it demonstrates the vulnerability empirically
-        is_safeguard_locked = victim_entry["is_freeze_locked"]
-        self.assertIn(is_safeguard_locked, [True, False])
+        self.assertTrue(victim_entry["is_freeze_locked"])
+        self.assertTrue(victim_entry["freeze_checkbox_disabled"])
+        self.assertNotIn(complainant_acc, [r for r in res["csv_content"].splitlines()[1].split(",")][2:3])
+        self.assertEqual(res["total_freeze_targets"], 1)
 
     def test_ncrp_freeze_utility_keyword_exclusion(self):
         """Utility billers (irctc, bescom, billdesk) must be excluded from debit liens."""

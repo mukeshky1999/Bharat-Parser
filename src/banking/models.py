@@ -64,6 +64,7 @@ class TxDirection(str, Enum):
     DEBIT = "DEBIT"
     CREDIT = "CREDIT"
     CORPORATE_BATCH_PENDING = "CORPORATE_BATCH_PENDING"
+    UNKNOWN = "UNKNOWN"  # no reliable cue in the narration
 
 
 @unique
