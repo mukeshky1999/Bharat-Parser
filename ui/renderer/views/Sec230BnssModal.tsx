@@ -22,7 +22,8 @@ interface Sec230BnssModalProps {
 type MediaItem = { path: string; vfs_path: string; file_name: string; file_size: number };
 
 const TAGS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'Disclosable' },
+  { value: '', label: 'Choose a decision…' },
+  { value: 'DISCLOSABLE', label: 'Release to defence' },
   { value: 'CSAM_POCSO', label: 'Withhold — POCSO / CSAM' },
   { value: 'NON_CONSENSUAL_INTIMATE_MEDIA', label: 'Withhold — non-consensual intimate' },
   { value: 'SEXUAL_ASSAULT_FOOTAGE', label: 'Withhold — sexual assault footage' },
@@ -82,6 +83,7 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
   if (!caseId.trim()) missing.push('case reference');
   if (anonymizeVictim && !victimName.trim()) missing.push('victim name to redact');
   if (chosen.length === 0) missing.push('at least one media file');
+  if (chosen.some((m) => !tags[m.path])) missing.push('a decision for every selected file');
   const canGenerate = missing.length === 0 && !generating;
 
   if (!isOpen) return null;
@@ -109,7 +111,7 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
         anonymizeVictim,
         victimName.trim() || undefined,
         undefined,
-        chosen.map((m) => ({ path: m.path, redaction_tag: tags[m.path] || null }))
+        chosen.map((m) => ({ path: m.path, redaction_tag: tags[m.path] }))
       );
       setResult(res);
       if (res.success) {

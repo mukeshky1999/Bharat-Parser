@@ -31,6 +31,10 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
   const [acknowledgementNo, setAcknowledgementNo] = useState('');
   const [complainantAccount, setComplainantAccount] = useState('');
   const [outputDir, setOutputDir] = useState('');
+  const [stateUt, setStateUt] = useState('');
+  const [policeStation, setPoliceStation] = useState('');
+  const [officer, setOfficer] = useState('');
+  const [crimeCategory, setCrimeCategory] = useState('');
   const [candidates, setCandidates] = useState<NcrpCandidate[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
@@ -109,7 +113,14 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
         payload,
         outputDir || undefined,
         complainantAccount.trim(),
-        acknowledgementNo.trim()
+        acknowledgementNo.trim(),
+        undefined,
+        {
+          state_ut: stateUt.trim(),
+          police_station: policeStation.trim(),
+          investigating_officer: officer.trim(),
+          crime_category: crimeCategory.trim()
+        }
       );
       setResult(res);
       if (res.success) {
@@ -217,6 +228,29 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
                 placeholder="Account number or VPA the victim paid from"
                 className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white font-mono text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500"
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="ncrp-state" className="block text-slate-300 font-semibold mb-1">State / UT</label>
+              <input id="ncrp-state" type="text" value={stateUt} onChange={(e) => setStateUt(e.target.value)} placeholder="Left as NOT_PROVIDED if blank"
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500" />
+            </div>
+            <div>
+              <label htmlFor="ncrp-ps" className="block text-slate-300 font-semibold mb-1">Police station</label>
+              <input id="ncrp-ps" type="text" value={policeStation} onChange={(e) => setPoliceStation(e.target.value)} placeholder="Left as NOT_PROVIDED if blank"
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500" />
+            </div>
+            <div>
+              <label htmlFor="ncrp-io" className="block text-slate-300 font-semibold mb-1">Investigating officer</label>
+              <input id="ncrp-io" type="text" value={officer} onChange={(e) => setOfficer(e.target.value)} placeholder="Left as NOT_PROVIDED if blank"
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500" />
+            </div>
+            <div>
+              <label htmlFor="ncrp-cat" className="block text-slate-300 font-semibold mb-1">Crime category</label>
+              <input id="ncrp-cat" type="text" value={crimeCategory} onChange={(e) => setCrimeCategory(e.target.value)} placeholder="Left as NOT_PROVIDED if blank"
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500" />
             </div>
           </div>
 

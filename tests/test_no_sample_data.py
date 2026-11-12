@@ -41,8 +41,8 @@ def test_sec230_hashes_real_file_bytes(tmp_path, monkeypatch):
     f = tmp_path / "receipt.jpg"
     f.write_bytes(b"real bytes")
     res = server.generate_sec230_bnss_report(
-        Sec230BnssRequest(case_id="C", output_dir=str(tmp_path / "out"),
-                          items=[Sec230MediaInput(path=str(f))])
+        Sec230BnssRequest(case_id="C", output_dir=str(tmp_path / "out"), anonymize_victim_identity=False,
+                          items=[Sec230MediaInput(path=str(f), redaction_tag="DISCLOSABLE")])
     )
     assert res["success"]
     html = open(res["html_viewer_path"], encoding="utf-8").read()

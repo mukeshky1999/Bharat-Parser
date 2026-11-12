@@ -222,7 +222,7 @@ class ChatRedlineResponse(BaseModel):
 
 class Sec230MediaInput(BaseModel):
     path: str
-    redaction_tag: Optional[str] = None  # a RedactionTag value, or None for disclosable material
+    redaction_tag: Optional[str] = None  # required: a RedactionTag value (DISCLOSABLE to release)
 
 
 class Sec230BnssRequest(BaseModel):
@@ -238,6 +238,11 @@ class NcrpFreezeRequest(BaseModel):
     output_dir: Optional[str] = None
     complainant_account: Optional[str] = None
     acknowledgement_no: Optional[str] = None
+    complainant_vpa: Optional[str] = None
+    state_ut: Optional[str] = None
+    police_station: Optional[str] = None
+    investigating_officer: Optional[str] = None
+    crime_category: Optional[str] = None
     candidates: Optional[List[Dict[str, Any]]] = None
     transactions: Optional[List[Dict[str, Any]]] = None
 
@@ -1858,12 +1863,21 @@ def generate_sec230_bnss_report(req: Sec230BnssRequest):
                    "nothing is generated from built-in samples.",
         )
 
+    if req.anonymize_victim_identity and not (req.victim_name or "").strip():
+        raise HTTPException(status_code=422, detail="Victim anonymisation is on: enter the victim name to redact.")
+
     packager = ExhibitAndDefensePackager()
 
     valid_tags = {t.value: t for t in RedactionTag}
     sample_items = []
     for item in req.items:
-        if item.redaction_tag and item.redaction_tag not in valid_tags:
+        if not item.redaction_tag:
+            raise HTTPException(
+                status_code=422,
+                detail=f"No redaction decision for {os.path.basename(item.path)}: choose a tag for every item "
+                       "(DISCLOSABLE to release it).",
+            )
+        if item.redaction_tag not in valid_tags:
             raise HTTPException(status_code=422, detail=f"Unknown redaction tag: {item.redaction_tag}")
         real_path = _resolve_case_file(item.path)
         with open(real_path, "rb") as fh:
@@ -1875,20 +1889,23 @@ def generate_sec230_bnss_report(req: Sec230BnssRequest):
                 sha256_hex=hashlib.sha256(raw).hexdigest(),
                 md5_hex=hashlib.md5(raw).hexdigest(),
                 raw_bytes=raw,
-                redaction_tag=valid_tags[item.redaction_tag] if item.redaction_tag else None,
+                redaction_tag=valid_tags[item.redaction_tag],
                 timestamps_utc=datetime.fromtimestamp(os.path.getmtime(real_path), timezone.utc).strftime(
                     "%Y-%m-%d %H:%M:%S UTC"
                 ) + " (file modification time)",
             )
         )
 
-    result = packager.package_section_230_defense_bundle(
-        case_id=case_id,
-        items=sample_items,
-        output_dir=out_dir,
-        anonymize_victim_identity=req.anonymize_victim_identity,
-        victim_name=req.victim_name,
-    )
+    try:
+        result = packager.package_section_230_defense_bundle(
+            case_id=case_id,
+            items=sample_items,
+            output_dir=out_dir,
+            anonymize_victim_identity=req.anonymize_victim_identity,
+            victim_name=req.victim_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
     return {
         "success": True,
@@ -1962,9 +1979,12 @@ def generate_ncrp_freeze_report(req: NcrpFreezeRequest):
             detail="No candidate accounts: the case has no successful outgoing transactions to freeze against.",
         )
 
-    comp_acc = str(req.complainant_account or "").strip()
+    comp_acc = complainant_account.lower()
+    comp_vpa = str(req.complainant_vpa or "").strip().lower()
     for c in candidates:
-        if comp_acc and str(c.get("account_no", "")).strip() == comp_acc:
+        acc = str(c.get("account_no", "")).strip().lower()
+        vpa = str(c.get("vpa", "")).strip().lower()
+        if (comp_acc and acc == comp_acc) or (comp_vpa and (vpa == comp_vpa or acc == comp_vpa)):
             c["is_complainant_victim"] = True
 
     center = NodalFreezeDeconflictionCenter()
@@ -1974,6 +1994,10 @@ def generate_ncrp_freeze_report(req: NcrpFreezeRequest):
         evaluated_candidates=evaluated,
         complainant_account=complainant_account,
         acknowledgement_no=acknowledgement_no,
+        state_ut=req.state_ut or "",
+        police_station=req.police_station or "",
+        investigating_officer=req.investigating_officer or "",
+        crime_category=req.crime_category or "",
     )
 
     csv_filename = "ncrp_1930_bank_freeze_packet.csv"

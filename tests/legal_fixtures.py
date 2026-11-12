@@ -26,6 +26,6 @@ def sec230_items(workspace: str):
     with open(bad, "wb") as f:
         f.write(b"SENSITIVE_POCSO_PROTECTED_STREAM_DO_NOT_DISCLOSE")
     return [
-        Sec230MediaInput(path=ok, redaction_tag=None),
+        Sec230MediaInput(path=ok, redaction_tag="DISCLOSABLE"),
         Sec230MediaInput(path=bad, redaction_tag="CSAM_POCSO"),
     ]

@@ -3,10 +3,17 @@ Golden-Hour Nodal Freeze De-Confliction Center & 1930 NCRP CSV Generator (Sub-En
 Enforces 3-tier freeze safeguards: locking complainant/victim accounts and excluding utility billers.
 """
 
-from datetime import datetime, timezone
+import csv
+import io
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from src.unk_triage_and_bsa_studio.models import FreezeCandidateAccount
+
+
+LF = chr(10)
+FORMULA_PREFIXES = ("=", "+", "-", "@", chr(9), chr(13))
 
 
 class NodalFreezeDeconflictionCenter:
@@ -24,6 +31,33 @@ class NodalFreezeDeconflictionCenter:
         "jio_postpaid",
     ]
 
+    NOT_PROVIDED = "NOT_PROVIDED"
+
+    @staticmethod
+    def _tokens(text: str) -> list[str]:
+        return [t for t in re.split(r"[^a-z0-9]+", str(text).lower()) if t]
+
+    @classmethod
+    def is_utility_biller(cls, *identifiers: str) -> bool:
+        """True if a known biller name appears as whole word(s) in any identifier.
+
+        Whole-token matching: 'francesca@ybl' does NOT match 'cesc'; 'bescom.billdesk@icici' matches.
+        """
+        for ident in identifiers:
+            toks = cls._tokens(ident)
+            for kw in cls.KNOWN_UTILITY_KEYWORDS:
+                kt = cls._tokens(kw)
+                n = len(kt)
+                if n and any(toks[i:i + n] == kt for i in range(len(toks) - n + 1)):
+                    return True
+        return False
+
+    @staticmethod
+    def _cell(value: Any) -> str:
+        """Neutralise spreadsheet formula injection for text cells."""
+        text = str(value)
+        return "'" + text if text[:1] in FORMULA_PREFIXES else text
+
     def evaluate_freeze_candidates(
         self, candidates: list[dict[str, Any]]
     ) -> list[FreezeCandidateAccount]:
@@ -37,10 +71,7 @@ class NodalFreezeDeconflictionCenter:
             is_victim = bool(c.get("is_complainant_victim", False))
             volume = float(c.get("volume_inr", 0.0))
 
-            is_utility = any(
-                k in vpa.lower() or k in acc_no.lower()
-                for k in self.KNOWN_UTILITY_KEYWORDS
-            )
+            is_utility = self.is_utility_biller(vpa, acc_no)
 
             if is_victim:
                 evaluated.append(
@@ -91,54 +122,46 @@ class NodalFreezeDeconflictionCenter:
         self,
         evaluated_candidates: list[FreezeCandidateAccount],
         complainant_account: str,
-        acknowledgement_no: str = "NCRP-2026-DEFAULT",
+        acknowledgement_no: str,
+        state_ut: str = "",
+        police_station: str = "",
+        investigating_officer: str = "",
+        crime_category: str = "",
     ) -> str:
-        """Generates 14-column 1930 NCRP Bank Lien CSV excluding locked and utility accounts."""
+        """14-column NCRP bank-lien sheet for non-victim, non-biller candidates.
+
+        State, station, officer and crime category are written exactly as supplied; blank values
+        are written as NOT_PROVIDED, never invented. The acknowledgement number is required.
+        """
+        if not str(acknowledgement_no or "").strip():
+            raise ValueError("NCRP acknowledgement number is required.")
         headers = [
-            "Acknowledgement_No",
-            "Complainant_Source_Account",
-            "Beneficiary_Account_to_Freeze",
-            "Beneficiary_IFSC",
-            "Beneficiary_UPI_VPA",
-            "Lien_Amount_INR",
-            "Action_Required",
-            "Crime_Category",
-            "State_UT",
-            "Police_Station",
-            "Investigating_Officer",
-            "Generated_At_IST",
-            "Safeguard_Check_Passed",
-            "Remarks",
+            "Acknowledgement_No", "Complainant_Source_Account", "Beneficiary_Account_to_Freeze",
+            "Beneficiary_IFSC", "Beneficiary_UPI_VPA", "Lien_Amount_INR", "Action_Required",
+            "Crime_Category", "State_UT", "Police_Station", "Investigating_Officer",
+            "Generated_At_IST", "Safeguard_Check_Passed", "Remarks",
         ]
+        ist = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=5, minutes=30)))
+        ist_str = ist.strftime("%Y-%m-%d %H:%M:%S IST")
+        given = lambda v: str(v).strip() or self.NOT_PROVIDED  # noqa: E731
 
-        now_dt = datetime.now(timezone.utc)
-        ist_str = datetime.fromtimestamp(
-            now_dt.timestamp() + 19800.0, tz=timezone.utc
-        ).strftime("%Y-%m-%d %H:%M:%S IST")
-
-        rows = [",".join(headers)]
-
+        buf = io.StringIO()
+        w = csv.writer(buf, lineterminator="\n", quoting=csv.QUOTE_MINIMAL)
+        w.writerow(headers)
         for c in evaluated_candidates:
-            # Exclude locked victim accounts and utility billers from the freeze list
             if c.is_freeze_locked or c.is_utility_excluded:
                 continue
-
-            row = [
-                acknowledgement_no,
-                complainant_account,
-                c.account_no,
-                c.ifsc,
-                c.vpa,
+            w.writerow([self._cell(x) for x in (
+                acknowledgement_no, complainant_account, c.account_no, c.ifsc, c.vpa,
+            )] + [
                 f"{c.volume_inr:.2f}",
                 "IMMEDIATE_DEBIT_FREEZE_LIEN",
-                "CYBER_FINANCIAL_FRAUD",
-                "Uttar Pradesh",
-                "Cyber Crime PS",
-                "Inspector Verma",
+                self._cell(given(crime_category)),
+                self._cell(given(state_ut)),
+                self._cell(given(police_station)),
+                self._cell(given(investigating_officer)),
                 ist_str,
-                "YES_DECONFLICTED",
-                "Exported from BharatAnalyzer Section 9.5",
-            ]
-            rows.append(",".join(row))
-
-        return "\n".join(rows)
+                "AUTOMATED_RULES_PASSED",
+                "Generated by BharatAnalyzer; examiner must review before submission",
+            ])
+        return buf.getvalue().rstrip("\n")

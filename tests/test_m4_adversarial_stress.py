@@ -353,7 +353,7 @@ class TestM4AdversarialStress(unittest.TestCase):
         mule = next(c for c in evaluated if "MULE" in c.account_no)
         self.assertFalse(mule.is_utility_excluded)
 
-        csv_text = center.generate_1930_ncrp_csv(evaluated, complainant_account="COMPL_1")
+        csv_text = center.generate_1930_ncrp_csv(evaluated, complainant_account="COMPL_1", acknowledgement_no="NCRP-T-1")
         self.assertNotIn("BESCOM", csv_text)
         self.assertNotIn("IRCTC", csv_text)
         self.assertIn("MULE_VALID_3", csv_text)

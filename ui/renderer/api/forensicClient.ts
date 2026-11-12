@@ -1088,7 +1088,7 @@ class ForensicClient {
     anonymize: boolean = true,
     victimName?: string,
     signal?: AbortSignal,
-    items?: Array<{ path: string; redaction_tag: string | null }>
+    items?: Array<{ path: string; redaction_tag: string }>
   ): Promise<Sec230BnssResponse> {
     try {
       const res = await this.fetchApi<Sec230BnssResponse>('/api/report/sec230-bnss', {
@@ -1162,7 +1162,8 @@ class ForensicClient {
     outputDir: string | undefined,
     complainantAccount: string,
     acknowledgementNo: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    details?: { state_ut?: string; police_station?: string; investigating_officer?: string; crime_category?: string }
   ): Promise<NcrpFreezeResponse> {
     try {
       const res = await this.fetchApi<NcrpFreezeResponse>('/api/report/ncrp-freeze', {
@@ -1172,7 +1173,8 @@ class ForensicClient {
           candidates,
           output_dir: outputDir,
           complainant_account: complainantAccount,
-          acknowledgement_no: acknowledgementNo
+          acknowledgement_no: acknowledgementNo,
+          ...(details || {})
         })
       });
       if (res.data && res.data.success) {

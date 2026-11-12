@@ -47,6 +47,9 @@ class RedactionTag(str, Enum):
     SEXUAL_ASSAULT_FOOTAGE = "SEXUAL_ASSAULT_FOOTAGE"
     UNRELIED_PRIVATE_DATA = "UNRELIED_PRIVATE_DATA"
     PROTECTED_VICTIM_IDENTITY = "PROTECTED_VICTIM_IDENTITY"
+    # Explicit examiner decision that the item may be released. There is no implicit default:
+    # an item with no tag is "unclassified" and the packager refuses it.
+    DISCLOSABLE = "DISCLOSABLE"
 
 
 @dataclass

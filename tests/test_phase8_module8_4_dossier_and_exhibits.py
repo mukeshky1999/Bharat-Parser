@@ -239,7 +239,7 @@ def test_section_230_bnss_defense_copy_pocso_and_intimate_media_redaction_gate()
             file_name="evidence_normal.jpg",
             sha256_hex="1111111111111111111111111111111111111111111111111111111111111111",
             md5_hex="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            redaction_tag=None,
+            redaction_tag=RedactionTag.DISCLOSABLE,
             timestamps_utc="2026-11-05T12:00:00Z",
             raw_bytes=b"SAFE_DOCUMENT_SCREENSHOT_BYTES",
         ),
@@ -265,11 +265,11 @@ def test_section_230_bnss_defense_copy_pocso_and_intimate_media_redaction_gate()
     # 1. Verification of CSAM / Intimate Media Gate
     assert bundle_result.pocso_withheld_count == 1
     # Raw contraband bytes must NOT exist in the defense bundle directory
-    withheld_path = os.path.join(sandbox, "exhibits", "intimate_assault_photo.jpg")
+    withheld_path = os.path.join(sandbox, "exhibits", "002_intimate_assault_photo.jpg")
     assert not os.path.exists(withheld_path)
 
     # Placeholder card must exist and cite Hon'ble Supreme Court judgment in P. Gopalkrishnan v. State of Kerala
-    placeholder_file = os.path.join(sandbox, "exhibits", "intimate_assault_photo_WITHHELD_NOTICE.txt")
+    placeholder_file = os.path.join(sandbox, "exhibits", "002_intimate_assault_photo_WITHHELD_NOTICE.txt")
     assert os.path.exists(placeholder_file)
     with open(placeholder_file, "r", encoding="utf-8") as f:
         card_text = f.read()
@@ -278,7 +278,7 @@ def test_section_230_bnss_defense_copy_pocso_and_intimate_media_redaction_gate()
     assert "2222222222222222222222222222222222222222222222222222222222222222" in card_text
 
     # Safe document screenshot must be copied
-    safe_path = os.path.join(sandbox, "exhibits", "evidence_normal.jpg")
+    safe_path = os.path.join(sandbox, "exhibits", "001_evidence_normal.jpg")
     assert os.path.exists(safe_path)
 
     # 2. Verification of Section 72 BNS Victim Anonymization

@@ -279,7 +279,7 @@ class TestUIAPIServer(unittest.TestCase):
 
         # Check that statutory withheld notice card was generated
         exhibits_dir = os.path.join(out_dir, "exhibits")
-        withheld_notice = os.path.join(exhibits_dir, "withheld_sensitive_stream_02_WITHHELD_NOTICE.txt")
+        withheld_notice = os.path.join(exhibits_dir, "002_withheld_sensitive_stream_02_WITHHELD_NOTICE.txt")
         self.assertTrue(os.path.isfile(withheld_notice))
         with open(withheld_notice, "r", encoding="utf-8") as f:
             notice_text = f.read()
