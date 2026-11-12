@@ -32,7 +32,7 @@ ok(/LEAD/.test(media), 'look-alike results are labelled as a lead');
 ok(/ships no list/.test(media), 'the hash list panel says the tool ships no list');
 // search says when it is incomplete
 const search = view('SearchView.tsx');
-ok(/may be incomplete/.test(search) && /was not searched/.test(search), 'search says when it stopped early or skipped a table');
+ok(/may be incomplete/.test(search) && /were not searched/.test(search), 'search says when it stopped early or skipped a table');
 // tags are the examiner's decisions
 ok(/the tool applies none/.test(insp('RecordDetail.tsx')), 'record panel says the tool applies no tags');
 // progress: no invented percentage
