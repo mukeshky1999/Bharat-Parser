@@ -270,3 +270,16 @@ Verification of the whole 2026-11-12 batch (tags in outputs, 5B.8, 5B.9): see th
 - **R-16 FIXED**: LevelDB log records and table blocks are checked against their masked CRC-32C. A mismatch is still read, classified `UNVERIFIED_FRAGMENT` and counted in `LevelDBDecoder.crc_failures`. The test fixtures now carry real checksums.
 - **Q-1 still OPEN, now visible**: PhonePe amounts carry `Amount_Basis`: "paise, as the column name says" when the name says so, otherwise "ASSUMED paise (column ... states no unit); not checked against a real sample". Settling the unit needs a real sample.
 - Tests: `tests/test_5b11_open_items.py` (5), `tests/test_validation_record.py` (6).
+
+### Phase 5C (partial), 2026-11-12
+Built, each checked in the running Electron app (screenshots in the session scratchpad, not committed):
+- **Search records** (stage 2, `views/SearchView.tsx`): words / exact phrase / contains / regex, app filter, paging, hit list with source file and decoder; a hit opens the record. Says when a search stopped early, when long values were only partly searched, and which tables were not searched in the chosen mode. Ctrl+K "Search records for…" opens this view.
+- **Record panel** (`inspectors/RecordDetail.tsx`): every stored field (a value not recorded reads "not recorded"; 0 and false are shown as values), the record's tags, buttons to apply or remove the five built-in tags and a tag of your own. `GET /api/case/record` now also returns `tags`.
+- **Tagged records** (stage 7): tag list with counts, records under each tag with note and time, remove, detached tags counted not listed.
+- **Timeline** (stage 7): placed in time / local clock only / no time recorded (the groups are never mixed), per-day bars, date / app / tag filters, newest-first, tag pills on events, record panel.
+- **Media library** (stage 6): thumbnails, status, hashes, camera clock labelled "no zone recorded, not converted", GPS, hash lists you supply (import / remove), look-alike images labelled LEAD, "Analyse media files" (repeats until none remain).
+- **Ingest progress** in the Add extraction dialog: "Step n of 11: …", the step's own progress bar or "working" when it cannot be counted, the file being read, the last failing log entries.
+- **Device switcher** in the case bar (shown when the case has more than one device).
+- Tests: `ui/tests/views_5c_test.ts` (added to `npm run test:ts`).
+
+Not done in 5C: conversation (bubble) view for Messages (5C.1); restyling the ledger / fusion / graph into the record-table pattern (5C.2); two-way byte-to-interpreter linking in the hex view (5C.3); saved filters and tag filter on every table, bulk tagging from tables (5C.4/5.5, tags can be applied one record at a time from the record panel); windowed tables, column chooser (5C.7); report builder with section picking (5C.8); reviewer mode and tags returned from the package (5C.10); a screen to run the validation record (5B.10). Layout note: on these views the global right-hand evidence card stays open beside the new record panel, which is cramped below about 1400 px wide.

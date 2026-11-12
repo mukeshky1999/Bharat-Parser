@@ -91,12 +91,12 @@ export const RecordDetail: React.FC<Props> = ({ record, onClose, onTagsChanged }
           <button type="submit" className={btn} disabled={busy || !custom.trim()}>Add</button>
         </form>
       </div>
-      <table className="w-full border-collapse">
+      <table className="w-full table-fixed border-collapse">
         <tbody>
           {data && Object.entries(data).map(([k, v]) => (
             <tr key={k} className="border-t border-slate-800 align-top">
               <th className="text-left font-normal text-slate-400 pr-2 py-1 w-36 break-words">{k}</th>
-              <td className={`py-1 break-words ${v === null || v === undefined || v === '' ? 'text-slate-500' : 'text-slate-100'}`}>{shownValue(v)}</td>
+              <td className={`py-1 break-all ${v === null || v === undefined || v === '' ? 'text-slate-500' : 'text-slate-100'}`}>{shownValue(v)}</td>
             </tr>
           ))}
         </tbody>

@@ -4,7 +4,7 @@ import { usePreferences } from '../state/preferencesStore';
 import { RecordDetail, RecordRef, TagPills } from '../inspectors/RecordDetail';
 
 const GROUPS: Array<{ id: TimelineGroup; label: string; help: string }> = [
-  { id: 'fixed', label: 'Placed in time', help: 'The source gave a zone or an absolute time, so the instant is known. Listed in time order.' },
+  { id: 'fixed', label: 'Placed in time', help: 'The source gave a zone or an absolute time, so the instant is known. Listed in time order. A device clock that was wrong is not corrected.' },
   { id: 'clock_only', label: 'Local clock only', help: 'The source gave a clock reading with no zone. The reading is shown as written; these are not placed in time and not mixed in with the others.' },
   { id: 'no_time', label: 'No time recorded', help: 'The record has no time at all. Listed in the order they were stored.' },
 ];
@@ -73,7 +73,6 @@ export const TimelineView: React.FC = () => {
         {error && <p className="text-rose-300 mb-2">{error}</p>}
         {data && (
           <>
-            {data.note && <p className="text-slate-400 text-xs mb-2">{data.note}</p>}
             {data.buckets && data.buckets.items.length > 0 && (
               <figure className="mb-3" aria-label="Records per day">
                 <div className="flex items-end gap-px h-16 overflow-x-auto">

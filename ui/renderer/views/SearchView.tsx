@@ -69,9 +69,15 @@ export const SearchView: React.FC = () => {
             </p>
             {!result.complete && <p className="text-amber-300 mb-2">The search was stopped{result.stopped_reason ? `: ${result.stopped_reason}` : ''}. Records after the stop were not checked, so this list may be incomplete.</p>}
             {result.cells_cut > 0 && <p className="text-amber-300 mb-2">{result.cells_cut} very long value(s) were only partly searched.</p>}
-            {Object.entries(result.tables).filter(([, t]) => t.skipped).map(([name, t]) => (
-              <p key={name} className="text-amber-300 mb-1">{name} was not searched: {t.skipped}</p>
-            ))}
+            {(() => {
+              const skipped = Object.entries(result.tables).filter(([, t]) => t.skipped);
+              if (skipped.length === 0) return null;
+              return (
+                <p className="text-amber-300 mb-2">
+                  {skipped.length} table(s) were not searched in this mode ({skipped.map(([n]) => n).join(', ')}): {skipped[0][1].skipped}
+                </p>
+              );
+            })()}
             <ul className="space-y-2">
               {result.hits.map((h) => (
                 <li key={`${h.table}-${h.id}`}>
