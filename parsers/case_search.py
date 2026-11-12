@@ -40,6 +40,33 @@ _ZERO_WIDTH = dict.fromkeys(map(ord, "​‌‍⁠﻿­"), None)
 _NESTED_REPEAT = re.compile(r"\((?:[^()\\]|\\.)*[+*](?:[^()\\]|\\.)*\)\s*[+*{]")
 
 
+try:                                    # supports a real time limit on one match, which the standard module does not
+    import regex as _regex
+except ImportError:                     # pragma: no cover - the guard below is then the only protection
+    _regex = None
+
+CELL_TIME_LIMIT_S = 1.0                 # one match against one cell
+
+
+class PatternTooSlow(Exception):
+    """One match ran past the time limit."""
+
+
+class _TimedPattern:
+    """A compiled pattern whose search stops after CELL_TIME_LIMIT_S (raises PatternTooSlow)."""
+
+    def __init__(self, compiled: Any) -> None:
+        self._p = compiled
+
+    def search(self, text: str):
+        if _regex is None:
+            return self._p.search(text)
+        try:
+            return self._p.search(text, timeout=CELL_TIME_LIMIT_S)
+        except TimeoutError as exc:
+            raise PatternTooSlow(str(exc)) from exc
+
+
 class SearchError(ValueError):
     """The query cannot be run; the message says why."""
 
@@ -70,8 +97,10 @@ def check_regex(pattern: str) -> "re.Pattern[str]":
     if _NESTED_REPEAT.search(pattern):
         raise SearchError("A repeated group inside a repeat (for example (a+)+) can run for a very long time and is not allowed.")
     try:
-        return re.compile(pattern, re.IGNORECASE)
-    except re.error as exc:
+        if _regex is not None:
+            return _TimedPattern(_regex.compile(pattern, _regex.IGNORECASE))
+        return _TimedPattern(re.compile(pattern, re.IGNORECASE))
+    except (re.error, getattr(_regex, "error", re.error)) as exc:
         raise SearchError(f"The pattern is not valid: {exc}")
 
 
@@ -101,7 +130,10 @@ def _snippet(value: str, needles: Sequence[str], pattern: Optional["re.Pattern[s
     text = str(value)
     pos, length = -1, 0
     if pattern is not None:
-        m = pattern.search(text[:SCAN_CELL_LIMIT])
+        try:
+            m = pattern.search(text[:SCAN_CELL_LIMIT])
+        except PatternTooSlow:
+            m = None
         if m:
             pos, length = m.start(), max(1, m.end() - m.start())
     else:
@@ -127,7 +159,10 @@ def _hit(table: str, row: Dict[str, Any], fields: Sequence[str], needles: Sequen
         if v in (None, ""):
             continue
         folded = fold(str(v)[:SCAN_CELL_LIMIT])
-        ok = bool(pattern.search(str(v)[:SCAN_CELL_LIMIT])) if pattern is not None else any(n in folded for n in needles)
+        try:
+            ok = bool(pattern.search(str(v)[:SCAN_CELL_LIMIT])) if pattern is not None else any(n in folded for n in needles)
+        except PatternTooSlow:
+            ok = False
         if ok:
             matched.append(f)
             if not snippet:
@@ -240,6 +275,7 @@ def search_case(
             cur = conn.execute(f'SELECT t.* FROM "{t}" t WHERE 1=1{extra}', params)
             cn = [d[0] for d in cur.description]
             n = 0
+            too_slow = False
             for r in cur:
                 row = dict(zip(cn, r))
                 found = False
@@ -251,9 +287,19 @@ def search_case(
                     if len(s) > SCAN_CELL_LIMIT:
                         s = s[:SCAN_CELL_LIMIT]
                         cells_cut += 1
-                    if (pattern.search(s) if pattern is not None else needles[0] in fold(s)):
+                    try:
+                        matched = pattern.search(s) if pattern is not None else needles[0] in fold(s)
+                    except PatternTooSlow:
+                        too_slow = True
+                        break
+                    if matched:
                         found = True
                         break
+                if too_slow:
+                    complete = False
+                    info["count_is_exact"] = False
+                    info["pattern_too_slow"] = True
+                    break
                 if found:
                     n += 1
                     if len(hits) + len(t_hits) < need:
@@ -283,12 +329,16 @@ def search_case(
         "mode": mode,
         "total": total,
         "total_is_exact": complete and all(i["count_is_exact"] for i in per_table.values()),
+        "tables_not_searched": sorted(t for t, i in per_table.items() if i.get("skipped")),   # total counts only the others
         "offset": offset,
         "limit": limit,
         "hits": page,
         "tables": per_table,
         "complete": complete,
-        "stopped_reason": None if complete else f"The time limit of {time_budget_s:g} s was reached; later tables and rows were not searched.",
+        "stopped_reason": None if complete else (
+            "The pattern took too long on one value (more than %g s), so the search stopped; a simpler pattern may finish." % CELL_TIME_LIMIT_S
+            if any(i.get("pattern_too_slow") for i in per_table.values())
+            else f"The time limit of {time_budget_s:g} s was reached; later tables and rows were not searched."),
         "cells_cut": cells_cut,
         "elapsed_ms": int((time.monotonic() - started) * 1000),
     }

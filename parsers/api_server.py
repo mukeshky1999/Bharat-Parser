@@ -1955,7 +1955,7 @@ def case_search(
     application: Optional[str] = Query(None),
     tag: Optional[str] = Query(None, description="Only records carrying this tag"),
     limit: int = Query(50, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=100000),
 ):
     """Search all tables of the open case. Each hit names its table and id; fetch the whole record with /api/case/record."""
     from parsers.case_search import SearchError

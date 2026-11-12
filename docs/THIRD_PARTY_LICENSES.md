@@ -17,6 +17,7 @@ This is an engineering inventory, not legal advice. Have the attorney confirm it
 | eth-hash | 0.8.0 | MIT | |
 | pytsk3 | 20260715 | Apache-2.0 | Wraps The Sleuth Kit, whose own licences are mixed. Check the licence of the bundled library before shipping. Used only for raw-image directory walking, optional import. |
 | pyewf-wheels | not installed here | upstream libewf is LGPL-3.0 | Not verified in this environment. Optional import. LGPL: dynamic use is normally fine; static bundling in the .exe needs compliance (offer the library source, allow replacement). Decide before building the installer. |
+| regex | 2026.11.9 | Apache-2.0 | Used for regular-expression search so one match can be stopped after a time limit. |
 | fastapi | 0.162.0 | MIT | |
 | uvicorn | 0.54.0 | BSD-3-Clause | |
 | python-multipart | 0.0.33 | Apache-2.0 | |
