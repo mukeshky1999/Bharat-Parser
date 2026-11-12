@@ -99,11 +99,11 @@ export const FileSystemExplorerTab: React.FC<FileSystemExplorerTabProps> = ({
       {/* 1. Header Toolbar */}
       <div className="h-11 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between shrink-0 select-none text-xs">
         <div className="flex items-center space-x-2">
-          <HardDrive className="w-4 h-4 text-sky-400" />
-          <span className="font-bold text-slate-200">
+          <HardDrive className="w-4 h-4 text-slate-300" />
+          <span className="font-semibold text-slate-200">
             Zero-Copy Virtual File System (VFS) Explorer
           </span>
-          <span className="text-[0.6875rem] text-slate-400 font-mono">
+          <span className="text-[0.75rem] text-slate-400 font-mono">
             ({filteredFiles.length} Indexed Nodes)
           </span>
         </div>
@@ -116,7 +116,7 @@ export const FileSystemExplorerTab: React.FC<FileSystemExplorerTabProps> = ({
                 key={ext}
                 onClick={() => setFilterExt(ext)}
                 className={`px-2 py-0.5 rounded transition-colors ${
-                  filterExt === ext ? 'bg-cyan-600 text-slate-50 font-bold' : 'text-slate-400 hover:text-slate-50'
+                  filterExt === ext ? 'bg-cyan-600 text-slate-50 font-semibold' : 'text-slate-400 hover:text-slate-50'
                 }`}
               >
                 {ext}
@@ -164,7 +164,7 @@ export const FileSystemExplorerTab: React.FC<FileSystemExplorerTabProps> = ({
           </div>
         ) : (
           <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-900 text-slate-400 text-[0.6875rem] uppercase tracking-wider sticky top-0 border-b border-slate-800 z-10 select-none">
+            <thead className="bg-slate-900 text-slate-400 text-[0.75rem] sticky top-0 border-b border-slate-800 z-10 select-none">
               <tr>
                 <th className="py-2.5 px-3 w-10 text-slate-500">#</th>
                 <th className="py-2.5 px-3">VFS File Path</th>
@@ -188,7 +188,7 @@ export const FileSystemExplorerTab: React.FC<FileSystemExplorerTabProps> = ({
                     onClick={() => handleRowClick(f)}
                     className={`cursor-pointer transition-colors ${
                       isSelected
-                        ? 'bg-sky-950/60 text-slate-100 font-semibold border-l-4 border-sky-400'
+                        ? 'bg-slate-800 text-slate-100 font-semibold border-l-4 border-slate-700'
                         : 'hover:bg-slate-900 text-slate-300'
                     }`}
                   >
@@ -207,7 +207,7 @@ export const FileSystemExplorerTab: React.FC<FileSystemExplorerTabProps> = ({
                         ? 'Android Application'
                         : 'Binary Stream'}
                     </td>
-                    <td className="py-2 px-3 text-right text-emerald-400 font-bold">
+                    <td className="py-2 px-3 text-right text-emerald-400 font-semibold">
                       {(size / 1024).toFixed(1)} KB
                     </td>
                     <td className="py-2 px-3 text-amber-400">
@@ -223,7 +223,7 @@ export const FileSystemExplorerTab: React.FC<FileSystemExplorerTabProps> = ({
                               onOpenInSqliteWizard(filePath);
                             }
                           }}
-                          className="px-2 py-0.5 rounded text-[0.6875rem] font-bold bg-indigo-950 text-indigo-300 border border-indigo-700 hover:bg-indigo-900 transition-colors"
+                          className="px-2 py-0.5 rounded text-[0.75rem] font-semibold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-800 transition-colors"
                           title="Open in deep SQLite B-Tree Explorer"
                         >
                           Inspect DB

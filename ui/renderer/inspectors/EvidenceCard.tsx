@@ -53,7 +53,7 @@ function Row({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mb-4">
-      <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-slate-400 mb-1">{title}</h3>
+      <h3 className="text-[0.75rem] font-semibold text-slate-400 mb-1">{title}</h3>
       <dl>{children}</dl>
     </section>
   );
@@ -207,7 +207,7 @@ export const EvidenceCard: React.FC = () => {
       <header className="px-4 pt-3 pb-2 border-b border-slate-800 shrink-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-slate-400 text-[0.6875rem] uppercase tracking-wider">{artifact.itemType || 'Record'}</div>
+            <div className="text-slate-400 text-[0.75rem]">{artifact.itemType || 'Record'}</div>
             <h2 className="text-slate-50 font-semibold break-words leading-snug">{titleOf(artifact)}</h2>
           </div>
           <button onClick={() => void setSelectedArtifact(null)} className="p-1 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800" aria-label="Clear selection">
@@ -260,7 +260,7 @@ export const EvidenceCard: React.FC = () => {
             </Section>
             {caseRecordOf(artifact.id, artifact.itemType) && (
               <section className="mb-4">
-                <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-slate-400 mb-1">Tags</h3>
+                <h3 className="text-[0.75rem] font-semibold text-slate-400 mb-1">Tags</h3>
                 <TagControls key={artifact.id} record={caseRecordOf(artifact.id, artifact.itemType)!} />
               </section>
             )}

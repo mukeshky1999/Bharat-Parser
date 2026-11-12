@@ -83,7 +83,7 @@ export const TimelineView: React.FC = () => {
                     <div key={b.start} title={`${b.start}: ${b.count}`} className="w-2 shrink-0 bg-cyan-600" style={{ height: `${Math.max(4, (b.count / max) * 100)}%` }} />
                   ))}
                 </div>
-                <figcaption className="text-[0.6875rem] text-slate-500">
+                <figcaption className="text-[0.75rem] text-slate-500">
                   Records per IST day, {data.buckets.items[0].start} to {data.buckets.items[data.buckets.items.length - 1].start}
                   {data.buckets.truncated ? ' (only part of the range is shown)' : ''}. Hover a bar for its count.
                 </figcaption>

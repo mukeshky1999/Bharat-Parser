@@ -157,8 +157,8 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4 select-none">
-      <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-2xl w-full max-w-lg overflow-hidden text-slate-50 text-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 select-none">
+      <div className="bg-slate-900 border border-slate-700 rounded-panel shadow-float w-full max-w-lg overflow-hidden text-slate-50 text-xs">
         {/* Modal Header */}
         <div className="h-10 px-4 bg-slate-900 border-b border-slate-700 flex items-center justify-between">
           <div className="flex items-center space-x-2 font-semibold">
@@ -177,7 +177,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
         <div className="p-4 space-y-4">
           {/* Format Radio Selection */}
           <div>
-            <label className="block text-[0.6875rem] font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
+            <label className="block text-[0.75rem] font-semibold text-slate-300 mb-1.5">
               Extraction Container Format
             </label>
             <div className="grid grid-cols-5 gap-1.5">
@@ -192,7 +192,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
                   key={fmt.id}
                   type="button"
                   onClick={() => setExtractionFormat(fmt.id as 'UFDR' | 'TAR' | 'ZIP' | 'FOLDER' | 'SQLITE')}
-                  className={`p-2 rounded text-center border transition-colors cursor-pointer text-[0.6875rem] ${
+                  className={`p-2 rounded text-center border transition-colors cursor-pointer text-[0.75rem] ${
                     extractionFormat === fmt.id
                       ? 'bg-cyan-600 border-cyan-600 text-slate-50 font-semibold'
                       : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-500'
@@ -206,7 +206,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
 
           {/* Path Input with Native File and Folder Dialog Buttons */}
           <div>
-            <label className="block text-[0.6875rem] font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
+            <label className="block text-[0.75rem] font-semibold text-slate-300 mb-1.5">
               Evidence Container / Workspace File Path
             </label>
             <div className="flex items-center space-x-2">
@@ -223,7 +223,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
                 className="px-2.5 h-8 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded flex items-center space-x-1 transition-colors cursor-pointer shrink-0"
                 title="Open native Windows File Explorer to select archive or database"
               >
-                <FolderOpen className="w-3.5 h-3.5 text-sky-400" />
+                <FolderOpen className="w-3.5 h-3.5 text-slate-300" />
                 <span>File</span>
               </button>
               <button
@@ -240,7 +240,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
 
           {/* Optional Case ID Input */}
           <div>
-            <label className="block text-[0.6875rem] font-semibold text-slate-300 mb-1 uppercase tracking-wide">
+            <label className="block text-[0.75rem] font-semibold text-slate-300 mb-1">
               Case Reference ID (Optional)
             </label>
             <input
@@ -254,15 +254,15 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
 
           {/* Keys for encrypted databases (optional) */}
           <details className="bg-slate-900 border border-slate-700 rounded p-2.5">
-            <summary className="cursor-pointer text-[0.6875rem] font-semibold text-slate-300 uppercase tracking-wide">Keys for encrypted databases (optional)</summary>
-            <p className="text-[0.6875rem] text-slate-400 my-2">Only keys you list here, and keys stored in the evidence itself, are tried. They are used while this evidence is processed and are not saved.</p>
+            <summary className="cursor-pointer text-[0.75rem] font-semibold text-slate-300">Keys for encrypted databases (optional)</summary>
+            <p className="text-[0.75rem] text-slate-400 my-2">Only keys you list here, and keys stored in the evidence itself, are tried. They are used while this evidence is processed and are not saved.</p>
             <KeyEntry rows={keyRows} onChange={setKeyRows} disabled={isProcessing} />
           </details>
 
           {/* Forensic Ingestion Info Banner */}
-          <div className="bg-slate-900 border border-slate-700 rounded p-2.5 space-y-1 text-[0.6875rem] text-slate-300">
+          <div className="bg-slate-900 border border-slate-700 rounded p-2.5 space-y-1 text-[0.75rem] text-slate-300">
             <span className="text-slate-400 font-semibold block">Supported Forensic Images:</span>
-            <p className="text-[0.6875rem] leading-relaxed text-slate-400">
+            <p className="text-[0.75rem] leading-relaxed text-slate-400">
               Universal Forensic Data Report UFDR (<span className="text-slate-300">.ufdr, .ufd</span>), Physical TAR images (<span className="text-slate-300">.tar, .tar.gz</span>), ZIP containers (<span className="text-slate-300">.zip</span>), XRY (<span className="text-slate-300">.xry</span>), Oxygen (<span className="text-slate-300">.ofb</span>), and extracted SQLite databases (<span className="text-slate-300">.db, .sqlite, -wal</span>).
             </p>
           </div>
@@ -277,7 +277,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
                   ? 'bg-emerald-950/80 border-emerald-600 text-emerald-300'
                   : feedback.type === 'error'
                   ? 'bg-rose-950/80 border-rose-600 text-rose-300'
-                  : 'bg-sky-950/80 border-sky-600 text-sky-300'
+                  : 'bg-slate-800 border-slate-700 text-slate-300'
               }`}
             >
               {feedback.type === 'success' ? (
@@ -292,7 +292,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
 
         {/* Modal Footer */}
         <div className="h-12 px-4 bg-slate-900 border-t border-slate-700 flex items-center justify-between">
-          <div className="flex items-center space-x-1.5 text-emerald-400 font-mono text-[0.6875rem]">
+          <div className="flex items-center space-x-1.5 text-emerald-400 font-mono text-[0.75rem]">
             <ShieldCheck className="w-4 h-4" />
             <span>Original evidence is never modified; hashed before and after</span>
           </div>

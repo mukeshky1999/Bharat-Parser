@@ -65,7 +65,7 @@ export const KeyEntry: React.FC<KeyEntryProps> = ({ rows, onChange, disabled }) 
               </button>
             </div>
             {c && (
-              <p className={`text-[0.6875rem] ${c.usable ? 'text-slate-400' : 'text-amber-300'}`}>
+              <p className={`text-[0.75rem] ${c.usable ? 'text-slate-400' : 'text-amber-300'}`}>
                 {c.usable
                   ? <>Will be tried as: {c.readings.map((x) => `${x.how} (${x.fingerprint})`).join(', ')}. The audit log records the name and fingerprint, not the key.</>
                   : null}
@@ -130,7 +130,7 @@ export const KeysNeededCard: React.FC<KeysNeededCardProps> = ({ onProcessed, ref
   };
 
   return (
-    <section className="rounded-lg border border-amber-700 bg-amber-950/40 p-4 text-xs text-slate-200 space-y-3" aria-label="Files that need a key">
+    <section className="rounded-panel border border-amber-700 bg-amber-950/40 p-4 text-xs text-slate-200 space-y-3" aria-label="Files that need a key">
       <h2 className="flex items-center gap-2 font-semibold text-amber-200"><KeyRound className="w-4 h-4" aria-hidden="true" />Encrypted databases that were not read</h2>
       <p className="text-slate-300">
         These files could not be opened because no key was supplied or found in the evidence. Their content is not in the case.

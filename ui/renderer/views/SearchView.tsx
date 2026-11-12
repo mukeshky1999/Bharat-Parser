@@ -115,7 +115,7 @@ export const SearchView: React.FC = () => {
                       <span>found in {h.matched_fields.join(', ') || 'field not named'}</span>
                     </div>
                     <div className="text-slate-100 break-words">{h.snippet}</div>
-                    <div className="text-[0.6875rem] text-slate-500 break-words">{h.source_file}{h.decoded_by ? ` · decoded by ${h.decoded_by}` : ''}</div>
+                    <div className="text-[0.75rem] text-slate-500 break-words">{h.source_file}{h.decoded_by ? ` · decoded by ${h.decoded_by}` : ''}</div>
                   </button>
                 </li>
               ))}
