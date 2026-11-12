@@ -1,32 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Smartphone,
-  ShieldCheck,
-  ShieldAlert,
   FileText,
-  Calendar,
   Phone,
   MessageSquare,
   Users,
   CreditCard,
   Coins,
   MapPin,
-  Image,
   FolderArchive,
   FolderTree,
   HardDrive,
-  ExternalLink,
-  Binary,
-  Layers,
   PlusCircle,
   AlertCircle,
-  GitMerge,
   Network,
-  Clock,
-  ArrowRight,
   Database,
-  Search,
-  Sparkles,
   Loader2
 } from 'lucide-react';
 import {
@@ -36,6 +23,10 @@ import {
 import { useWorkbenchStore, ActiveTabType } from '../state/workbenchStore';
 import { useUi } from '../state/uiStore';
 import { forensicClient, CaseSummaryResponse } from '../api/forensicClient';
+import { Panel, PanelHeader } from '../components/Panel';
+import { Button } from '../components/Button';
+import { Badge } from '../components/Badge';
+import { KeyValue } from '../components/KeyValue';
 import { KeysNeededCard } from '../inspectors/KeyBrokerPanel';
 
 /** The backend reports a dossier field as a list, a plain string, or a "Not Found" marker. Returns text to show, or null when nothing was found. */
@@ -177,534 +168,201 @@ export const ExtractionSummaryTab: React.FC<ExtractionSummaryTabProps> = ({
 
   const counts = backendSummary?.counts || {};
 
-  // Responsive Overview Cards (Never clip category titles!)
-  const summaryCards = [
-    {
-      title: 'UPI & Banking Ledger',
-      active: counts.upi_all?.active || 0,
-      deleted: counts.upi_all?.wal_and_carved || 0,
-      icon: <CreditCard className="w-5 h-5 text-emerald-400" />,
-      tab: 'UPI_LEDGER' as ActiveTabType,
-      desc: 'NPCI UTRs, VPAs & ghost intents'
-    },
-    {
-      title: 'Chats & Social Comms',
-      active: counts.chats_all?.active || 0,
-      deleted: counts.chats_all?.wal_and_carved || 0,
-      icon: <MessageSquare className="w-5 h-5 text-sky-400" />,
-      tab: 'CHATS' as ActiveTabType,
-      desc: '10 Chat engines, WAL & View-Once'
-    },
-    {
-      title: 'Saved Contacts & Beneficiaries',
-      active: counts.contacts_all?.active || 0,
-      deleted: counts.contacts_all?.wal_and_carved || 0,
-      icon: <Users className="w-5 h-5 text-amber-300" />,
-      tab: 'CONTACTS' as ActiveTabType,
-      desc: 'Dating leads, Truecaller & VPAs'
-    },
-    {
-      title: 'Call Log Records',
-      active: counts.calls_all?.active || 0,
-      deleted: counts.calls_all?.wal_and_carved || 0,
-      icon: <Phone className="w-5 h-5 text-green-400" />,
-      tab: 'CALLS' as ActiveTabType,
-      desc: 'Cellular CDR & VoIP records'
-    },
-    {
-      title: 'Crypto Wallets & P2P',
-      active: counts.crypto_all?.active || 0,
-      deleted: counts.crypto_all?.wal_and_carved || 0,
-      icon: <Coins className="w-5 h-5 text-yellow-400" />,
-      tab: 'CRYPTO' as ActiveTabType,
-      desc: 'Custodial on-ramps & escrow orders'
-    },
-    {
-      title: 'System Notifications & Spillover',
-      active: counts.os_spillover_all?.active || counts.os_spillover?.active || 0,
-      deleted: counts.os_spillover_all?.wal_and_carved || 0,
-      icon: <AlertCircle className="w-5 h-5 text-purple-400" />,
-      tab: 'OS_SPILLOVER' as ActiveTabType,
-      desc: 'OTP intercepts & keyboard cache'
-    },
-    {
-      title: 'Link graph',
-      active: backendSummary?.mule_alerts?.length || 0,
-      deleted: 0,
-      icon: <Network className="w-5 h-5 text-blue-400" />,
-      tab: 'MULE_GRAPH' as ActiveTabType,
-      desc: 'Who paid whom (leads)'
-    },
-    {
-      title: 'Raw SQLite & B-Tree Explorer',
-      active: counts.data_files?.active || 0,
-      deleted: counts.data_files?.wal_and_carved || 0,
-      icon: <Database className="w-5 h-5 text-amber-500" />,
-      tab: 'SQLITE_WIZARD' as ActiveTabType,
-      desc: 'Free-list carver & cell inspector'
-    },
-    {
-      title: 'Locations & Media Files',
-      active: counts.locations_all?.active || 0,
-      deleted: counts.locations_all?.wal_and_carved || 0,
-      icon: <MapPin className="w-5 h-5 text-rose-400" />,
-      tab: 'LOCATIONS_MEDIA' as ActiveTabType,
-      desc: 'GPS EXIF coordinates & media'
-    },
-    {
-      title: 'Virtual File System (VFS)',
-      active: counts.vfs_files?.active || counts.data_files?.active || 0,
-      deleted: 0,
-      icon: <FolderTree className="w-5 h-5 text-teal-400" />,
-      tab: 'FILE_SYSTEM' as ActiveTabType,
-      desc: 'Air-gapped catalog & index'
-    },
+  const categories: { title: string; note: string; active: number; recovered: number; icon: React.ElementType; tab: ActiveTabType }[] = [
+    { title: 'UPI transactions', note: 'UTRs, VPAs and unconfirmed payment intents', active: counts.upi_all?.active || 0, recovered: counts.upi_all?.wal_and_carved || 0, icon: CreditCard, tab: 'UPI_LEDGER' },
+    { title: 'Chats', note: 'Messages from all supported apps', active: counts.chats_all?.active || 0, recovered: counts.chats_all?.wal_and_carved || 0, icon: MessageSquare, tab: 'CHATS' },
+    { title: 'Contacts', note: 'Saved contacts and payment beneficiaries', active: counts.contacts_all?.active || 0, recovered: counts.contacts_all?.wal_and_carved || 0, icon: Users, tab: 'CONTACTS' },
+    { title: 'Calls', note: 'Cellular and app call records', active: counts.calls_all?.active || 0, recovered: counts.calls_all?.wal_and_carved || 0, icon: Phone, tab: 'CALLS' },
+    { title: 'Crypto wallets', note: 'Wallet addresses and exchange orders', active: counts.crypto_all?.active || 0, recovered: counts.crypto_all?.wal_and_carved || 0, icon: Coins, tab: 'CRYPTO' },
+    { title: 'System traces', note: 'Notifications and keyboard cache', active: counts.os_spillover_all?.active || counts.os_spillover?.active || 0, recovered: counts.os_spillover_all?.wal_and_carved || 0, icon: AlertCircle, tab: 'OS_SPILLOVER' },
+    { title: 'Link graph', note: 'Who paid whom (leads)', active: backendSummary?.mule_alerts?.length || 0, recovered: 0, icon: Network, tab: 'MULE_GRAPH' },
+    { title: 'Database inspector', note: 'Raw tables, free pages and cells', active: counts.data_files?.active || 0, recovered: counts.data_files?.wal_and_carved || 0, icon: Database, tab: 'SQLITE_WIZARD' },
+    { title: 'Locations and media', note: 'GPS coordinates and media files', active: counts.locations_all?.active || 0, recovered: counts.locations_all?.wal_and_carved || 0, icon: MapPin, tab: 'LOCATIONS_MEDIA' },
+    { title: 'Files', note: 'File catalogue of the evidence', active: counts.vfs_files?.active || counts.data_files?.active || 0, recovered: 0, icon: FolderTree, tab: 'FILE_SYSTEM' },
   ];
 
-  // If no dump is loaded yet, display clean, centered BharatAnalyzer Case Intake Workspace
+  const rehash = integrity?.match === true
+    ? { tone: 'ok' as const, text: 'Re-hash MATCH' }
+    : integrity?.match === false
+    ? { tone: 'bad' as const, text: 'Re-hash MISMATCH' }
+    : { tone: 'neutral' as const, text: 'Re-hash NOT RECORDED' };
+
   if (!isLoaded) {
+    const sources: { icon: React.ElementType; title: string; text: string; action: string; onClick: () => void }[] = [
+      { icon: FolderArchive, title: 'Archive or image file', text: 'A .ufdr, .tar, .zip, .xry, .ofb or .ab file.', action: 'Select file', onClick: handlePickFileAndIngest },
+      { icon: FolderTree, title: 'Extracted folder or database', text: 'A folder from a file-system extraction, or a single .sqlite or .db file.', action: 'Select folder', onClick: handlePickFolderAndIngest },
+    ];
     return (
-      <div className="h-full w-full bg-slate-900 text-slate-100 overflow-y-auto p-6 flex flex-col items-center justify-center select-none font-sans">
-        <div className="max-w-[1000px] w-full space-y-6">
-          {/* Welcome Header */}
-          <div className="text-center space-y-2">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-700 shadow-xl shadow-cyan-950/60 border border-cyan-400/40 mb-2">
-              <svg
-                className="w-8 h-8 text-slate-50"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" />
-                <path d="M9 12l2 2 4-4" />
-              </svg>
-            </div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-slate-50 sm:text-3xl">
-              Bharat<span className="text-cyan-400">Analyzer</span> Case Intake
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-400 max-w-lg mx-auto">
-              Digital forensics and financial intelligence for Indian investigations. The evidence file is hashed before and after processing, and the analysis runs on a working copy.
-            </p>
+      <div className="h-full w-full bg-slate-950 overflow-y-auto p-6">
+        <div className="max-w-3xl space-y-4">
+          <div>
+            <h1 className="text-lg font-semibold text-slate-50">Open evidence</h1>
+            <p className="mt-1 text-slate-400">The evidence file is hashed before and after processing. Analysis runs on a working copy; the original is opened read-only.</p>
           </div>
 
-          {/* Ingestion Progress Bar (When ingesting) */}
           {isIngesting && (
-            <div className="bg-slate-900 border border-cyan-500/50 rounded-xl p-5 shadow-2xl space-y-3">
-              <div className="flex items-center justify-between text-xs font-mono">
-                <span className="flex items-center gap-2 text-cyan-300 font-bold">
-                  <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
-                  <span>Reading evidence</span>
-                </span>
-                <span className="text-slate-400">The original file is opened read-only</span>
-              </div>
-              <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-slate-600 w-full rounded-full" aria-hidden="true" />
-              </div>
-              <p className="text-xs text-cyan-200 font-mono">{ingestionPhase}</p>
-            </div>
+            <Panel className="p-4" aria-live="polite">
+              <div className="flex items-center gap-2 text-slate-100"><Loader2 className="w-4 h-4 animate-spin text-slate-400" /> Reading evidence</div>
+              <p className="mt-1 text-slate-400">{ingestionPhase}</p>
+            </Panel>
           )}
 
-          {/* Error Message */}
           {errorMessage && (
-            <div className="p-3 bg-red-950/80 border border-red-800 text-red-200 rounded-lg text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-              <span>{errorMessage}</span>
-            </div>
+            <Panel className="p-3 flex items-start gap-2 border-rose-700" role="alert">
+              <AlertCircle className="w-4 h-4 text-rose-300 shrink-0 mt-0.5" />
+              <span className="text-rose-200">{errorMessage}</span>
+            </Panel>
           )}
 
-          {isLoaded && (
-            <KeysNeededCard
-              refreshKey={backendSummary?.case_id ?? ''}
-              onProcessed={async () => {
-                await syncWithBackendCase();
-                const data = await forensicClient.getCaseSummary();
-                if (data) setBackendSummary(data);
-              }}
-            />
-          )}
-
-          {/* Three Large Intake Action Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Card 1: Open Forensic Container Archive */}
-            <div
-              onClick={handlePickFileAndIngest}
-              className="bg-slate-900 hover:bg-slate-800 border border-slate-700/80 hover:border-cyan-500/80 rounded-xl p-5 flex flex-col justify-between cursor-pointer transition-all hover:shadow-xl hover:shadow-cyan-950/30 group"
-            >
-              <div className="space-y-3">
-                <div className="w-10 h-10 rounded-lg bg-cyan-950/80 border border-cyan-700/60 flex items-center justify-center text-cyan-400 group-hover:scale-105 transition-transform">
-                  <FolderArchive className="w-5 h-5" />
+          <Panel className="divide-y divide-slate-800">
+            {sources.map((s) => (
+              <div key={s.title} className="flex items-center gap-4 px-4 py-3">
+                <s.icon className="w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-slate-100">{s.title}</div>
+                  <div className="text-slate-400">{s.text}</div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-50 group-hover:text-cyan-300 transition-colors">
-                    Forensic Container Archive
-                  </h3>
-                  <p className="text-[0.6875rem] text-slate-400 mt-1 leading-relaxed">
-                    Native Windows Explorer file picker for <span className="text-slate-200 font-mono">.ufdr, .tar, .zip, .xry, .ofb, .ab</span> dumps.
-                  </p>
+                <Button variant="primary" onClick={s.onClick} disabled={isIngesting}>{s.action}</Button>
+              </div>
+            ))}
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-4">
+                <HardDrive className="w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <label htmlFor="direct-path" className="font-medium text-slate-100">Path</label>
+                  <div className="text-slate-400">Type or paste the full path to an evidence file or folder.</div>
                 </div>
               </div>
-              <div className="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-cyan-400 font-medium">
-                <span>Select Archive File</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-
-            {/* Card 2: Open Extracted Dump Folder or SQLite DB */}
-            <div
-              onClick={handlePickFolderAndIngest}
-              className="bg-slate-900 hover:bg-slate-800 border border-slate-700/80 hover:border-blue-500/80 rounded-xl p-5 flex flex-col justify-between cursor-pointer transition-all hover:shadow-xl hover:shadow-blue-950/30 group"
-            >
-              <div className="space-y-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-950/80 border border-blue-700/60 flex items-center justify-center text-blue-400 group-hover:scale-105 transition-transform">
-                  <FolderTree className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-50 group-hover:text-blue-300 transition-colors">
-                    Extracted Folder or DB
-                  </h3>
-                  <p className="text-[0.6875rem] text-slate-400 mt-1 leading-relaxed">
-                    Select an uncompressed logical filesystem directory, physical extraction, or standalone <span className="text-slate-200 font-mono">.sqlite / .db</span>.
-                  </p>
-                </div>
-              </div>
-              <div className="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-blue-400 font-medium">
-                <span>Browse Folder</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-
-            {/* Card 3: Enter Direct Disk Path */}
-            <div className="bg-slate-900 border border-slate-700/80 rounded-xl p-5 flex flex-col justify-between">
-              <div className="space-y-3">
-                <div className="w-10 h-10 rounded-lg bg-indigo-950/80 border border-indigo-700/60 flex items-center justify-center text-indigo-400">
-                  <HardDrive className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-50">
-                    Enter Direct Disk Path
-                  </h3>
-                  <p className="text-[0.6875rem] text-slate-400 mt-1 leading-relaxed">
-                    Direct path on physical drive, external forensic RAID, or workstation storage.
-                  </p>
-                </div>
+              <div className="mt-2 flex gap-2 pl-8">
                 <input
+                  id="direct-path"
                   type="text"
                   value={directPathInput}
                   onChange={(e) => setDirectPathInput(e.target.value)}
-                  placeholder="e.g. D:\Cases\2026\evidence.tar"
-                  className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-50 placeholder-slate-500 font-mono focus:outline-none focus:border-indigo-500"
+                  onKeyDown={(e) => { if (e.key === 'Enter') void handleDirectPathIngest(); }}
+                  placeholder="D:\Cases\2026\evidence.tar"
+                  className="h-8 flex-1 min-w-0 px-2 rounded-ctl bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500 font-mono"
                 />
+                <Button onClick={handleDirectPathIngest} disabled={!directPathInput.trim() || isIngesting}>Open</Button>
               </div>
-              <button
-                onClick={handleDirectPathIngest}
-                disabled={!directPathInput.trim() || isIngesting}
-                className="mt-4 w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-slate-50 font-semibold text-xs rounded transition-colors flex items-center justify-center gap-1.5"
-              >
-                <span>Ingest in Read-Only Mode</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
             </div>
-          </div>
+          </Panel>
 
-          {/* Compliance Banner */}
-          <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-between text-xs text-slate-400 font-mono">
-            <span className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>A report and facts annexure can be prepared in stage 8 once evidence is open</span>
-            </span>
-            <span className="text-slate-500">Hashes are recorded on opening</span>
-          </div>
+          <p className="text-slate-400">Once evidence is open, the report and facts annexure are prepared in stage 8. Hashes are recorded when the evidence is opened.</p>
         </div>
       </div>
     );
   }
 
-  // Loaded State: High-Contrast Obsidian Slate & Data Canvas
+  const fileSize = meta.hashes?.fileSizeBytes
+    ? `${(meta.hashes.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB (${meta.hashes.fileSizeBytes.toLocaleString()} bytes)`
+    : null;
+  const val = (v: unknown): string | null => dossierText(v);
+
   return (
-    <div className="h-full w-full bg-slate-900 text-slate-200 overflow-y-auto select-text font-sans">
-      <div className="p-4 space-y-4 max-w-[1600px] mx-auto">
-        {/* ===================================================================
-            TOP SECTION: Device Profile & Hash Verification Seal
-            =================================================================== */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Device Profile Card */}
-          <div className="lg:col-span-7 bg-slate-900 border border-slate-700/80 rounded-xl p-4 flex flex-col md:flex-row items-center md:items-start gap-4 shadow-lg">
-            <div className="w-20 h-36 bg-gradient-to-b from-slate-800 to-slate-950 rounded-2xl p-1.5 shadow-md border border-slate-600 shrink-0 flex flex-col items-center justify-between">
-              <div className="w-5 h-1 bg-slate-600 rounded-full mb-1" />
-              <div className="w-full flex-1 bg-cyan-950/80 rounded border border-cyan-800/60 flex flex-col items-center justify-center p-1 text-center">
-                <Smartphone className="w-6 h-6 text-cyan-400 mb-1" />
-                <span className="text-[0.6875rem] text-cyan-300 font-mono text-center font-bold leading-tight truncate max-w-full">
-                  {meta.model}
-                </span>
-              </div>
-              <div className="w-3 h-3 rounded-full border border-slate-600 mt-1" />
-            </div>
-
-            <div className="flex-1 text-xs leading-relaxed space-y-2">
-              <div className="flex items-center justify-between border-b border-slate-700/80 pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold text-sm text-slate-50">
-                    {meta.model}
-                  </span>
-                  <span className="bg-cyan-950 text-cyan-300 font-mono text-[0.6875rem] font-bold px-2 py-0.5 rounded border border-cyan-800/60">
-                    {meta.extractionType}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[0.75rem]">
-                <div>
-                  <span className="text-slate-400 font-medium">Manufacturer: </span>
-                  <span className="font-semibold text-slate-50">{meta.manufacturer}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-medium">Android Version: </span>
-                  <span className="font-semibold text-slate-50">{meta.androidVersion}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-medium">Serial Number: </span>
-                  <span className="font-semibold text-slate-50">{meta.serialNumber}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-medium">Time Zone: </span>
-                  <span className="font-semibold text-slate-50">{meta.timezone}</span>
-                </div>
-                <div className="col-span-2 truncate">
-                  <span className="text-slate-400 font-medium">Evidence Source: </span>
-                  <span className="font-mono text-cyan-400 text-[0.6875rem] font-medium" title={meta.evidenceSourcePath}>
-                    {meta.evidenceSourcePath}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Forensic Integrity Seal Card */}
-          <div className="lg:col-span-5 bg-slate-900 border border-slate-700/80 rounded-xl p-4 shadow-lg flex flex-col justify-between">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-700/80">
-                <div className="flex items-center space-x-2">
-                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                  <span className="font-bold text-sm text-slate-50">
-                    Forensic Hash & Chain of Custody
-                  </span>
-                </div>
-                <span className={`px-2 py-0.5 text-[0.75rem] font-semibold rounded border ${
-                  integrity?.match === true ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
-                  : integrity?.match === false ? 'bg-rose-950 text-rose-300 border-rose-700'
-                  : 'bg-slate-800 text-slate-300 border-slate-600'}`}>
-                  {integrity?.match === true ? 'Re-hash MATCH' : integrity?.match === false ? 'Re-hash MISMATCH' : 'Re-hash NOT RECORDED'}
-                </span>
-              </div>
-
-              <div className="space-y-1 text-xs text-slate-300 font-mono">
-                <div>
-                  <span className="text-slate-400 font-sans">Pre-Ingestion MD5: </span>
-                  <span className="text-slate-200 select-all font-semibold">
-                    {meta.hashes?.md5 || 'not recorded'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-sans">Pre-Ingestion SHA-256: </span>
-                  <span className="text-emerald-300 break-all select-all font-bold text-[0.6875rem]">
-                    {meta.hashes?.sha256 || 'not recorded'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-sans">Post-Ingestion SHA-256: </span>
-                  <span className="text-slate-200 break-all select-all text-[0.6875rem]">{integrity?.postSha256 || 'not recorded'}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-sans">File size: </span>
-                  <span className="text-slate-200">
-                    {meta.hashes?.fileSizeBytes ? `${(meta.hashes.fileSizeBytes / (1024 * 1024)).toFixed(2)} MB (${meta.hashes.fileSizeBytes.toLocaleString()} bytes)` : 'not recorded'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-800 mt-3 flex items-center justify-between gap-2">
-              <button
-                onClick={() => setActiveTab('REPORT_EXPORT')}
-                className="px-3 py-1.5 bg-cyan-700 hover:bg-cyan-600 text-slate-50 text-xs font-semibold rounded shadow transition-colors flex items-center gap-1.5"
-                title="Opens the examination report, facts annexure, review package and audit log"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Report and export</span>
-              </button>
-
-              <button
-                onClick={() => openDialog('ADD_EXTRACTION')}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded border border-slate-700 transition-colors flex items-center gap-1.5"
-              >
-                <PlusCircle className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Add Secondary Extraction</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* ===================================================================
-            CATEGORY SUMMARY CARDS (Responsive CSS Grid - ZERO Truncation!)
-            =================================================================== */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-              Analyzed Forensic Artifacts
-            </h2>
-            <span className="text-[0.6875rem] text-slate-400 font-mono">
-              Click any card to inspect category records
-            </span>
-          </div>
-
-          <div
-            className="grid gap-2.5"
-            style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}
-          >
-            {summaryCards.map((card) => (
-              <button
-                key={card.title}
-                onClick={() => setActiveTab(card.tab)}
-                className="bg-slate-900 hover:bg-slate-800 border border-slate-700/80 hover:border-cyan-500/80 rounded-lg p-3 flex flex-col justify-between text-left transition-all shadow-sm hover:shadow-md cursor-pointer group"
-              >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="p-1.5 rounded-md bg-slate-900 border border-slate-800 shrink-0">
-                    {card.icon}
-                  </div>
-                  <div className="flex items-center space-x-1 shrink-0 font-mono text-[0.6875rem]">
-                    <span className="bg-slate-800 text-slate-100 border border-slate-700 px-1.5 py-0.2 rounded-full font-bold" title="Active Allocated Records">
-                      {card.active}
-                    </span>
-                    {card.deleted > 0 && (
-                      <span className="bg-red-950 text-red-400 border border-red-800/80 px-1.5 py-0.2 rounded-full font-bold" title="Carved / WAL Deleted Records">
-                        ({card.deleted})
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="font-semibold text-xs text-slate-50 group-hover:text-cyan-300 leading-snug">
-                    {card.title}
-                  </h3>
-                  <p className="text-[0.6875rem] text-slate-400 mt-0.5 leading-tight">
-                    {card.desc}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* ===================================================================
-            UNIFIED MASTER DEVICE OWNER DOSSIER
-            =================================================================== */}
-        <div className="bg-slate-900 border border-slate-700/80 rounded-xl shadow-lg overflow-hidden">
-          <div className="px-4 py-3 bg-slate-900 border-b border-slate-700/80 flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Users className="w-4 h-4 text-cyan-400" />
-              <h2 className="font-bold text-sm text-slate-50">
-                Unified Master Device Owner Dossier
-              </h2>
-            </div>
-            <span className="text-[0.6875rem] font-mono text-cyan-300 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800/60">
-              Compiled from the apps' own records
-            </span>
-          </div>
-
-          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs border-b border-slate-800">
-            <div>
-              <span className="text-slate-400 text-[0.6875rem] block font-medium">Primary Mobile Number</span>
-              <span className="text-slate-50 font-mono font-bold text-sm mt-0.5 block select-all">
-                {dossierText(dossier.Primary_Mobile) ?? 'not found'}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-slate-400 text-[0.6875rem] block font-medium">Account Holder Names</span>
-              <span className="text-slate-50 font-semibold mt-0.5 block select-all">
-                {dossierText(dossier.Account_Holder_Names) !== null ? dossierText(dossier.Account_Holder_Names)
-                  : 'not found'}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-slate-400 text-[0.6875rem] block font-medium">Owner Emails</span>
-              <span className="text-cyan-300 font-mono mt-0.5 block select-all truncate" title={dossierText(dossier.Owner_Emails) ?? ''}>
-                {dossierText(dossier.Owner_Emails) !== null ? dossierText(dossier.Owner_Emails)
-                  : 'not found'}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-slate-400 text-[0.6875rem] block font-medium">Owner UPI VPAs</span>
-              <span className="text-emerald-400 font-mono mt-0.5 block select-all truncate" title={dossierText(dossier.Owner_VPAs_Raw) ?? ''}>
-                {dossierText(dossier.Owner_VPAs_Raw) !== null ? dossierText(dossier.Owner_VPAs_Raw)
-                  : 'not found'}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-slate-400 text-[0.6875rem] block font-medium">Linked Bank Accounts</span>
-              <span className="text-slate-200 font-mono mt-0.5 block select-all">
-                {dossierText(dossier.Linked_Bank_Accounts) !== null ? dossierText(dossier.Linked_Bank_Accounts)
-                  : 'not found'}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-slate-400 text-[0.6875rem] block font-medium">Active Financial Apps</span>
-              <span className="text-slate-200 font-medium mt-0.5 block">
-                {dossierText(dossier.Active_Financial_Apps) !== null ? dossierText(dossier.Active_Financial_Apps)
-                  : 'not found'}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-slate-400 text-[0.6875rem] block font-medium">Secondary Mobiles</span>
-              <span className="text-slate-300 font-mono mt-0.5 block select-all">
-                {dossierText(dossier.Secondary_Mobiles) !== null ? dossierText(dossier.Secondary_Mobiles)
-                  : 'None Identified'}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-slate-400 text-[0.6875rem] block font-medium">UPI Circle Delegations</span>
-              <span className="text-slate-300 font-medium mt-0.5 block">
-                {dossierText(dossier.UPI_Circle_Delegations) !== null ? dossierText(dossier.UPI_Circle_Delegations)
-                  : 'None'}
-              </span>
-            </div>
-          </div>
-
-          {/* Per-App Breakdown Table */}
-          {perAppBreakdown && perAppBreakdown.length > 0 && (
+    <div className="h-full w-full bg-slate-950 overflow-y-auto select-text">
+      <div className="p-4 space-y-4 max-w-[1400px]">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <Panel>
+            <PanelHeader title="Device" actions={meta.extractionType ? <Badge>{meta.extractionType}</Badge> : undefined} />
             <div className="p-4">
-              <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
-                Application-by-Application Profile Matrix
-              </h3>
-              <div className="overflow-x-auto rounded-lg border border-slate-800">
-                <table className="w-full text-left text-xs border-collapse">
+              <KeyValue columns={2} items={[
+                { label: 'Model', value: meta.model },
+                { label: 'Manufacturer', value: meta.manufacturer },
+                { label: 'Android version', value: meta.androidVersion },
+                { label: 'Serial number', value: meta.serialNumber },
+                { label: 'Time zone', value: meta.timezone },
+                { label: 'Evidence source', value: meta.evidenceSourcePath, mono: true, wide: true },
+              ]} />
+            </div>
+          </Panel>
+
+          <Panel>
+            <PanelHeader title="Hashes and integrity" actions={<Badge tone={rehash.tone}>{rehash.text}</Badge>} />
+            <div className="p-4 space-y-4">
+              <KeyValue columns={1} items={[
+                { label: 'MD5 before processing', value: meta.hashes?.md5, mono: true },
+                { label: 'SHA-256 before processing', value: meta.hashes?.sha256, mono: true },
+                { label: 'SHA-256 after processing', value: integrity?.postSha256, mono: true },
+                { label: 'File size', value: fileSize },
+              ]} />
+              <div className="flex gap-2 pt-3 border-t border-slate-800">
+                <Button variant="primary" onClick={() => setActiveTab('REPORT_EXPORT')} title="Opens the examination report, facts annexure, review package and audit log">
+                  <FileText className="w-4 h-4" /> Report and export
+                </Button>
+                <Button onClick={() => openDialog('ADD_EXTRACTION')}>
+                  <PlusCircle className="w-4 h-4 text-slate-400" /> Add another extraction
+                </Button>
+              </div>
+            </div>
+          </Panel>
+        </div>
+
+        <Panel>
+          <PanelHeader title="Records by category" />
+          <table className="w-full text-left">
+            <thead>
+              <tr className="text-slate-400 border-b border-slate-800">
+                <th className="py-2 pl-4 font-medium">Category</th>
+                <th className="py-2 font-medium hidden md:table-cell">Contents</th>
+                <th className="py-2 px-3 font-medium text-right">Records</th>
+                <th className="py-2 pr-4 font-medium text-right">Recovered</th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories.map((c) => (
+                <tr key={c.title} className="border-b border-slate-800/70 last:border-0 hover:bg-slate-800/60">
+                  <td className="py-0">
+                    <button onClick={() => setActiveTab(c.tab)} className="flex items-center gap-3 w-full h-9 pl-4 text-left text-slate-100 font-medium hover:text-cyan-300">
+                      <c.icon className="w-4 h-4 text-slate-400" aria-hidden="true" />{c.title}
+                    </button>
+                  </td>
+                  <td className="text-slate-400 hidden md:table-cell">{c.note}</td>
+                  <td className="px-3 text-right text-slate-100">{c.active.toLocaleString()}</td>
+                  <td className={`pr-4 text-right ${c.recovered > 0 ? 'text-amber-300' : 'text-slate-500'}`}>{c.recovered.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Panel>
+
+        <Panel>
+          <PanelHeader title="Device owner" actions={<span className="text-slate-400">Taken from the apps' own records</span>} />
+          <div className="p-4">
+            <KeyValue columns={4} items={[
+              { label: 'Primary mobile number', value: val(dossier.Primary_Mobile), mono: true },
+              { label: 'Account holder names', value: val(dossier.Account_Holder_Names) },
+              { label: 'Email addresses', value: val(dossier.Owner_Emails), mono: true },
+              { label: 'UPI VPAs', value: val(dossier.Owner_VPAs_Raw), mono: true },
+              { label: 'Linked bank accounts', value: val(dossier.Linked_Bank_Accounts), mono: true },
+              { label: 'Financial apps in use', value: val(dossier.Active_Financial_Apps) },
+              { label: 'Other mobile numbers', value: val(dossier.Secondary_Mobiles), mono: true },
+              { label: 'UPI Circle delegations', value: val(dossier.UPI_Circle_Delegations) },
+            ]} />
+          </div>
+
+          {perAppBreakdown && perAppBreakdown.length > 0 && (
+            <div className="border-t border-slate-800">
+              <h3 className="px-4 pt-3 pb-2 font-semibold text-slate-100">Accounts by app</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
                   <thead>
-                    <tr className="bg-slate-900 text-slate-300 border-b border-slate-800 text-[0.6875rem]">
-                      <th className="py-2 px-3 font-semibold">Application</th>
-                      <th className="py-2 px-3 font-semibold">Account Identifier</th>
-                      <th className="py-2 px-3 font-semibold">Owner Name</th>
-                      <th className="py-2 px-3 font-semibold">VPAs / Wallets</th>
-                      <th className="py-2 px-3 font-semibold">Source Artifact File</th>
+                    <tr className="text-slate-400 border-y border-slate-800">
+                      <th className="py-2 pl-4 font-medium">App</th>
+                      <th className="py-2 px-3 font-medium">Account</th>
+                      <th className="py-2 px-3 font-medium">Holder</th>
+                      <th className="py-2 px-3 font-medium">VPA or wallet</th>
+                      <th className="py-2 pr-4 font-medium">Source file</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/80 font-mono text-[0.6875rem]">
+                  <tbody>
                     {perAppBreakdown.map((row: any, i: number) => (
-                      <tr key={i} className="hover:bg-slate-800/40 transition-colors">
-                        <td className="py-2 px-3 text-cyan-300 font-semibold">{row.App_Name || row.Application || 'App'}</td>
-                        <td className="py-2 px-3 text-slate-200 select-all">{row.Account_ID || row.Identifier || 'N/A'}</td>
-                        <td className="py-2 px-3 text-slate-50 font-sans font-medium">{row.Holder_Name || row.Name || 'N/A'}</td>
-                        <td className="py-2 px-3 text-emerald-400">{row.VPA || row.Wallet || '—'}</td>
-                        <td className="py-2 px-3 text-slate-400 text-[0.6875rem] truncate max-w-xs">{row.Source_File || 'DB'}</td>
+                      <tr key={i} className="border-b border-slate-800/70 last:border-0 hover:bg-slate-800/60">
+                        <td className="py-2 pl-4 text-slate-100 font-medium">{row.App_Name || row.Application || 'App'}</td>
+                        <td className="py-2 px-3 font-mono text-slate-200">{row.Account_ID || row.Identifier || 'not recorded'}</td>
+                        <td className="py-2 px-3 text-slate-200">{row.Holder_Name || row.Name || 'not recorded'}</td>
+                        <td className="py-2 px-3 font-mono text-slate-200">{row.VPA || row.Wallet || '—'}</td>
+                        <td className="py-2 pr-4 text-slate-400 truncate max-w-xs" title={row.Source_File}>{row.Source_File || 'not recorded'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -712,7 +370,16 @@ export const ExtractionSummaryTab: React.FC<ExtractionSummaryTabProps> = ({
               </div>
             </div>
           )}
-        </div>
+        </Panel>
+
+        <KeysNeededCard
+          refreshKey={backendSummary?.case_id ?? ''}
+          onProcessed={async () => {
+            await syncWithBackendCase();
+            const data = await forensicClient.getCaseSummary();
+            if (data) setBackendSummary(data);
+          }}
+        />
       </div>
     </div>
   );
