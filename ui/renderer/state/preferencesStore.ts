@@ -16,6 +16,8 @@ export interface Preferences {
   cardOpen: boolean;
   /** 20-20-20 reminder: every 20 minutes, look 20 feet away for 20 seconds. Off unless the examiner turns it on. */
   breakReminder: boolean;
+  /** Columns the examiner hid, per table (a display choice only: exports keep every column). */
+  hiddenColumns: Record<string, string[]>;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -28,6 +30,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   navCollapsed: false,
   cardOpen: true,
   breakReminder: false,
+  hiddenColumns: {},
 };
 
 const STORAGE_KEY = 'bharat.preferences.v1';
@@ -47,6 +50,13 @@ export function sanitizePreferences(raw: unknown): Preferences {
   if (typeof r.navCollapsed === 'boolean') out.navCollapsed = r.navCollapsed;
   if (typeof r.cardOpen === 'boolean') out.cardOpen = r.cardOpen;
   if (typeof r.breakReminder === 'boolean') out.breakReminder = r.breakReminder;
+  if (r.hiddenColumns && typeof r.hiddenColumns === 'object' && !Array.isArray(r.hiddenColumns)) {
+    const hc: Record<string, string[]> = {};
+    for (const [k, v] of Object.entries(r.hiddenColumns as Record<string, unknown>).slice(0, 20)) {
+      if (Array.isArray(v)) hc[k.slice(0, 40)] = v.filter((x): x is string => typeof x === 'string').slice(0, 30).map((x) => x.slice(0, 40));
+    }
+    out.hiddenColumns = hc;
+  }
   return out;
 }
 
@@ -84,7 +94,7 @@ interface PreferencesState extends Preferences {
 function pick(s: Preferences): Preferences {
   return {
     theme: s.theme, density: s.density, fontScale: s.fontScale, timeZone: s.timeZone, navWidth: s.navWidth,
-    cardWidth: s.cardWidth, navCollapsed: s.navCollapsed, cardOpen: s.cardOpen, breakReminder: s.breakReminder,
+    cardWidth: s.cardWidth, navCollapsed: s.navCollapsed, cardOpen: s.cardOpen, breakReminder: s.breakReminder, hiddenColumns: s.hiddenColumns,
   };
 }
 

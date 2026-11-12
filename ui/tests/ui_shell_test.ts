@@ -24,6 +24,10 @@ ok(wild.navWidth === 180 && wild.cardWidth === DEFAULT_PREFERENCES.cardWidth, 'p
 ok(wild.breakReminder === false, 'break reminder stays off unless it is exactly true');
 ok(sanitizePreferences({ theme: 'contrast', fontScale: 0.5 }).fontScale === 0.9, 'font scale lower clamp');
 ok(DEFAULT_PREFERENCES.breakReminder === false, 'reminder is off by default');
+ok(JSON.stringify(DEFAULT_PREFERENCES.hiddenColumns) === '{}', 'no column is hidden by default');
+const hc = sanitizePreferences({ hiddenColumns: { CALLS: ['from', 7, 'to'], bad: 'x', ARR: null } }).hiddenColumns;
+ok(JSON.stringify(hc) === JSON.stringify({ CALLS: ['from', 'to'] }), 'hidden columns keep only text names and drop anything else');
+ok(JSON.stringify(sanitizePreferences({ hiddenColumns: [1, 2] }).hiddenColumns) === '{}', 'a list in place of the map gives no hidden columns');
 
 // ---- stages ------------------------------------------------------------------------------------------------------
 ok(STAGES.length === 8, 'eight stages');

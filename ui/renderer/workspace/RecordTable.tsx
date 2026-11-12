@@ -87,7 +87,11 @@ export const RecordTable: React.FC<RecordTableProps> = ({ title, category }) => 
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  const cols = COLUMNS[category];
+  const allCols = COLUMNS[category];
+  const hiddenCols = usePreferences((s) => s.hiddenColumns[category]) ?? [];
+  const setPrefs = usePreferences((s) => s.set);
+  const allHidden = usePreferences((s) => s.hiddenColumns);
+  const cols = allCols.filter((c) => !hiddenCols.includes(c.key));
 
   const fmtTime = (t?: TimestampTriplet) => (hasTime(t) ? (tz === 'IST' ? t.istFormatted : t.utcIso) : NOT_RECORDED);
 
@@ -167,9 +171,9 @@ export const RecordTable: React.FC<RecordTableProps> = ({ title, category }) => 
 
   const exportCsv = () =>
     downloadCsv(`${category.toLowerCase()}.csv`, [
-      [...(category === 'CALLS' ? ['Time'] : []), ...cols.filter((c) => c.key !== 'time').map((c) => c.label)].map(csvCell).join(','),
+      [...(category === 'CALLS' ? ['Time'] : []), ...allCols.filter((c) => c.key !== 'time').map((c) => c.label)].map(csvCell).join(','),
       ...filtered.map((r) =>
-        [...(category === 'CALLS' ? [fmtTime(r.timestamp)] : []), ...cols.filter((c) => c.key !== 'time').map((c) => r.cells[c.key] ?? '')].map(csvCell).join(',')
+        [...(category === 'CALLS' ? [fmtTime(r.timestamp)] : []), ...allCols.filter((c) => c.key !== 'time').map((c) => r.cells[c.key] ?? '')].map(csvCell).join(',')
       ),
     ]);
 
@@ -187,6 +191,19 @@ export const RecordTable: React.FC<RecordTableProps> = ({ title, category }) => 
           Only recovered records
         </label>
         <span className="text-slate-400">{filtered.length.toLocaleString()} of {rows.length.toLocaleString()}</span>
+        <details className="relative">
+          <summary className="h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 cursor-pointer inline-flex items-center list-none">Columns</summary>
+          <div className="absolute z-20 mt-1 w-56 rounded border border-slate-700 bg-slate-900 p-2 shadow-xl">
+            {allCols.map((c) => (
+              <label key={c.key} className="flex items-center gap-2 py-0.5 text-slate-200">
+                <input type="checkbox" checked={!hiddenCols.includes(c.key)} disabled={!hiddenCols.includes(c.key) && cols.length === 1}
+                  onChange={(e) => setPrefs({ hiddenColumns: { ...allHidden, [category]: e.target.checked ? hiddenCols.filter((k) => k !== c.key) : [...hiddenCols, c.key] } })} />
+                {c.label}
+              </label>
+            ))}
+            <p className="mt-1 text-[0.6875rem] text-slate-400">Hiding a column only changes what is shown. Export keeps every column.</p>
+          </div>
+        </details>
         <button onClick={exportCsv} disabled={filtered.length === 0} className="ml-auto flex items-center gap-2 h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40">
           <Download className="w-4 h-4" /> Export CSV
         </button>
