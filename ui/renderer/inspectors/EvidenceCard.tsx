@@ -184,6 +184,7 @@ export const EvidenceCard: React.FC = () => {
 
   const fields = Object.entries(raw).filter(([k, v]) => !HIDDEN_KEYS.has(k) && k !== 'body' && !(typeof v === 'object' && v !== null && !Array.isArray(v) && 'utcIso' in (v as object)));
   const t = artifact.timestamp;
+  const localTime: TimestampTriplet | null | undefined = artifact.timestamp;
 
   const copyJson = () => {
     try {
@@ -244,6 +245,12 @@ export const EvidenceCard: React.FC = () => {
                   <button className="text-cyan-400 hover:underline mt-1" onClick={() => setPref({ timeZone: tzMode === 'IST' ? 'UTC' : 'IST' })}>
                     Show {tzMode === 'IST' ? 'UTC' : 'IST'} first
                   </button>
+                </>
+              ) : localTime?.localClock ? (
+                <>
+                  <Row k="Clock time as recorded" v={localTime.localClock} mono />
+                  <Row k="Time zone" v="Not recorded (no UTC or IST time is claimed)" />
+                  <Row k="Raw value" v={show(localTime.rawValue)} mono />
                 </>
               ) : (
                 <Row k="Time" v={NOT_RECORDED} />

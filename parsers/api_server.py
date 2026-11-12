@@ -59,6 +59,7 @@ from parsers.graph_intelligence import (
     generate_pyvis_network_html,
 )
 from parsers.heuristic_engine import (
+    compose_tx_provenance,
     extract_profile_from_sqlite,
     parse_database_artifacts,
 )
@@ -698,6 +699,8 @@ def _execute_ingestion_pipeline(
                                     fr["Source_File"].astype(str).str.strip().ne("") & fr["Source_File"].notna(),
                                     vfs_path,
                                 )
+                            if frame_name == "transactions":
+                                _stamp_transaction_evidence(fr, vfs_path)
                     key = app_label
                     n = 2
                     while key in app_artifacts:
@@ -1722,6 +1725,28 @@ class ReportParticulars(BaseModel):
     designation: Optional[str] = ""
     requesting_officer: Optional[str] = ""
     notes: Optional[str] = ""
+
+
+_TX_DIRECTION = {"DEBIT": "OUTGOING", "CREDIT": "INCOMING"}
+
+
+def _stamp_transaction_evidence(fr: pd.DataFrame, vfs_path: str) -> None:
+    """X-13: give each transaction its provenance line and direction at ingest.
+
+    Forensic_Provenance lists every source row that contributed (file :: table :: RowID :: State).
+    Direction follows the recorded Type; a TRANSFER has no established direction, so it stays empty.
+    """
+    if "Source_Rows" in fr.columns:
+        fr["Forensic_Provenance"] = fr["Source_Rows"].map(lambda v: compose_tx_provenance(vfs_path, v))
+    else:
+        fr["Forensic_Provenance"] = None
+    if "Type" in fr.columns:
+        fr["Direction"] = fr["Type"].map(lambda t: _TX_DIRECTION.get(str(t).strip().upper()))
+    else:
+        fr["Direction"] = None
+    # Source_Rows is folded into Forensic_Provenance; the store has no column for it.
+    if "Source_Rows" in fr.columns:
+        del fr["Source_Rows"]
 
 
 def _require_case() -> None:

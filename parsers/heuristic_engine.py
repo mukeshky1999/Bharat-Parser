@@ -32,6 +32,7 @@ from parsers.app_overrides import (
     matches_owner_identity,
     normalize_timestamp_value,
     parse_indian_financial_text,
+    timestamp_record,
     resolve_payer_payee_counterparty,
 )
 from parsers.corrupt_db_carver import carve_corrupted_sqlite_file
@@ -1063,11 +1064,98 @@ def _normalise_phonepe_tid_and_ts(txid_str: str, current_dt_str: Optional[str]) 
     return dt_extracted
 
 
+# X-13: what a transaction row carries besides the seven display columns. The first four describe
+# the time (raw value, UTC, IST and what the clock string means); Source_Rows is a JSON list of every
+# source row that contributed to the record: [{"table": ..., "rowid": ..., "state": ...}, ...].
+TX_EVIDENCE_COLUMNS = ['Timestamp_Raw', 'Timestamp_UTC', 'Timestamp_IST', 'Timestamp_Basis', 'Source_Rows']
+
+
+def _clean_cell(v: Any) -> Any:
+    if v is None:
+        return None
+    try:
+        if pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
+    s_v = str(v).strip()
+    return None if s_v == '' or s_v.lower() in ('none', 'nan', 'nat') else v
+
+
+def _row_time_record(row: Dict[str, Any], date_value: Any) -> Dict[str, Optional[str]]:
+    """Use the time fields the parser already worked out; otherwise convert the Date once, here."""
+    basis = _clean_cell(row.get('Timestamp_Basis'))
+    if basis is not None:
+        date_str = normalize_timestamp_value(date_value, 'auto')
+        return {
+            'Date': date_str,
+            'Timestamp_Raw': _clean_cell(row.get('Timestamp_Raw')),
+            'Timestamp_UTC': _clean_cell(row.get('Timestamp_UTC')),
+            'Timestamp_IST': _clean_cell(row.get('Timestamp_IST')),
+            'Timestamp_Basis': basis if date_str else None,
+        }
+    return timestamp_record(date_value, 'auto')
+
+
+def _row_sources(row: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The source rows already attached to an input row (a JSON list, or a single table/rowid pair)."""
+    raw_list = _clean_cell(row.get('Source_Rows'))
+    if isinstance(raw_list, str):
+        try:
+            loaded = json.loads(raw_list)
+            if isinstance(loaded, list):
+                return [x for x in loaded if isinstance(x, dict)]
+        except ValueError:
+            pass
+    table = _clean_cell(row.get('Source_Table'))
+    rowid = _clean_cell(row.get('Source_RowID'))
+    state = _clean_cell(row.get('Recovery_State'))
+    if table is None and rowid is None and state is None:
+        return []
+    if rowid is not None:
+        try:
+            rowid = int(rowid)
+        except (TypeError, ValueError):
+            rowid = str(rowid)
+    return [{'table': table, 'rowid': rowid, 'state': state}]
+
+
+def _union_sources(a: List[Dict[str, Any]], b: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    out = list(a)
+    for item in b:
+        if item not in out:
+            out.append(item)
+    return out
+
+
+def compose_tx_provenance(source_file: str, source_rows_json: Any) -> Optional[str]:
+    """One provenance line per contributing source row, joined with ' + '.
+
+    Same shape as the chat provenance: file :: table :: RowID=n :: State=...
+    Returns None (shown as "not recorded") when no source row was kept."""
+    raw = _clean_cell(source_rows_json)
+    if not isinstance(raw, str):
+        return None
+    try:
+        items = json.loads(raw)
+    except ValueError:
+        return None
+    parts = []
+    for it in items if isinstance(items, list) else []:
+        if not isinstance(it, dict):
+            continue
+        table = it.get('table') or 'Not recorded'
+        rowid = it.get('rowid')
+        state = it.get('state') or 'Not recorded'
+        parts.append(f"{source_file} :: {table} :: RowID={rowid if rowid is not None else 'Not recorded'} :: State={state}")
+    return ' + '.join(parts) if parts else None
+
+
 def synthesize_and_deduplicate_records(
     df: pd.DataFrame,
     owner_identifiers: Optional[Set[str]] = None,
 ) -> pd.DataFrame:
-    std_cols = ['Date', 'Transaction_ID', 'Linked_Reference_IDs', 'Amount', 'Counterparty', 'Status', 'Type', 'Risk_Level']
+    std_cols = ['Date', 'Transaction_ID', 'Linked_Reference_IDs', 'Amount', 'Counterparty', 'Status', 'Type', 'Risk_Level'] + TX_EVIDENCE_COLUMNS
     if df is None or df.empty:
         return pd.DataFrame(columns=std_cols)
 
@@ -1116,8 +1204,14 @@ def synthesize_and_deduplicate_records(
             if pd.notna(linked) and str(linked).strip() not in ('', 'None', 'nan', 'N/A')
             else txid_str
         )
-        dt_str = normalize_timestamp_value(dt, 'auto')
-        dt_str = _normalise_phonepe_tid_and_ts(txid_str, dt_str)
+        ts_rec = _row_time_record(row, dt)
+        dt_str = ts_rec['Date']
+        derived_dt = _normalise_phonepe_tid_and_ts(txid_str, dt_str)
+        if derived_dt and not dt_str:
+            # The time came from the reference ID itself: say so, and claim no zone.
+            ts_rec = {'Date': derived_dt, 'Timestamp_Raw': txid_str, 'Timestamp_UTC': None,
+                      'Timestamp_IST': None, 'Timestamp_Basis': 'DERIVED_FROM_TRANSACTION_ID'}
+        dt_str = ts_rec['Date']
 
         # Reject boolean or '0.0' status non-transaction rows where Date is None or TxID is N/A
         if st_val.lower() in ('true', 'false', '0.0', '0') and (dt_str is None or txid_str == 'N/A') and '@' not in cparty_str:
@@ -1150,6 +1244,8 @@ def synthesize_and_deduplicate_records(
             'Counterparty': cparty_str,
             'Status': st_val,
             'Type': tp_val,
+            '_ts': ts_rec,
+            '_src': _row_sources(row),
         })
 
     if not cleaned_records:
@@ -1190,6 +1286,8 @@ def synthesize_and_deduplicate_records(
             r_linked = r['Linked_Reference_IDs']
             r_status = r['Status']
             r_type = r['Type']
+            r_ts = r['_ts']
+            r_src = r['_src']
 
             merged_into_existing = False
             for cl in clusters:
@@ -1208,8 +1306,10 @@ def synthesize_and_deduplicate_records(
                 # C-08: records merge only on an identical reference ID. Amount/time/party
                 # similarity must never fuse distinct transactions into one that never existed.
                 if same_txid:
+                    cl['_src'] = _union_sources(cl['_src'], r_src)
                     if cl['Date'] is None and r_dt is not None:
                         cl['Date'] = r_dt
+                        cl['_ts'] = r_ts
                     if r_cparty != 'Unknown':
                         if (
                             cl['Counterparty'] == 'Unknown'
@@ -1255,6 +1355,8 @@ def synthesize_and_deduplicate_records(
                     'Counterparty': r_cparty,
                     'Status': r_status,
                     'Type': r_type,
+                    '_ts': r_ts,
+                    '_src': list(r_src),
                 })
 
         for cl in clusters:
@@ -1303,6 +1405,9 @@ def synthesize_and_deduplicate_records(
 
 
     final_df['Risk_Level'] = compute_transaction_risk_badges(final_df)
+    for key in ('Timestamp_Raw', 'Timestamp_UTC', 'Timestamp_IST', 'Timestamp_Basis'):
+        final_df[key] = final_df['_ts'].map(lambda t, k=key: t.get(k))
+    final_df['Source_Rows'] = final_df['_src'].map(lambda lst: json.dumps(lst) if lst else None)
     return final_df[std_cols]
 
 
@@ -1384,7 +1489,7 @@ def parse_database_artifacts(
     artifacts: Dict[str, Any] = {
         'transactions': pd.DataFrame(columns=[
             'Date', 'Transaction_ID', 'Linked_Reference_IDs', 'Amount', 'Counterparty', 'Status', 'Type', 'Risk_Level',
-        ]),
+        ] + TX_EVIDENCE_COLUMNS),
         'chats': pd.DataFrame(columns=CATEGORIZED_FORENSIC_COLUMNS),
         'contacts': pd.DataFrame(),
         'notifications': pd.DataFrame(),
@@ -1875,7 +1980,13 @@ def parse_database_artifacts(
             has_split_dr_cr = (debit_col is not None and credit_col is not None)
             if amt_col or has_split_dr_cr or blob_col:
                 try:
-                    raw_tx = pd.read_sql_query(f'SELECT * FROM {q_table} LIMIT 25000', conn)
+                    try:
+                        raw_tx = pd.read_sql_query(f'SELECT rowid AS "__src_rowid__", * FROM {q_table} LIMIT 25000', conn)
+                        src_rowids = raw_tx.pop('__src_rowid__')
+                    except Exception:
+                        # views and WITHOUT ROWID tables have no rowid: the row is then "not recorded"
+                        raw_tx = pd.read_sql_query(f'SELECT * FROM {q_table} LIMIT 25000', conn)
+                        src_rowids = None
                     if raw_tx.empty:
                         continue
 
@@ -1904,11 +2015,16 @@ def parse_database_artifacts(
                                 local_owners.add(top_vpa)
 
                     tx_df = pd.DataFrame(index=raw_tx.index)
-                    tx_df['Date'] = (
-                        raw_tx[date_col].map(lambda v: normalize_timestamp_value(v, epoch=epoch))
+                    ts_recs = (
+                        raw_tx[date_col].map(lambda v: timestamp_record(v, epoch))
                         if date_col
-                        else None
+                        else pd.Series([timestamp_record(None)] * len(raw_tx), index=raw_tx.index)
                     )
+                    for ts_key in ('Date', 'Timestamp_Raw', 'Timestamp_UTC', 'Timestamp_IST', 'Timestamp_Basis'):
+                        tx_df[ts_key] = ts_recs.map(lambda r, k=ts_key: r[k])
+                    tx_df['Source_Table'] = table
+                    tx_df['Source_RowID'] = src_rowids if src_rowids is not None else None
+                    tx_df['Recovery_State'] = 'Allocated B-Tree'
                     tx_df['Transaction_ID'] = (
                         raw_tx[txid_col].map(lambda v: str(v).strip() if is_valid_txid(v) else 'N/A')
                         if txid_col
@@ -2018,7 +2134,9 @@ def parse_database_artifacts(
                                     except Exception:
                                         pass
                                 if extracted['Date'] and pd.isna(tx_df.at[idx, 'Date']):
-                                    tx_df.at[idx, 'Date'] = normalize_timestamp_value(extracted['Date'], epoch=epoch)
+                                    blob_ts = timestamp_record(extracted['Date'], epoch)
+                                    for ts_key in ('Date', 'Timestamp_Raw', 'Timestamp_UTC', 'Timestamp_IST', 'Timestamp_Basis'):
+                                        tx_df.at[idx, ts_key] = blob_ts[ts_key]
                                 if extracted['Counterparty'] and tx_df.at[idx, 'Counterparty'] == 'Unknown':
                                     tx_df.at[idx, 'Counterparty'] = str(extracted['Counterparty'])
                                 if extracted['Transaction_ID'] and tx_df.at[idx, 'Transaction_ID'] == 'N/A':
@@ -2059,7 +2177,9 @@ def parse_database_artifacts(
                     tx_df = tx_df[valid_mask]
                     if not tx_df.empty:
                         collected_txs.append(tx_df[[
-                            'Date', 'Transaction_ID', 'Amount', 'Counterparty', 'Status', 'Type'
+                            'Date', 'Transaction_ID', 'Amount', 'Counterparty', 'Status', 'Type',
+                            'Timestamp_Raw', 'Timestamp_UTC', 'Timestamp_IST', 'Timestamp_Basis',
+                            'Source_Table', 'Source_RowID', 'Recovery_State',
                         ]])
                 except Exception:
                     continue
@@ -2080,6 +2200,8 @@ def parse_database_artifacts(
             if _db_has_payment_table(db_path):
                 freelist_df = carve_sqlite_freelists(db_path)
                 if not freelist_df.empty:
+                    if 'Recovery_State' not in freelist_df.columns:
+                        freelist_df['Recovery_State'] = 'Recovered: freelist page'
                     all_tx_fragments.append(freelist_df)
         except Exception:
             pass
@@ -2089,6 +2211,8 @@ def parse_database_artifacts(
             if os.path.exists(wal_path):
                 wal_rollback_df = analyze_wal_revisions(wal_path)
                 if not wal_rollback_df.empty:
+                    if 'Recovery_State' not in wal_rollback_df.columns:
+                        wal_rollback_df['Recovery_State'] = 'Recovered: WAL revision'
                     all_tx_fragments.append(wal_rollback_df)
         except Exception:
             pass

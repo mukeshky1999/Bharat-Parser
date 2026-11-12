@@ -163,6 +163,23 @@ async function fetchAllArtifactRows(category: string): Promise<{ rows: BackendRo
   return { rows };
 }
 
+/** X-13: a transaction time is UTC/IST only when the source fixed the instant; otherwise the clock string is shown as recorded. */
+function txTimestamp(r: any): TimestampTriplet {
+  if (r.Timestamp_UTC) {
+    return { ...normalizeTimestamp(`${String(r.Timestamp_UTC).replace(' ', 'T')} UTC`, 'ISO_8601'), basis: r.Timestamp_Basis || undefined };
+  }
+  const clock = String(r.Date || '').trim();
+  return {
+    rawValue: r.Timestamp_Raw ?? r.Date ?? '',
+    sourceFormat: 'ISO_8601',
+    utcIso: '',
+    istFormatted: 'Unknown',
+    epochMs: 0,
+    localClock: clock || undefined,
+    basis: r.Timestamp_Basis || (clock ? 'LOCAL_ZONE_UNKNOWN' : undefined),
+  };
+}
+
 function mapTxDirection(v: unknown): 'DEBIT' | 'CREDIT' | 'UNKNOWN' {
   const t = String(v ?? '').trim().toUpperCase();
   if (t === 'DEBIT' || t === 'DR') return 'DEBIT';
@@ -469,7 +486,7 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
                 currency: 'INR',
                 direction,
                 status: mapTxStatus(r.Status),
-                timestamp: normalizeTimestamp(r.Timestamp_IST || r.Date || '', 'ISO_8601'),
+                timestamp: txTimestamp(r),
                 clockTamperDetected: Boolean(r.Clock_Tamper_Detected),
                 corroboratedSources: ['APP_DB'],
                 provenance: parseProvenance(r.Forensic_Provenance, summary, 'transactions', r.Source_File || '')

@@ -8,6 +8,10 @@ export interface TimestampTriplet {
   utcIso: string;           // e.g. "2026-10-14T08:52:01.000Z"
   istFormatted: string;     // e.g. "2026-10-14 14:22:01.000 IST (+05:30)"
   epochMs: number;
+  /** Clock string exactly as the source stored it, when its time zone is not recorded (no UTC/IST is claimed). */
+  localClock?: string;
+  /** What the clock string means: EPOCH_UTC, OFFSET_CONVERTED_UTC, LOCAL_ZONE_UNKNOWN, DERIVED_FROM_TRANSACTION_ID. */
+  basis?: string;
 }
 
 export interface ForensicProvenance {

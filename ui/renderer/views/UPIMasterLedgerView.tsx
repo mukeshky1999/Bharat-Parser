@@ -442,7 +442,15 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
                     <td className="py-2 px-3">{renderStateBadge(tx.provenance?.recoveryState)}</td>
                     <td className="py-2 px-3 text-[0.6875rem] text-slate-300">
                       <div className="flex items-center space-x-1.5">
-                        <span>{tx.timestamp?.istFormatted ? tx.timestamp.istFormatted.substring(0, 19) : '-'}</span>
+                        {tx.timestamp?.utcIso ? (
+                          <span>{tx.timestamp.istFormatted.substring(0, 19)}</span>
+                        ) : tx.timestamp?.localClock ? (
+                          <span title="The source stored this clock time without a time zone, so no UTC or IST time is claimed.">
+                            {tx.timestamp.localClock.substring(0, 19)} <span className="text-amber-400">(zone not recorded)</span>
+                          </span>
+                        ) : (
+                          <span>-</span>
+                        )}
                         {tx.clockTamperDetected && (
                           <span title="Clock Tampering Detected! Device timestamp differs from internal transaction sequence token.">
                             <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />

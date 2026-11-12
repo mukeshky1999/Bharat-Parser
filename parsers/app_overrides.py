@@ -660,16 +660,22 @@ def resolve_payer_payee_counterparty(
     return None, explicit_direction
 
 
-def normalize_timestamp_value(
+def normalize_timestamp_detail(
     value: Any, epoch: str = 'auto'
-) -> Optional[str]:
+) -> Tuple[Optional[str], Optional[str]]:
+    """Returns (normalised 'YYYY-MM-DD HH:MM:SS', basis).
+
+    basis says what the clock string means: EPOCH_UTC (a numeric epoch, which is UTC),
+    OFFSET_CONVERTED_UTC (a string that carried an offset, converted to UTC) or
+    LOCAL_ZONE_UNKNOWN (a string with no offset: the zone is not recorded, so no UTC is claimed).
+    """
     if value is None or pd.isna(value):
-        return None
+        return None, None
     try:
         if isinstance(value, str):
             value = value.strip()
             if not value or value.lower() in ('none', 'nan', 'null', 'n/a', '0'):
-                return None
+                return None, None
             if re.match(r'^-?\d+(\.\d+)?$', value):
                 numeric = float(value)
             else:
@@ -678,17 +684,19 @@ def normalize_timestamp_value(
                 day_first = bool(re.match(r'^\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}', value))
                 parsed = pd.to_datetime(value, errors='coerce', dayfirst=day_first)
                 if pd.isna(parsed) or parsed.year < 2015 or parsed.year > 2035:
-                    return None
-                if getattr(parsed, 'tzinfo', None) is not None:
+                    return None, None
+                had_tz = getattr(parsed, 'tzinfo', None) is not None
+                if had_tz:
                     parsed = parsed.tz_convert('UTC').tz_localize(None)
-                return parsed.strftime('%Y-%m-%d %H:%M:%S')
+                basis = 'OFFSET_CONVERTED_UTC' if had_tz else 'LOCAL_ZONE_UNKNOWN'
+                return parsed.strftime('%Y-%m-%d %H:%M:%S'), basis
         else:
             numeric = float(value)
     except (TypeError, ValueError):
-        return None
+        return None, None
 
     if numeric <= 0:
-        return None
+        return None, None
 
     magnitude = abs(numeric)
     if epoch == 'unix_ns' or magnitude > 1e16:
@@ -711,13 +719,46 @@ def normalize_timestamp_value(
             seconds = numeric
 
     if not (1420070400 <= seconds <= 2051222400):
-        return None
+        return None, None
 
     try:
         ts = pd.to_datetime(seconds, unit='s', errors='coerce', utc=False)
-        return None if pd.isna(ts) else ts.strftime('%Y-%m-%d %H:%M:%S')
+        return (None, None) if pd.isna(ts) else (ts.strftime('%Y-%m-%d %H:%M:%S'), 'EPOCH_UTC')
     except Exception:
-        return None
+        return None, None
+
+
+def normalize_timestamp_value(
+    value: Any, epoch: str = 'auto'
+) -> Optional[str]:
+    return normalize_timestamp_detail(value, epoch)[0]
+
+
+_IST_OFFSET = pd.Timedelta(hours=5, minutes=30)
+
+
+def timestamp_record(value: Any, epoch: str = 'auto') -> Dict[str, Optional[str]]:
+    """One converter for every transaction time (X-13).
+
+    Date           the normalised clock string (kept for existing views)
+    Timestamp_Raw  the value exactly as read from the source
+    Timestamp_UTC / Timestamp_IST  set only when the source fixes the instant (numeric epoch or an
+                   offset-aware string). A bare local string leaves both empty: the zone is not recorded.
+    Timestamp_Basis  EPOCH_UTC | OFFSET_CONVERTED_UTC | LOCAL_ZONE_UNKNOWN, or None when there is no time.
+    """
+    date_str, basis = normalize_timestamp_detail(value, epoch)
+    raw = None
+    if value is not None and not (not isinstance(value, (str, bytes)) and pd.isna(value)):
+        raw = value.decode('utf-8', 'replace') if isinstance(value, bytes) else str(value)
+    out: Dict[str, Optional[str]] = {
+        'Date': date_str, 'Timestamp_Raw': raw, 'Timestamp_UTC': None,
+        'Timestamp_IST': None, 'Timestamp_Basis': basis,
+    }
+    if date_str and basis in ('EPOCH_UTC', 'OFFSET_CONVERTED_UTC'):
+        utc = pd.Timestamp(date_str)
+        out['Timestamp_UTC'] = utc.strftime('%Y-%m-%d %H:%M:%S')
+        out['Timestamp_IST'] = (utc + _IST_OFFSET).strftime('%Y-%m-%d %H:%M:%S')
+    return out
 
 
 def try_decompress_blob(raw: Any) -> Optional[bytes]:

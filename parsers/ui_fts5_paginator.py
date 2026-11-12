@@ -186,7 +186,10 @@ class CaseUIPaginatorStore:
                     Direction TEXT,
                     Forensic_Provenance TEXT,
                     Timestamp_IST TEXT,
-                    Possible_Link TEXT
+                    Possible_Link TEXT,
+                    Timestamp_Raw TEXT,
+                    Timestamp_UTC TEXT,
+                    Timestamp_Basis TEXT
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_tx_app ON transactions(Application);
@@ -420,6 +423,12 @@ class CaseUIPaginatorStore:
                 CREATE INDEX IF NOT EXISTS idx_vfs_catalog_path ON vfs_files(vfs_path);
                 CREATE INDEX IF NOT EXISTS idx_vfs_catalog_name ON vfs_files(file_name);
             """)
+
+            # Case databases created before X-13 lack the transaction time columns: add them.
+            have = {r[1] for r in cur.execute("PRAGMA table_info(transactions)")}
+            for col in ("Timestamp_Raw", "Timestamp_UTC", "Timestamp_Basis"):
+                if col not in have:
+                    cur.execute(f"ALTER TABLE transactions ADD COLUMN {col} TEXT")
 
             conn.commit()
         finally:

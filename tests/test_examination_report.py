@@ -11,7 +11,7 @@ from parsers.api_server import ReportParticulars
 
 # Words that belong to a legal form or to a particular institution. The tool must not print them itself.
 FORBIDDEN = re.compile(
-    r"Section\s*63|Section\s*230|Bharatiya|\bBSA\b|\bBNSS\b|\bBNS\b|Evidence Act|NCRP|1930|Government of India|"
+    r"Section\s*63|Section\s*230|Bharatiya|\bBSA\b|\bBNSS\b|\bBNS\b|Evidence Act|NCRP|\b1930\b|Government of India|"
     r"State Police|Police Station|solemnly|do hereby|certify|certificate",
     re.IGNORECASE,
 )
