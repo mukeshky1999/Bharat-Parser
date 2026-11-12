@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Tag, X } from 'lucide-react';
 import { forensicClient, TagSummary } from '../api/forensicClient';
+import { shownValue } from '../utils/recordText';
 
 /**
  * One stored record exactly as the case holds it, with its tags.
@@ -9,15 +10,7 @@ import { forensicClient, TagSummary } from '../api/forensicClient';
  */
 export interface RecordRef { table: string; id: number }
 
-export const NOT_RECORDED = 'not recorded';
-
 const btn = 'h-7 px-2 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 text-xs disabled:opacity-40';
-
-export function shownValue(v: unknown): string {
-  if (v === null || v === undefined || v === '') return NOT_RECORDED;
-  if (typeof v === 'object') return JSON.stringify(v);
-  return String(v);
-}
 
 export const TagPills: React.FC<{ tags: string[] }> = ({ tags }) => (
   <>

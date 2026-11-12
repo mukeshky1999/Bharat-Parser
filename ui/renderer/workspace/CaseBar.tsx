@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, FileArchive, FolderOpen, Search, Settings } from 'lucide-react';
 import { useWorkbenchStore } from '../state/workbenchStore';
 import { useUi } from '../state/uiStore';
-import { forensicClient, HealthResponse } from '../api/forensicClient';
+import { forensicClient, HealthResponse, EvidenceItemSummary } from '../api/forensicClient';
 import { integrityText } from './integrity';
 
 interface CaseBarProps {
@@ -17,6 +17,23 @@ export const CaseBar: React.FC<CaseBarProps> = ({ onPickFile, onPickFolder }) =>
   const [health, setHealth] = useState<HealthResponse>({ status: 'CHECKING' });
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const syncWithBackendCase = useWorkbenchStore((s) => s.syncWithBackendCase);
+  const [devices, setDevices] = useState<EvidenceItemSummary[]>([]);
+  const [activeDevice, setActiveDevice] = useState('');
+
+  useEffect(() => {
+    if (!caseManifest) { setDevices([]); return; }
+    let alive = true;
+    void forensicClient.getEvidenceItems().then((d) => { if (alive) { setDevices(d); setActiveDevice((cur) => cur || d[d.length - 1]?.item_id || ''); } });
+    return () => { alive = false; };
+  }, [caseManifest?.caseId, caseManifest?.evidenceFileName]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const switchDevice = async (id: string) => {
+    if (await forensicClient.selectActiveItem(id)) {
+      setActiveDevice(id);
+      await syncWithBackendCase();
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -66,6 +83,15 @@ export const CaseBar: React.FC<CaseBarProps> = ({ onPickFile, onPickFolder }) =>
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        {devices.length > 1 && (
+          <label className="flex items-center gap-1.5 text-slate-300">
+            <span className="hidden lg:inline">Device</span>
+            <select aria-label="Device the owner profile and link graph describe" value={activeDevice} onChange={(e) => void switchDevice(e.target.value)}
+              className="h-8 rounded bg-slate-950 border border-slate-700 px-2 text-slate-100" title="Records of every device stay in the case; this chooses which device the owner profile, link graph and alerts describe.">
+              {devices.map((d) => <option key={d.item_id} value={d.item_id}>{d.label || d.item_id}{d.model && d.model !== 'Not recorded' ? ` (${d.model})` : ''}</option>)}
+            </select>
+          </label>
+        )}
         <span className="flex items-center gap-1.5 text-slate-300" title={`Backend: ${health.status}`}>
           <span className={`w-2 h-2 rounded-full ${online ? 'bg-emerald-400' : checking ? 'bg-slate-500' : 'bg-rose-400'}`} aria-hidden="true" />
           {online ? 'Engine ready' : checking ? 'Engine starting' : 'Engine not reachable'}

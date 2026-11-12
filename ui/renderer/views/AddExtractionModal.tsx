@@ -12,6 +12,7 @@ import {
 import { forensicClient } from '../api/forensicClient';
 import { useWorkbenchStore } from '../state/workbenchStore';
 import { KeyEntry, KeyRow, keysFromRows } from '../inspectors/KeyBrokerPanel';
+import { IngestProgressPanel } from './IngestProgressPanel';
 
 interface AddExtractionModalProps {
   isOpen: boolean;
@@ -103,7 +104,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
     abortControllerRef.current = controller;
 
     setIsProcessing(true);
-    setFeedback({ type: 'info', message: 'Computing SHA-256 integrity seal and streaming forensic artifacts...' });
+    setFeedback({ type: 'info', message: 'Reading the evidence. The steps are shown below as the tool reaches them.' });
 
     try {
       const res = await forensicClient.ingestCase(
@@ -265,6 +266,8 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
               Universal Forensic Data Report UFDR (<span className="text-slate-300">.ufdr, .ufd</span>), Physical TAR images (<span className="text-slate-300">.tar, .tar.gz</span>), ZIP containers (<span className="text-slate-300">.zip</span>), XRY (<span className="text-slate-300">.xry</span>), Oxygen (<span className="text-slate-300">.ofb</span>), and extracted SQLite databases (<span className="text-slate-300">.db, .sqlite, -wal</span>).
             </p>
           </div>
+
+          <IngestProgressPanel active={isProcessing} />
 
           {/* Feedback message */}
           {feedback && (
