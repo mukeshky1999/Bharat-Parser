@@ -3,7 +3,7 @@ Section 63(4)(c) BSA 2023 Statutory Certificate Generator (Sub-Engine 8.3B).
 Populates Part A (Party/Custodian) and Part B (Forensic Expert) prescribed in the Schedule to the BSA, 2023.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import json
 from typing import Optional
 
@@ -78,7 +78,7 @@ class Section63BsaCertificateGenerator:
         rendered_pdf_sha256: Optional[str] = None,
     ) -> tuple[Section63BsaCertificateRecord, str]:
         """Generates statutory Part A + Part B Certificate Record and human-readable text."""
-        now_ist = datetime.now().strftime("%Y-%m-%d %H:%M:%S IST (+05:30)")
+        now_ist = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%Y-%m-%d %H:%M:%S IST (+05:30)")
         sec63_2_c_text = self.synthesize_sec63_2_c_clause(integrity_audit)
 
         deponent_dict = {

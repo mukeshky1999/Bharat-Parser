@@ -1224,6 +1224,9 @@ def analyze_image_ocr(req: OcrAnalyzeRequest):
         "extracted_amounts_inr": ocr_result.extracted_amounts_inr,
         "vpas": unique_vpas,
         "confidence_score": ocr_result.confidence_score,
+        # The score is fixed per matched rule (e.g. 0.95 when a PAN pattern is found). It is not the OCR
+        # engine's recognition confidence and says nothing about how accurate the text is.
+        "confidence_basis": "classification rule strength; not OCR recognition confidence",
     }
 
 
