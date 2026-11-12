@@ -410,3 +410,20 @@ def test_generic_classifier_does_not_invent_direction_status_counterparty_or_coo
         assert (recs["Amount"] > 0).all()
         assert not recs["Status"].eq("COMPLETED").any()
         assert not recs["Transaction_ID"].astype(str).str.startswith("GEN_").any()
+
+
+def test_ios_signal_rows_without_a_direction_column_are_not_labelled_incoming(tmp_path):
+    import sqlite3
+
+    from parsers.chat_social_privacy_parsers import parse_signal_database
+
+    db = tmp_path / "signal.sqlite"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE model_TSInteraction (uniqueId TEXT, uniqueThreadId TEXT, timestamp INTEGER, "
+                "receivedAtTimestamp INTEGER, body TEXT, authorId TEXT, expiresInSeconds INTEGER)")
+    con.execute("INSERT INTO model_TSInteraction VALUES ('u1','t1',1700000000000,1700000000000,'hi','+911234567890',0)")
+    con.commit()
+    con.close()
+    df = parse_signal_database(str(db))
+    assert len(df) == 1
+    assert df.iloc[0]["Direction"] == "UNKNOWN" and df.iloc[0]["Status"] == "UNKNOWN"
