@@ -69,6 +69,8 @@ from parsers.multi_source_fusion import (
     reconcile_bank_statement_with_device,
 )
 from parsers.plugin_loader import PluginRegistry
+from parsers import examination_report
+from src.audit.ledger import AuditLedger, AuditTamperError
 from parsers.ui_fts5_paginator import CaseUIPaginatorStore
 from tools.forensic_benchmark_recorder import ForensicBenchmarkRecorder
 from src.chat_reconstructor_and_redline.myers_redline_engine import MyersRedlineEngine
@@ -179,6 +181,68 @@ _case_state: Dict[str, Any] = {
 _thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 _ingest_lock = asyncio.Lock()
 _benchmark_lock = asyncio.Lock()
+
+TOOL_VERSION = "2.0.0"
+_audit_cache: Dict[str, AuditLedger] = {}
+_log = __import__("logging").getLogger("bharat.api")
+
+
+def _get_audit():
+    """The audit ledger of the loaded case, or (None, reason). The file sits beside the case database."""
+    cid = str(_case_state.get("case_id") or "").strip()
+    if not cid:
+        return None, "No case is loaded."
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", cid)[:80]
+    path = os.path.join(os.path.dirname(os.path.abspath(_active_store.db_path)), f"audit_{safe}.jsonl")
+    led = _audit_cache.get(path)
+    if led is None:
+        try:
+            led = AuditLedger(cid, path)
+        except AuditTamperError as exc:
+            return None, f"Audit log failed verification: {exc}"
+        _audit_cache[path] = led
+    return led, ""
+
+
+def _audit_event(action: str, payload: Optional[Dict[str, Any]] = None) -> None:
+    led, err = _get_audit()
+    if led is None:
+        _log.error("audit event %s not recorded: %s", action, err)
+        return
+    actor = str(_case_state.get("examiner_name") or "").strip() or "examiner (name not entered)"
+    led.append(actor, action, payload or {})
+
+
+def _tool_environment() -> Dict[str, Any]:
+    import platform
+    commit = os.environ.get("BHARAT_BUILD_COMMIT", "")
+    if not commit:
+        try:
+            import subprocess
+            commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, timeout=3,
+                                    cwd=os.path.dirname(os.path.abspath(__file__))).stdout.strip()
+        except Exception:
+            commit = ""
+    return {
+        "Tool": "BharatAnalyzer",
+        "Tool version": TOOL_VERSION,
+        "Build commit": commit or examination_report.NOT_RECORDED,
+        "Python": platform.python_version(),
+        "Operating system": f"{platform.system()} {platform.release()}",
+    }
+
+
+def _audit_summary() -> Dict[str, Any]:
+    led, err = _get_audit()
+    if led is None:
+        return {"entries": [], "verified": False, "error": err, "head_hash": ""}
+    res = led.verify()
+    return {
+        "entries": [{"seq": e.seq, "ts_utc": e.ts_utc, "ts_ist": e.ts_ist, "actor": e.actor, "action": e.action,
+                     "payload": json.loads(e.payload_json), "hash": e.hash} for e in led.entries],
+        "verified": res.ok, "error": res.error, "head_hash": res.head_hash,
+    }
+
 
 
 # ------------------------------------------------------------------------------
@@ -898,6 +962,12 @@ def _execute_ingestion_pipeline(
         },
     }
 
+    _audit_event("evidence_ingested", {
+        "evidence": os.path.basename(abs_evidence),
+        "sha256_before": hashes.get("sha256"), "sha256_after": hashes.get("postIngestionSha256"),
+        "integrity_match": hashes.get("integrityMatch"),
+        "steps_failed": sum(1 for x in processing_log if x.get("status") == "FAILED"),
+    })
     return {
         "success": True,
         "case_id": case_id,
@@ -1025,6 +1095,7 @@ def pin_finding(body: FindingIn):
             )
     finally:
         conn.close()
+    _audit_event("finding_pinned", {"kind": body.kind[:40], "record_id": body.record_id[:200]})
     return list_findings()
 
 
@@ -1038,6 +1109,7 @@ def unpin_finding(finding_id: int):
             conn.execute("DELETE FROM findings WHERE id=? AND case_id=?", (finding_id, str(_case_state["case_id"])))
     finally:
         conn.close()
+    _audit_event("finding_removed", {"finding_id": finding_id})
     return list_findings()
 
 
@@ -1917,6 +1989,71 @@ def _build_sec63_response(officer: Optional[Dict[str, Any]] = None):
     )
 
 
+class ReportParticulars(BaseModel):
+    case_number: Optional[str] = ""
+    agency: Optional[str] = ""
+    examiner_name: Optional[str] = ""
+    designation: Optional[str] = ""
+    requesting_officer: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+def _require_case() -> None:
+    if not _case_state.get("loaded"):
+        raise HTTPException(status_code=412, detail="Open evidence first. A report is built only from a loaded case.")
+
+
+def _report_facts(particulars: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    _require_case()
+    parts = dict(particulars or {})
+    # Fall back to what was entered when the evidence was opened; never to a placeholder.
+    if not parts.get("examiner_name"):
+        parts["examiner_name"] = _case_state.get("examiner_name") or ""
+    if not parts.get("agency"):
+        parts["agency"] = _case_state.get("agency_name") or ""
+    findings = list_findings()["findings"]
+    return examination_report.build_facts(
+        _case_state, _active_store.get_project_tree_counts(), findings, _audit_summary(), parts, _tool_environment()
+    )
+
+
+_NO_STORE = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
+
+
+@app.post("/api/report/examination")
+def examination_report_post(req: ReportParticulars):
+    """Examination report (HTML): recorded facts, limitations, pinned findings and the audit log. No legal wording."""
+    _require_case()
+    # Record the generation first, then render, so the audit section lists it.
+    _audit_event("report_generated", {"kind": "examination_report"})
+    facts = _report_facts(req.model_dump(exclude_none=True))
+    return Response(
+        content=examination_report.render_report_html(facts), media_type="text/html; charset=utf-8",
+        headers={**_NO_STORE, "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline';",
+                 "Content-Disposition": 'inline; filename="examination_report.html"'},
+    )
+
+
+@app.get("/api/report/facts")
+def report_facts(format: str = Query("json", pattern="^(json|csv)$")):
+    """The facts annexure as JSON or CSV, for copying into the lab's own forms."""
+    _require_case()
+    _audit_event("report_generated", {"kind": "facts_annexure", "format": format})
+    facts = _report_facts(None)
+    if format == "csv":
+        return Response(content=examination_report.render_facts_csv(facts), media_type="text/csv; charset=utf-8",
+                        headers={**_NO_STORE, "Content-Disposition": 'attachment; filename="case_facts.csv"'})
+    return Response(content=examination_report.render_facts_json(facts), media_type="application/json",
+                    headers={**_NO_STORE, "Content-Disposition": 'attachment; filename="case_facts.json"'})
+
+
+@app.get("/api/audit")
+def get_audit_log():
+    if not _case_state.get("loaded"):
+        raise HTTPException(status_code=412, detail="No case is loaded.")
+    return _audit_summary()
+
+
 @app.get("/api/report/sec63-bsa")
 def generate_sec63_bsa_certificate():
     """Section 63(4)(c) BSA certificate generated only from facts recorded for the loaded case."""
@@ -2286,6 +2423,7 @@ async def open_case_workspace(req: CaseOpenRequest):
             "workspace_dir": ws,
         }
 
+    _audit_event("case_opened", {"workspace": os.path.basename(str(ws))})
     return CaseOpenResponse(
         success=True,
         workspace=_active_store.case_workspace,
