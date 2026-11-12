@@ -149,6 +149,21 @@ def _get_columns(conn: sqlite3.Connection, table_name: str) -> Set[str]:
         return set()
 
 
+def _flag(value: Any) -> Optional[int]:
+    """A 0/1 direction flag. A NULL (or anything that is not 0/1) is unknown, not 0 (L-08)."""
+    if value is None or isinstance(value, bool):
+        return None if value is None else int(value)
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if n in (0, 1) else None
+
+
+def _direction(flag: Optional[int]) -> str:
+    return 'Outgoing' if flag == 1 else ('Incoming' if flag == 0 else 'Unknown')
+
+
 def _empty_pa_row(
     app: str,
     source_file: str,
@@ -1554,7 +1569,7 @@ def parse_whatsapp_full_forensics(
                     mid = r.get('key_id') or r.get('m_rowid') or 0
                     text = str(r.get('text_data') or r.get('data') or '').strip()
                     mtype = int(r.get('message_type') or 0)
-                    from_me = int(r.get('from_me') if r.get('from_me') is not None else (r.get('key_from_me') or 0))
+                    from_me = _flag(r.get('from_me') if r.get('from_me') is not None else r.get('key_from_me'))
                     ts_raw = r.get('timestamp') or r.get('received_timestamp')
 
                     # Determine Type & Ephemeral Flags
@@ -1598,7 +1613,7 @@ def parse_whatsapp_full_forensics(
                     row = _empty_pa_row('WhatsApp', db_path, 'message', mid, f"RowID={r.get('m_rowid', mid)}")
                     row['Thread_ID'] = chat_jid
                     row['Chat_Type'] = 'Group Chat' if is_group else 'Direct (1-on-1)'
-                    row['Direction'] = 'Outgoing' if from_me == 1 else 'Incoming'
+                    row['Direction'] = _direction(from_me)
                     row['Message_Type'] = mtype_desc
                     if from_me == 1:
                         if r.get('read_ts') or wa_status in (13, 14, 8):
@@ -1611,14 +1626,16 @@ def parse_whatsapp_full_forensics(
                             delivery = 'Pending/Unsent'
                         else:
                             delivery = 'Unknown'
-                    else:
+                    elif from_me == 0:
                         delivery = 'Received'
+                    else:
+                        delivery = 'Unknown'
                     row['Delivery_Status'] = delivery
                     row['Message_Body'] = text or f"[{mtype_desc}]"
                     row['Quoted_Text'] = str(r.get('quoted_body') or '')
                     row['Thread_Title'] = chat_jid.split('@')[0]
-                    row['Sender_Identifier'] = 'Owner' if from_me == 1 else sender
-                    row['Recipient_Identifier'] = chat_jid if from_me == 1 else 'Owner'
+                    row['Sender_Identifier'] = 'Owner' if from_me == 1 else (sender if from_me == 0 else 'Unknown')
+                    row['Recipient_Identifier'] = chat_jid if from_me == 1 else ('Owner' if from_me == 0 else 'Unknown')
                     row['Is_View_Once'] = is_view_once
                     row['Is_Revoked_Deleted'] = is_revoked
                     row['Disappearing_TTL_Sec'] = int(r.get('ephemeral_expire') or 0)
@@ -1650,19 +1667,19 @@ def parse_whatsapp_full_forensics(
                         cr = dict(cr_raw)
                         cid = cr.get('call_id') or cr.get('cl_rowid') or 0
                         peer = str(cr.get('peer_jid') or '')
-                        is_out = int(cr.get('from_me') or 0)
+                        is_out = _flag(cr.get('from_me'))
                         dur = int(cr.get('duration') or 0)
                         res_val = int(cr.get('call_result') or 0)
                         is_vid = int(cr.get('video_call') or 0)
 
                         c_row = _empty_pa_row('WhatsApp', db_path, 'call_log', cid, f"RowID={cr.get('cl_rowid', cid)}")
                         c_row['Thread_ID'] = peer
-                        c_row['Direction'] = 'Outgoing' if is_out == 1 else 'Incoming'
+                        c_row['Direction'] = _direction(is_out)
                         c_row['Message_Type'] = 'VoIP Call'
                         c_row['Delivery_Status'] = 'Connected Call' if dur > 0 else 'Missed Call'
                         c_row['Message_Body'] = f"WhatsApp {'Video' if is_vid else 'Voice'} Call ({dur}s, Result={res_val})"
-                        c_row['Sender_Identifier'] = 'Owner' if is_out == 1 else peer
-                        c_row['Recipient_Identifier'] = peer if is_out == 1 else 'Owner'
+                        c_row['Sender_Identifier'] = 'Owner' if is_out == 1 else (peer if is_out == 0 else 'Unknown')
+                        c_row['Recipient_Identifier'] = peer if is_out == 1 else ('Owner' if is_out == 0 else 'Unknown')
                         raw_ts, utc_ts, ist_ts = format_timestamp_triplet(cr.get('timestamp'), epoch_hint='unix_ms')
                         c_row['Raw_Timestamp_Value'] = raw_ts
                         c_row['Timestamp_UTC'] = utc_ts
@@ -1689,19 +1706,19 @@ def parse_whatsapp_full_forensics(
                     pk = r.get('Z_PK')
                     text = str(r.get('ZTEXT') or '').strip()
                     mtype = int(r.get('ZMESSAGETYPE') or 0)
-                    from_me = int(r.get('ZISFROMME') or 0)
+                    from_me = _flag(r.get('ZISFROMME'))
                     date_val = r.get('ZMESSAGEDATE')
                     jid = str(r.get('ZCONTACTJID') or '')
 
                     row = _empty_pa_row('WhatsApp', db_path, 'ZWAMESSAGE', pk, f"Z_PK={pk}")
                     row['Thread_ID'] = jid
                     row['Chat_Type'] = 'Group Chat' if '@g.us' in jid else 'Direct (1-on-1)'
-                    row['Direction'] = 'Outgoing' if from_me == 1 else 'Incoming'
+                    row['Direction'] = _direction(from_me)
                     row['Message_Type'] = 'Text' if mtype == 0 else ('Media' if mtype in (1, 2, 3) else 'System')
                     row['Message_Body'] = text or f"[iOS WhatsApp Message type={mtype}]"
                     row['Thread_Title'] = jid.split('@')[0]
-                    row['Sender_Identifier'] = 'Owner' if from_me == 1 else jid
-                    row['Recipient_Identifier'] = jid if from_me == 1 else 'Owner'
+                    row['Sender_Identifier'] = 'Owner' if from_me == 1 else (jid if from_me == 0 else 'Unknown')
+                    row['Recipient_Identifier'] = jid if from_me == 1 else ('Owner' if from_me == 0 else 'Unknown')
 
                     raw_ts, utc_ts, ist_ts = format_timestamp_triplet(date_val, epoch_hint='cocoa')
                     row['Raw_Timestamp_Value'] = raw_ts
@@ -2000,13 +2017,13 @@ def parse_zangi_database(db_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
                     r = dict(r_raw)
                     mid = r.get('id') or r.get('_rowid') or 0
                     body = str(r.get('body') or '').strip()
-                    is_out = int(r.get('is_outgoing') or 0)
+                    is_out = _flag(r.get('is_outgoing'))
                     sender_num = str(r.get('sender_number') or '')
                     date_val = r.get('date')
 
                     row = _empty_pa_row('Zangi Messenger', db_path, 'messages', mid, f"RowID={r.get('_rowid', mid)}")
                     row['Thread_ID'] = sender_num
-                    row['Direction'] = 'Outgoing' if is_out == 1 else 'Incoming'
+                    row['Direction'] = _direction(is_out)
                     row['Message_Body'] = body or '[Zangi Message]'
                     row['Sender_Identifier'] = f"Zangi_ID:{sender_num}"
                     row['Thread_Title'] = f"Zangi ({sender_num})"
@@ -2027,13 +2044,13 @@ def parse_zangi_database(db_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
                     r = dict(r_raw)
                     pk = r.get('Z_PK')
                     text = str(r.get('ZTEXT') or '').strip()
-                    is_out = int(r.get('ZISOUTGOING') or 0)
+                    is_out = _flag(r.get('ZISOUTGOING'))
                     znum = str(r.get('ZSENDERZANGINUMBER') or '')
                     date_val = r.get('ZDATE')
 
                     row = _empty_pa_row('Zangi Messenger', db_path, 'ZMESSAGE', pk, f"Z_PK={pk}")
                     row['Thread_ID'] = znum
-                    row['Direction'] = 'Outgoing' if is_out == 1 else 'Incoming'
+                    row['Direction'] = _direction(is_out)
                     row['Message_Body'] = text or '[Zangi Encrypted CoreData Frame]'
                     row['Sender_Identifier'] = f"Zangi_ID:{znum}"
                     row['Thread_Title'] = f"Zangi ({znum})"
@@ -2235,12 +2252,12 @@ def parse_privacy_messengers(
                         mid = r.get('id') or r.get('_rowid') or 0
                         tid = str(r.get('identity') or '')
                         body = str(r.get('body') or '').strip()
-                        is_out = int(r.get('is_outbox') or 0)
+                        is_out = _flag(r.get('is_outbox'))
 
                         row = _empty_pa_row('Threema', db_path, 'message', mid, f"RowID={r.get('_rowid', mid)}")
                         row['Thread_ID'] = tid
-                        row['Sender_Identifier'] = 'Owner' if is_out == 1 else f"Threema_ID:{tid}"
-                        row['Direction'] = 'Outgoing' if is_out == 1 else 'Incoming'
+                        row['Sender_Identifier'] = 'Owner' if is_out == 1 else (f"Threema_ID:{tid}" if is_out == 0 else 'Unknown')
+                        row['Direction'] = _direction(is_out)
                         row['Message_Body'] = body or '[Threema Encrypted Message]'
                         raw_ts, utc_ts, ist_ts = format_timestamp_triplet(r.get('created_at'), epoch_hint='unix_ms')
                         row['Raw_Timestamp_Value'] = raw_ts
