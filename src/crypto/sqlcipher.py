@@ -7,7 +7,7 @@ import hmac as py_hmac
 import logging
 import os
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
@@ -29,6 +29,40 @@ class SQLCipherProfile:
     hmac_algorithm: str  # "SHA512", "SHA1", "NONE"
     kdf_algorithm: str   # "SHA512", "SHA1"
     kdf_iterations: int
+
+
+@dataclass
+class DecryptionReport:
+    """What was checked while decrypting, so the caller can state it. Nothing here is inferred."""
+    profile: str = ""
+    # True when the profile has a per-page HMAC and every page was checked against it.
+    mac_checked: bool = False
+    db_pages: int = 0
+    # Database pages whose HMAC did not match. They are written as decrypted but are NOT authenticated.
+    db_pages_failed_mac: List[int] = field(default_factory=list)
+    wal_frames_total: int = 0
+    wal_frames_written: int = 0
+    # Frames after the first bad one are not written: SQLite itself stops reading a WAL there.
+    wal_frames_rejected: int = 0
+    wal_stop_reason: str = ""
+    failure: str = ""
+
+
+def _page_mac_ok(page: bytes, page_no: int, prof: "SQLCipherProfile", k_mac: bytes) -> Optional[bool]:
+    """True/False for the page's HMAC; None when the profile has no HMAC."""
+    if prof.hmac_algorithm == "NONE":
+        return None
+    R = prof.reserve_size
+    mac_len = 64 if prof.hmac_algorithm == "SHA512" else 32
+    start = 16 if page_no == 1 else 0
+    ciphertext = page[start:prof.page_size - R]
+    iv = page[prof.page_size - R:prof.page_size - R + 16]
+    expected = page[prof.page_size - R + 16:prof.page_size - R + 16 + mac_len]
+    h = hmac.HMAC(k_mac, hashes.SHA512() if prof.hmac_algorithm == "SHA512" else hashes.SHA1())
+    h.update(ciphertext)
+    h.update(iv)
+    h.update(struct.pack("<I", page_no))
+    return py_hmac.compare_digest(h.finalize()[:mac_len], expected)
 
 
 STANDARD_PROFILES: List[SQLCipherProfile] = [
@@ -94,6 +128,7 @@ class SQLCipherDecryptor:
 
     def __init__(self):
         self.active_profile: Optional[SQLCipherProfile] = None
+        self.last_report: DecryptionReport = DecryptionReport()
 
     def derive_keys(
         self,
@@ -231,8 +266,10 @@ class SQLCipherDecryptor:
         enc_db = Path(encrypted_db_path)
         out_db = Path(output_db_path)
         out_db.parent.mkdir(parents=True, exist_ok=True)
+        report = self.last_report = DecryptionReport()
 
         if not enc_db.exists():
+            report.failure = "encrypted file not found"
             return False, 0
 
         with open(enc_db, "rb") as f_in:
@@ -240,19 +277,35 @@ class SQLCipherDecryptor:
 
         probe_result = None
         if forced_profile:
+            # A forced profile skips the search over profiles, not the checks: page 1 must still authenticate
+            # (or, for a profile without HMAC, decrypt to a plausible SQLite header). A wrong key or profile
+            # used to produce a garbage file reported as success.
             salt_enc = first_chunk[:16]
             k_enc, k_mac = self.derive_keys(raw_key_material, salt_enc, forced_profile)
-            probe_result = (forced_profile, k_enc, k_mac)
-            self.active_profile = forced_profile
+            ok = False
+            if len(first_chunk) >= forced_profile.page_size:
+                p1 = first_chunk[:forced_profile.page_size]
+                mac = _page_mac_ok(p1, 1, forced_profile, k_mac)
+                if mac is not False:
+                    R1 = forced_profile.reserve_size
+                    dec = Cipher(algorithms.AES(k_enc), modes.CBC(p1[forced_profile.page_size - R1:forced_profile.page_size - R1 + 16])).decryptor()
+                    plain = dec.update(p1[16:forced_profile.page_size - R1]) + dec.finalize()
+                    ok = plain[5:8] == b"\x40\x20\x20"
+            if ok:
+                probe_result = (forced_profile, k_enc, k_mac)
+                self.active_profile = forced_profile
         else:
             probe_result = self.probe_page1_profile(first_chunk, raw_key_material)
 
         if not probe_result:
+            report.failure = "key or profile did not authenticate page 1"
             return False, 0
 
         profile, k_enc, k_mac = probe_result
         page_size = profile.page_size
         R = profile.reserve_size
+        report.profile = profile.name
+        report.mac_checked = profile.hmac_algorithm != "NONE"
 
         # Decrypt Database Page-by-Page
         total_size = enc_db.stat().st_size
@@ -265,10 +318,14 @@ class SQLCipherDecryptor:
                 if len(p_bytes) < page_size:
                     break
 
+                report.db_pages += 1
                 # Pass through all-zero pages
                 if all(b == 0 for b in p_bytes):
                     f_out.write(b"\x00" * page_size)
                     continue
+
+                if _page_mac_ok(p_bytes, page_num, profile, k_mac) is False:
+                    report.db_pages_failed_mac.append(page_num)
 
                 page_iv = p_bytes[page_size - R:page_size - R + 16]
                 cipher = Cipher(algorithms.AES(k_enc), modes.CBC(page_iv))
@@ -305,6 +362,8 @@ class SQLCipherDecryptor:
                     k_enc=k_enc,
                     page_size=page_size,
                     reserve_size=R,
+                    profile=profile,
+                    k_mac=k_mac,
                 )
 
         return True, decrypted_wal_frames
@@ -315,12 +374,22 @@ class SQLCipherDecryptor:
         out_wal: Path,
         k_enc: bytes,
         page_size: int,
-        reserve_size: int
+        reserve_size: int,
+        profile: Optional[SQLCipherProfile] = None,
+        k_mac: bytes = b"",
     ) -> int:
-        """Decrypts WAL file frame-by-frame and recomputes SQLite cumulative checksums."""
+        """Decrypts the WAL frame by frame.
+
+        A frame is accepted only if its salts equal the WAL header's and, where the profile has an HMAC, its HMAC
+        verifies. At the first frame that fails, writing stops (SQLite also stops reading there) and the rest are
+        counted as rejected in ``last_report``. The cumulative checksums in the output file are NEW values computed
+        over the decrypted pages; the original checksum chain is not reproduced and was not verified here.
+        """
+        report = self.last_report
         wal_size = enc_wal.stat().st_size
         frame_size = 24 + page_size
         total_frames = (wal_size - 32) // frame_size
+        report.wal_frames_total = max(total_frames, 0)
         if total_frames <= 0:
             return 0
 
@@ -328,6 +397,7 @@ class SQLCipherDecryptor:
             # 1. 32-byte WAL Header is unencrypted
             wal_hdr = f_in.read(32)
             f_out.write(wal_hdr)
+            wal_salts = wal_hdr[16:24]
 
             # Extract initial cumulative checksum seed and endianness
             magic = struct.unpack(">I", wal_hdr[:4])[0]
@@ -345,6 +415,13 @@ class SQLCipherDecryptor:
                 page_num = struct.unpack(">I", f_hdr[:4])[0]
                 frame_payload = f_in.read(page_size)
                 if len(frame_payload) < page_size:
+                    break
+
+                if f_hdr[8:16] != wal_salts:
+                    report.wal_stop_reason = f"frame {i}: salts differ from the WAL header (stale frame from an earlier WAL generation)"
+                    break
+                if profile is not None and _page_mac_ok(frame_payload, page_num, profile, k_mac) is False:
+                    report.wal_stop_reason = f"frame {i}: HMAC does not verify (torn, altered or wrong key)"
                     break
 
                 # Decrypt frame payload
@@ -374,4 +451,6 @@ class SQLCipherDecryptor:
                 f_out.write(updated_hdr + decrypted_page)
                 decrypted_count += 1
 
+            report.wal_frames_written = decrypted_count
+            report.wal_frames_rejected = total_frames - decrypted_count
             return decrypted_count

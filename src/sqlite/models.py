@@ -74,6 +74,8 @@ class RecoveredRecord:
     recovered_row_uid: Optional[int] = None
     db_profile_id: Optional[int] = None
     evidentiary_state: Optional[EvidentiaryState] = None
+    # Names of columns whose bytes were cut off (value is None, meaning unknown). None = nothing was cut off.
+    truncated_columns: Optional[List[str]] = None
 
     @property
     def columns_json(self) -> str:

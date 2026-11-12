@@ -191,15 +191,18 @@ def format_timestamp_triplet(
 
         num = float(raw_val)
 
-        # Windows FILETIME 100ns (ticks > 116444736000000000) or explicit hint
-        if norm_epoch in ("filetime", "windows_filetime") or (norm_epoch == "auto" and num > 116444736000000000):
+        # Auto-detection works on windows that do not overlap for the years 1970 to 2100. A hint always wins.
+        #   Windows FILETIME (100 ns since 1601): 1.1644e17 up to 2.5e17
+        #   Unix nanoseconds:                     2.5e17 and above (a modern value is about 1.7e18)
+        #   WebKit microseconds since 1601:       1.1644e16 up to 2.5e16
+        # The nanosecond test used to come after "> 1.16e17 is FILETIME", so a Unix-nanosecond value (about 1.7e18)
+        # was read as FILETIME and landed in the year 7000 or failed.
+        if norm_epoch in ("filetime", "windows_filetime") or (norm_epoch == "auto" and 116444736000000000 <= num < 2.5e17):
             unix_sec = (num / 10_000_000.0) - WEBKIT_FILETIME_DIFF_SECONDS
-        # WebKit microseconds (> 11644473600000000) or explicit hint
-        elif norm_epoch in ("webkit", "chrome") or (norm_epoch == "auto" and num > 11644473600000000):
-            unix_sec = (num / 1e6) - WEBKIT_FILETIME_DIFF_SECONDS
-        # Unix nanoseconds (> 1e17)
-        elif norm_epoch in ("unix_ns", "ns") or (norm_epoch == "auto" and num > 1e17):
+        elif norm_epoch in ("unix_ns", "ns") or (norm_epoch == "auto" and num >= 2.5e17):
             unix_sec = num / 1e9
+        elif norm_epoch in ("webkit", "chrome") or (norm_epoch == "auto" and 11644473600000000 <= num < 2.5e16):
+            unix_sec = (num / 1e6) - WEBKIT_FILETIME_DIFF_SECONDS
         # Unix microseconds (> 1e14)
         elif norm_epoch in ("unix_us", "unix_micro", "us") or (norm_epoch == "auto" and num > 1e14):
             unix_sec = num / 1e6
@@ -209,6 +212,11 @@ def format_timestamp_triplet(
         # Cocoa CoreData seconds (typically between 100000000 and 1500000000)
         elif norm_epoch in ("cocoa", "cocoa_sec"):
             unix_sec = num + COCOA_EPOCH_DIFF_SECONDS
+        elif norm_epoch == "auto" and 1e8 <= num < 1.2e9:
+            # Plain seconds in this band are a 2004 to 2008 date read as Unix, or a 2004 to 2038 date read as Cocoa.
+            # No phone produced a Unix value this early, and a Cocoa value (iOS) fits better, but the number alone
+            # does not say which. The time is left unknown; the caller can pass the epoch it knows.
+            return (raw_val, "", "")
         else:
             unix_sec = num
 
@@ -220,4 +228,6 @@ def format_timestamp_triplet(
             dt_ist.strftime("%Y-%m-%d %H:%M:%S IST (+05:30)"),
         )
     except Exception:
-        return (raw_val, str(raw_val), str(raw_val))
+        # A value that cannot be converted gives no UTC or IST time. It used to put the raw number in both fields,
+        # which then read as a converted time.
+        return (raw_val, "", "")

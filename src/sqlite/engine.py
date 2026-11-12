@@ -164,6 +164,16 @@ def parse_create_table_sql(sql: str) -> Tuple[str, List[ColumnSchema], bool, Opt
     return table_name, columns, is_without_rowid, ipk_column_name
 
 
+_CLASS_RANK = {
+    ResidualConfidence.ORIGINAL_RECORD: 1.0,
+    ResidualConfidence.HISTORICAL_COMMITTED_RECORD: 0.8,
+    ResidualConfidence.RESIDUAL_RECORD: 0.6,
+    ResidualConfidence.PARTIAL_RECORD: 0.4,
+    ResidualConfidence.RECONSTRUCTED_RECORD: 0.3,
+    ResidualConfidence.UNVERIFIED_FRAGMENT: 0.1,
+}
+
+
 class ForensicSQLiteEngine:
     """Master forensic SQLite recovery engine for live, WAL, journal, and residual records."""
 
@@ -350,7 +360,7 @@ class ForensicSQLiteEngine:
         # Step 6: Process Rollback Journal if present
         journal_records: List[RecoveredRecord] = []
         if journal_file and journal_file.exists() and journal_file.stat().st_size >= 28:
-            j_reader = RollbackJournalReader(journal_file)
+            j_reader = RollbackJournalReader(journal_file, db_page_size=page_size)
             j_pages = j_reader.read_all_pages()
             for j_page in j_pages:
                 jp_bytes = j_page.page_data
@@ -375,6 +385,7 @@ class ForensicSQLiteEngine:
                     base_file_offset=j_page.file_byte_offset,
                 )
 
+                cks = {True: "VALID", False: "INVALID", None: "NOT_CHECKABLE"}[j_page.checksum_valid]
                 for rec in j_recs:
                     row_key = (tbl.name, rec.sqlite_rowid) if rec.sqlite_rowid is not None else None
                     if row_key and row_key in live_rows_map:
@@ -383,10 +394,11 @@ class ForensicSQLiteEngine:
                             rec.diff_vs_active = {
                                 "status": "ROLLBACK_PRE_TRANSACTION_STATE",
                                 "current_live": live_rec.columns_dict,
+                                "journal_checksum": cks,
                             }
                             journal_records.append(rec)
                     else:
-                        rec.diff_vs_active = {"status": "ROLLBACK_PRE_TRANSACTION_STATE"}
+                        rec.diff_vs_active = {"status": "ROLLBACK_PRE_TRANSACTION_STATE", "journal_checksum": cks}
                         journal_records.append(rec)
 
         # Step 7: Residual Carving (Zone 1: Freeblocks, Zone 2: Gaps, Zone 3: Freelist, Zone 4: Post-EOF)
@@ -463,6 +475,12 @@ class ForensicSQLiteEngine:
 
         # Assign EvidentiaryState to each record
         for rec in all_recovered:
+            # An ordinal rank taken from where the record was recovered, not a probability and not agreement between
+            # sources. It used to be 1.0 for every record, including guessed carved rows. A record with cut-off
+            # columns is capped at the lowest tier above an unverified fragment.
+            score = _CLASS_RANK.get(rec.recovery_classification, 0.1)
+            if rec.truncated_columns:
+                score = min(score, 0.3)
             storage_layer = (
                 EvidentiaryStorage.LIVE_RECORD
                 if rec.recovery_classification == ResidualConfidence.ORIGINAL_RECORD
@@ -475,7 +493,7 @@ class ForensicSQLiteEngine:
                 access=EvidentiaryAccess.PLAINTEXT,
                 storage_layer=storage_layer,
                 provenance_pointer=f"page={rec.source_page_number};offset={rec.source_byte_offset}",
-                corroboration_score=1.0,
+                corroboration_score=score,
                 linked_artifact_ids=[str(staging_id)],
                 forensic_group=ForensicGroup.G01_INGESTION_AND_OWNERSHIP,
             )
@@ -707,6 +725,7 @@ class ForensicSQLiteEngine:
                     full_payload = page_bytes[payload_start:payload_start + P]
 
                 col_values = decode_record(full_payload, text_encoding=text_encoding)
+                truncated_names = [tbl.columns[i].name for i in col_values.truncated if i < len(tbl.columns)] or None
                 cols_dict: Dict[str, Any] = {}
 
                 # Map column values to column names
@@ -726,6 +745,7 @@ class ForensicSQLiteEngine:
                     source_byte_offset=page_file_base + cell_off,
                     columns_dict=cols_dict,
                     wal_frame_number=wal_frame_num,
+                    truncated_columns=truncated_names,
                 )
                 records.append(rec)
             except Exception as exc:

@@ -140,6 +140,8 @@ class VFSIndexEntry:
     backup_file_id_sha1: Optional[str] = None
     is_encrypted_entry: int = 0
     file_id: Optional[int] = None
+    crc32: Optional[int] = None
+    zip_method: Optional[int] = None
 
 
 class VFSIndexer:
@@ -178,9 +180,15 @@ class VFSIndexer:
                 archive_data_offset INTEGER NOT NULL DEFAULT 0,
                 compression_method TEXT NOT NULL,
                 backup_file_id_sha1 TEXT,
-                is_encrypted_entry INTEGER DEFAULT 0
+                is_encrypted_entry INTEGER DEFAULT 0,
+                crc32 INTEGER,
+                zip_method INTEGER
             );
         """)
+        existing = {r[1] for r in cur.execute("PRAGMA table_info(vfs_index)")}
+        for col in ("crc32", "zip_method"):
+            if col not in existing:
+                cur.execute(f"ALTER TABLE vfs_index ADD COLUMN {col} INTEGER")
 
         cur.execute("CREATE INDEX IF NOT EXISTS idx_vfs_canonical_path ON vfs_index(canonical_path);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_vfs_parent_dir ON vfs_index(parent_dir_path);")
@@ -206,6 +214,13 @@ class VFSIndexer:
         """)
         conn.commit()
         conn.close()
+
+    def _next_container_id(self) -> int:
+        conn = sqlite3.connect(self.catalog_db_path)
+        try:
+            return int(conn.execute("SELECT COALESCE(MAX(container_id), 0) + 1 FROM container_sources").fetchone()[0])
+        finally:
+            conn.close()
 
     def index_archive(self, target_path: Union[str, Path], container_id: int) -> int:
         """
@@ -235,9 +250,11 @@ class VFSIndexer:
         elif fp_result.container_type == ContainerType.ANDROID_AB_BACKUP:
             return self._index_android_backup(path, container_id)
         elif fp_result.container_type == ContainerType.UFED_PACKAGE_DIR:
+            # Each payload gets its own container id. Sharing one id made the last payload overwrite the source
+            # path of the others, so earlier payloads' files were read from the wrong file.
             total = 0
             for payload in fp_result.payload_paths:
-                total += self.index_archive(payload, container_id)
+                total += self.index_archive(payload, self._next_container_id())
             return total
         else:
             return self._index_tar_uncompressed(path, container_id)
@@ -286,7 +303,9 @@ class VFSIndexer:
                         symlink_target=member.linkname if member.issym() else None,
                         uncompressed_size=member.size,
                         compressed_size=member.size,
-                        archive_data_offset=member.offset_data,
+                        # Compressed: offset inside the decompressed stream. Uncompressed: offset inside the file,
+                        # which is the header length plus the offset inside the tar stream.
+                        archive_data_offset=member.offset_data if ab_info.compressed else ab_info.data_offset + member.offset_data,
                         compression_method=CompressionMethod.ANDROID_AB_STREAM if ab_info.compressed else CompressionMethod.RAW_STORED,
                         backup_file_id_sha1=None,
                         is_encrypted_entry=0
@@ -489,7 +508,9 @@ class VFSIndexer:
                 if len(cd_header) < 46 or not cd_header.startswith(b"PK\x01\x02"):
                     break
 
+                gp_flags = struct.unpack("<H", cd_header[8:10])[0]
                 comp_method_raw = struct.unpack("<H", cd_header[10:12])[0]
+                entry_crc = struct.unpack("<I", cd_header[16:20])[0]
                 comp_size = struct.unpack("<I", cd_header[20:24])[0]
                 uncomp_size = struct.unpack("<I", cd_header[24:28])[0]
                 name_len = struct.unpack("<H", cd_header[28:30])[0]
@@ -526,14 +547,14 @@ class VFSIndexer:
                     pos += ef_len
 
                 # Determine compression enum
-                if comp_method_raw == 0:
-                    compression_method = CompressionMethod.RAW_STORED
-                elif comp_method_raw == 8:
-                    compression_method = CompressionMethod.ZIP_DEFLATE
-                elif comp_method_raw == 93:
-                    compression_method = CompressionMethod.ZIP_ZSTD
-                else:
-                    compression_method = CompressionMethod.ZIP_DEFLATE
+                # An unknown method is recorded as unknown. It used to be labelled deflate, which made the reader fail
+                # (or return still-compressed bytes) without saying why.
+                compression_method = {
+                    0: CompressionMethod.ZIP_STORED,
+                    8: CompressionMethod.ZIP_DEFLATE,
+                    12: CompressionMethod.ZIP_BZIP2,
+                    93: CompressionMethod.ZIP_ZSTD,
+                }.get(comp_method_raw, CompressionMethod.ZIP_UNSUPPORTED)
 
                 canonical = self.normalizer.normalize_path(filename_raw)
                 parent_dir = str(Path(canonical).parent).replace("\\", "/")
@@ -555,7 +576,9 @@ class VFSIndexer:
                     archive_data_offset=local_header_offset,
                     compression_method=compression_method,
                     backup_file_id_sha1=None,
-                    is_encrypted_entry=0
+                    is_encrypted_entry=1 if (gp_flags & 0x1) else 0,
+                    crc32=entry_crc,
+                    zip_method=comp_method_raw,
                 )
                 entries.append(entry)
 
@@ -568,11 +591,22 @@ class VFSIndexer:
         if not manifest_db_path.exists():
             return 0
 
-        conn = sqlite3.connect(manifest_db_path)
-        cur = conn.cursor()
-        cur.execute("SELECT fileID, domain, relativePath, flags, file FROM Files")
-        rows = cur.fetchall()
-        conn.close()
+        # Open a copy. Opening the evidence file read-write changed the hash of Manifest.db and deleted its WAL
+        # after a checkpoint. The copy includes -wal and -shm so committed rows still in the WAL are read.
+        import shutil
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix="manifest_") as tmp:
+            for suffix in ("", "-wal", "-shm"):
+                src_file = Path(str(manifest_db_path) + suffix)
+                if src_file.exists():
+                    shutil.copyfile(src_file, Path(tmp) / ("Manifest.db" + suffix))
+            conn = sqlite3.connect(Path(tmp) / "Manifest.db")
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT fileID, domain, relativePath, flags, file FROM Files")
+                rows = cur.fetchall()
+            finally:
+                conn.close()
 
         for file_id, domain, rel_path, flags, file_blob in rows:
             canonical = self.normalizer.normalize_ios_domain(domain, rel_path)
@@ -662,8 +696,8 @@ class VFSIndexer:
                 container_id, canonical_path, parent_dir_path, filename, file_extension,
                 original_raw_path, entry_type, symlink_target, uncompressed_size,
                 compressed_size, archive_data_offset, compression_method,
-                backup_file_id_sha1, is_encrypted_entry
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                backup_file_id_sha1, is_encrypted_entry, crc32, zip_method
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         total = len(entries)
@@ -685,7 +719,9 @@ class VFSIndexer:
                     e.archive_data_offset,
                     e.compression_method.value,
                     e.backup_file_id_sha1,
-                    e.is_encrypted_entry
+                    e.is_encrypted_entry,
+                    e.crc32,
+                    e.zip_method,
                 )
                 for e in batch
             ])

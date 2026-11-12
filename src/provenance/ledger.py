@@ -3,9 +3,18 @@ Provenance Ledger Database & Courtroom Audit Engine.
 Phase 1, Module 1.2, Section 6: Manages Product A, Product B, and Section 63(4)(c) BSA Chain of Custody Ledgers.
 """
 
+import hashlib
 import sqlite3
 from pathlib import Path
-from typing import Optional, Union, Dict, Any, List
+from typing import Optional, Tuple, Union, Dict, Any, List
+
+CUSTODY_GENESIS = hashlib.sha256(b"CUSTODY_GENESIS_V1").hexdigest()
+
+
+def _custody_hash(prev_hash: str, fields: Tuple[Any, ...]) -> str:
+    """Hash of one custody event, bound to the hash of the event before it."""
+    text = prev_hash + "\x1f" + "\x1f".join("" if f is None else str(f) for f in fields)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 class ProvenanceLedger:
@@ -98,8 +107,26 @@ class ProvenanceLedger:
                 action_type TEXT NOT NULL,
                 target_description TEXT NOT NULL,
                 input_sha256 TEXT,
-                output_sha256 TEXT
+                output_sha256 TEXT,
+                prev_hash TEXT,
+                entry_hash TEXT
             );
+        """)
+        # Databases made before hash chaining get the two columns; their old rows stay unchained (NULL) and
+        # verify_custody_chain() says so instead of claiming they are intact.
+        existing = {r[1] for r in cur.execute("PRAGMA table_info(chain_of_custody_audit_log)")}
+        for col in ("prev_hash", "entry_hash"):
+            if col not in existing:
+                cur.execute(f"ALTER TABLE chain_of_custody_audit_log ADD COLUMN {col} TEXT")
+        # Rows can only be added. This stops accidental or careless changes through this interface; it does not stop
+        # someone with the file from rebuilding the whole table, which is why the head hash is also printed in reports.
+        cur.execute("""
+            CREATE TRIGGER IF NOT EXISTS custody_no_update BEFORE UPDATE ON chain_of_custody_audit_log
+            BEGIN SELECT RAISE(ABORT, 'chain_of_custody_audit_log is append-only'); END;
+        """)
+        cur.execute("""
+            CREATE TRIGGER IF NOT EXISTS custody_no_delete BEFORE DELETE ON chain_of_custody_audit_log
+            BEGIN SELECT RAISE(ABORT, 'chain_of_custody_audit_log is append-only'); END;
         """)
 
         conn.commit()
@@ -226,24 +253,63 @@ class ProvenanceLedger:
         input_sha256: Optional[str] = None,
         output_sha256: Optional[str] = None
     ) -> int:
-        """Appends an immutable event to the courtroom audit ledger."""
+        """Appends an event. Each event carries the hash of the one before it (see verify_custody_chain)."""
         conn = self._get_connection()
+        conn.isolation_level = None
         cur = conn.cursor()
+        cur.execute("BEGIN IMMEDIATE;")
+        last = cur.execute(
+            "SELECT entry_hash FROM chain_of_custody_audit_log WHERE entry_hash IS NOT NULL ORDER BY event_id DESC LIMIT 1"
+        ).fetchone()
+        prev_hash = last["entry_hash"] if last else CUSTODY_GENESIS
+        fields = (event_utc_iso, software_version, workstation_hostname, action_type,
+                  target_description, input_sha256, output_sha256)
+        entry_hash = _custody_hash(prev_hash, fields)
         cur.execute("""
             INSERT INTO chain_of_custody_audit_log (
                 event_utc_iso, software_version, workstation_hostname,
-                action_type, target_description, input_sha256, output_sha256
-            ) VALUES (?, ?, ?, ?, ?, ?, ?);
-        """, (
-            event_utc_iso, software_version, workstation_hostname,
-            action_type, target_description, input_sha256, output_sha256
-        ))
+                action_type, target_description, input_sha256, output_sha256, prev_hash, entry_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, fields + (prev_hash, entry_hash))
         event_id = cur.lastrowid
-        conn.commit()
+        cur.execute("COMMIT;")
         conn.close()
         if event_id is None:
             raise RuntimeError("Failed to insert chain of custody event")
         return event_id
+
+    def custody_head_hash(self) -> str:
+        """Hash of the newest chained event; the value to print in a report."""
+        conn = self._get_connection()
+        try:
+            row = conn.execute(
+                "SELECT entry_hash FROM chain_of_custody_audit_log WHERE entry_hash IS NOT NULL ORDER BY event_id DESC LIMIT 1"
+            ).fetchone()
+        finally:
+            conn.close()
+        return row["entry_hash"] if row else CUSTODY_GENESIS
+
+    def verify_custody_chain(self) -> Dict[str, Any]:
+        """Recomputes every hash. Returns {ok, events, unchained, first_bad_event_id, head_hash}.
+
+        ``unchained`` counts events recorded before chaining existed; they are not covered by the check.
+        """
+        rows = self.get_chain_of_custody_events()
+        prev = CUSTODY_GENESIS
+        unchained = 0
+        bad: Optional[int] = None
+        for r in rows:
+            if r.get("entry_hash") is None:
+                unchained += 1
+                continue
+            fields = (r["event_utc_iso"], r["software_version"], r["workstation_hostname"], r["action_type"],
+                      r["target_description"], r["input_sha256"], r["output_sha256"])
+            if r["prev_hash"] != prev or _custody_hash(prev, fields) != r["entry_hash"]:
+                bad = r["event_id"]
+                break
+            prev = r["entry_hash"]
+        return {"ok": bad is None, "events": len(rows), "unchained": unchained,
+                "first_bad_event_id": bad, "head_hash": prev}
 
     def get_container_record(self, container_id: int) -> Optional[Dict[str, Any]]:
         """Retrieves container record by container_id."""

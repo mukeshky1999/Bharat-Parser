@@ -27,6 +27,22 @@ from src.core.enums import (
 )
 
 
+class VFSReadError(ValueError):
+    """A file in a container could not be returned as the evidence holds it. The reason is in the message."""
+
+
+class UnsupportedCompression(VFSReadError):
+    """The entry's compression method is not supported here; its content was not read."""
+
+
+class EncryptedEntry(VFSReadError):
+    """The entry is encrypted and no password was supplied."""
+
+
+class EntryIntegrityError(VFSReadError):
+    """The bytes read do not match the length or CRC the container records."""
+
+
 @dataclass(slots=True)
 class StagedSQLiteFamily:
     """Represents a materialized SQLite database family for safe forensic examination."""
@@ -60,10 +76,12 @@ class VFSReader:
         conn = self._get_connection()
         cur = conn.cursor()
 
-        if "%" in pattern_or_exact_path or "_" in pattern_or_exact_path:
+        if "%" in pattern_or_exact_path:
+            # "%" is the only wildcard. A "_" is a literal character: "msg_store.db" used to match "msgXstore.db".
+            escaped = pattern_or_exact_path.replace("\\", "\\\\").replace("_", "\\_")
             cur.execute(
-                "SELECT * FROM vfs_index WHERE canonical_path LIKE ? ORDER BY canonical_path",
-                (pattern_or_exact_path,)
+                "SELECT * FROM vfs_index WHERE canonical_path LIKE ? ESCAPE '\\' ORDER BY canonical_path",
+                (escaped,)
             )
         else:
             cur.execute(
@@ -111,7 +129,12 @@ class VFSReader:
                 data = f.read(uncomp_size)
             return io.BytesIO(data)
 
-        elif comp_method in (CompressionMethod.ZIP_DEFLATE.value, CompressionMethod.ZIP_ZSTD.value):
+        elif comp_method in (
+            CompressionMethod.ZIP_STORED.value, CompressionMethod.ZIP_DEFLATE.value, CompressionMethod.ZIP_ZSTD.value,
+            CompressionMethod.ZIP_BZIP2.value, CompressionMethod.ZIP_UNSUPPORTED.value,
+        ):
+            if row["is_encrypted_entry"]:
+                raise EncryptedEntry(f"{row['canonical_path']}: the ZIP entry is encrypted and no password was supplied")
             with open(container_path, "rb") as f:
                 f.seek(offset)
                 local_header = f.read(30)
@@ -122,12 +145,33 @@ class VFSReader:
                 f.seek(payload_offset)
                 raw_compressed = f.read(comp_size)
 
-            if comp_method == CompressionMethod.ZIP_DEFLATE.value:
-                # -15 raw deflate window bits
-                decompressor = zlib.decompressobj(-15)
-                decompressed = decompressor.decompress(raw_compressed)
-            else:
+            if comp_method == CompressionMethod.ZIP_STORED.value:
                 decompressed = raw_compressed
+            elif comp_method == CompressionMethod.ZIP_DEFLATE.value:
+                # -15 raw deflate window bits
+                decompressed = zlib.decompressobj(-15).decompress(raw_compressed)
+            elif comp_method == CompressionMethod.ZIP_BZIP2.value:
+                import bz2
+                decompressed = bz2.BZ2Decompressor().decompress(raw_compressed)
+            elif comp_method == CompressionMethod.ZIP_ZSTD.value:
+                try:
+                    import zstandard
+                except ImportError:
+                    raise UnsupportedCompression(
+                        f"{row['canonical_path']}: the entry uses Zstandard (ZIP method 93) and the zstandard "
+                        "package is not installed, so its content was not read") from None
+                decompressed = zstandard.ZstdDecompressor().decompress(raw_compressed, max_output_size=max(uncomp_size, 1))
+            else:
+                raise UnsupportedCompression(
+                    f"{row['canonical_path']}: ZIP compression method {row['zip_method']} is not supported, "
+                    "so its content was not read")
+
+            if len(decompressed) != uncomp_size:
+                raise EntryIntegrityError(
+                    f"{row['canonical_path']}: expected {uncomp_size} bytes, got {len(decompressed)}")
+            expected_crc = row["crc32"]
+            if expected_crc is not None and (zlib.crc32(decompressed) & 0xFFFFFFFF) != expected_crc:
+                raise EntryIntegrityError(f"{row['canonical_path']}: CRC-32 does not match the archive's record")
             return io.BytesIO(decompressed)
 
         elif comp_method == CompressionMethod.TAR_GZ_STREAM.value:
@@ -194,9 +238,10 @@ class VFSReader:
         cur.execute(
             """
             SELECT * FROM vfs_index
-            WHERE parent_dir_path = ? AND filename IN (?, ?, ?)
+            WHERE container_id = ? AND parent_dir_path = ? AND filename IN (?, ?, ?)
             """,
             (
+                primary_row["container_id"],
                 parent_dir,
                 f"{base_name}-wal",
                 f"{base_name}-journal",

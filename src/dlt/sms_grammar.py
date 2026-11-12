@@ -61,6 +61,17 @@ class FinancialSMSGrammarParser:
         "win cash",
     )
 
+    # Whole words only. Substrings caused "consent" to read as "sent" and "Account holder" as "hold".
+    _DEBIT_WORDS = re.compile(r"\b(debited|debit|withdrawn|paid|sent|transferred|spent|deducted|dr)\b", re.IGNORECASE)
+    _CREDIT_WORDS = re.compile(r"\b(credited|credit|received|deposited|refunded|cr)\b", re.IGNORECASE)
+    _LIEN_WORDS = re.compile(r"\b(lien|freeze|freezing|frozen|ncrp)\b", re.IGNORECASE)
+    _HOLD_WORD = re.compile(r"\bhold\b", re.IGNORECASE)
+    _CYBER_REF = re.compile(r"\b(cyber\s*crime|ack(?:nowledg\w+)?)\b", re.IGNORECASE)
+    _OTP_WORDS = re.compile(r"\b(otp|one time password|verification code|secret code)\b", re.IGNORECASE)
+    _ATM_WORDS = re.compile(r"\b(atm|cash withdrawal|cardless|yono cash)\b", re.IGNORECASE)
+    # A 12-digit number that is 91 + a ten-digit mobile number is a phone number, not a UTR.
+    _PHONE_WITH_91 = re.compile(r"^91[6-9]\d{9}$")
+
     def normalize_amount_str(self, amt_str: Optional[str]) -> Optional[float]:
         """Strips Indian commas and converts numeric string to float."""
         if not amt_str:
@@ -141,7 +152,7 @@ class FinancialSMSGrammarParser:
             num12_matches = self.UTR_NUMERIC_12_PATTERN.findall(norm_body)
             for cand12 in num12_matches:
                 # Disambiguate from mobile or timestamp
-                if cand12 != tail_digits and not cand12.startswith("17"):
+                if cand12 != tail_digits and not cand12.startswith("17") and not self._PHONE_WITH_91.match(cand12):
                     utr = cand12
                     break
 
@@ -175,7 +186,8 @@ class FinancialSMSGrammarParser:
         special_token: Optional[str] = None
 
         # Category 6: LIEN_HOLD_OR_FREEZE_ALERT
-        if any(k in body_lower for k in ("hold", "lien", "freeze", "frozen", "debit freeze", "cyber crime", "ncrp", "1930")):
+        # "call 1930 to report" is advice printed on ordinary alerts, so the number alone is not evidence of a hold.
+        if self._LIEN_WORDS.search(norm_body) or (self._HOLD_WORD.search(norm_body) and self._CYBER_REF.search(norm_body)):
             ncrp_match = self.NCRP_ACK_PATTERN.search(norm_body)
             if ncrp_match:
                 special_token = ncrp_match.group(1).strip()
@@ -199,7 +211,7 @@ class FinancialSMSGrammarParser:
             )
 
         # Category 3: ATM_CASH_WITHDRAWAL
-        if ("atm" in body_lower or "cash withdrawal" in body_lower or "cardless" in body_lower or "yono cash" in body_lower) and (
+        if self._ATM_WORDS.search(norm_body) and (
             "debited" in body_lower or "withdrawn" in body_lower
         ):
             loc_match = re.search(r"\b(?:at|ATM)\s+([A-Za-z0-9\s\-]+?)(?:\s+on|\.|$)", norm_body)
@@ -233,7 +245,7 @@ class FinancialSMSGrammarParser:
             )
 
         # Category 5: OTP_AUTHENTICATION_CODE
-        if any(k in body_lower for k in ("otp", "one time password", "verification code", "secret code")) and not any(
+        if self._OTP_WORDS.search(norm_body) and not any(
             k in body_lower for k in ("debited", "credited")
         ):
             otp_match = re.search(r"\b(\d{4,8})\b", norm_body)
@@ -262,8 +274,18 @@ class FinancialSMSGrammarParser:
                 utr_or_rrn_reference=utr,
             )
 
+        # Direction comes from the first explicit debit or credit word in the message. "A/c debited ... beneficiary
+        # credited" is a debit for the account holder; a message with neither word has no stated direction.
+        d_hit = self._DEBIT_WORDS.search(norm_body)
+        c_hit = self._CREDIT_WORDS.search(norm_body)
+        direction = None
+        if d_hit and (not c_hit or d_hit.start() < c_hit.start()):
+            direction = "DEBIT"
+        elif c_hit:
+            direction = "CREDIT"
+
         # Category 1: TX_DEBIT_OUTFLOW
-        if any(k in body_lower for k in ("debited", "paid", "sent", "transferred", "spent", "dr from", "deducted")):
+        if direction == "DEBIT":
             return ParsedFinancialSMSFields(
                 sms_event_category=FinancialSMSCategory.TX_DEBIT_OUTFLOW.value,
                 amount_inr_decimal=tx_amount,
@@ -276,7 +298,7 @@ class FinancialSMSGrammarParser:
             )
 
         # Category 2: TX_CREDIT_INFLOW
-        if any(k in body_lower for k in ("credited", "received", "deposited", "cr to", "refunded")):
+        if direction == "CREDIT":
             return ParsedFinancialSMSFields(
                 sms_event_category=FinancialSMSCategory.TX_CREDIT_INFLOW.value,
                 amount_inr_decimal=tx_amount,
@@ -288,10 +310,10 @@ class FinancialSMSGrammarParser:
                 counterparty_vpa_or_name=counterparty,
             )
 
-        # Fallback if amount present
+        # An amount with no debit or credit word: the direction is not recorded, so none is claimed.
         if tx_amount is not None:
             return ParsedFinancialSMSFields(
-                sms_event_category=FinancialSMSCategory.TX_DEBIT_OUTFLOW.value,
+                sms_event_category=FinancialSMSCategory.UNCLASSIFIED.value,
                 amount_inr_decimal=tx_amount,
                 post_tx_available_balance_inr=post_bal,
                 masked_account_or_card=masked_acct,
@@ -302,5 +324,5 @@ class FinancialSMSGrammarParser:
             )
 
         return ParsedFinancialSMSFields(
-            sms_event_category=FinancialSMSCategory.PROMOTIONAL_SPAM_IGNORED.value
+            sms_event_category=FinancialSMSCategory.UNCLASSIFIED.value
         )

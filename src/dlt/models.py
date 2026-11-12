@@ -24,6 +24,8 @@ class FinancialSMSCategory(str, Enum):
     UPI_AUTOPAY_OR_MANDATE = "UPI_AUTOPAY_OR_MANDATE"
     FAILED_OR_DECLINED_TX = "FAILED_OR_DECLINED_TX"
     PROMOTIONAL_SPAM_IGNORED = "PROMOTIONAL_SPAM_IGNORED"
+    # The message does not say whether money left or arrived, or what kind of alert it is. Direction is not guessed.
+    UNCLASSIFIED = "UNCLASSIFIED"
 
 
 @unique

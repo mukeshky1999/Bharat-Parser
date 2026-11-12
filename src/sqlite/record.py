@@ -9,6 +9,25 @@ from typing import Any, List, Tuple
 from src.sqlite.varint import decode_varint
 
 
+def serial_type_length(serial_type: int) -> int:
+    """Bytes a column of this serial type occupies in the record body."""
+    fixed = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 6, 6: 8, 7: 8, 8: 0, 9: 0, 10: 0, 11: 0}
+    if serial_type in fixed:
+        return fixed[serial_type]
+    if serial_type >= 12:
+        return (serial_type - 12) // 2 if serial_type % 2 == 0 else (serial_type - 13) // 2
+    return 0
+
+
+class DecodedRecord(list):
+    """The decoded column values. ``truncated`` lists the column indexes whose bytes ran past the end of the
+    payload; their value is None (unknown), never 0 or a shortened string."""
+
+    def __init__(self, values=(), truncated=None):
+        super().__init__(values)
+        self.truncated: List[int] = list(truncated or [])
+
+
 def decode_serial_type(
     serial_type: int,
     data: bytes,
@@ -24,19 +43,19 @@ def decode_serial_type(
     elif serial_type == 1:
         # 1-byte signed integer
         if offset >= len(data):
-            return 0, 0
+            return None, 0
         val = struct.unpack(">b", data[offset:offset + 1])[0]
         return val, 1
     elif serial_type == 2:
         # 2-byte big-endian signed integer
         if offset + 2 > len(data):
-            return 0, 0
+            return None, 0
         val = struct.unpack(">h", data[offset:offset + 2])[0]
         return val, 2
     elif serial_type == 3:
         # 3-byte big-endian signed integer (sign-extend bit 23)
         if offset + 3 > len(data):
-            return 0, 0
+            return None, 0
         raw = struct.unpack(">I", b"\x00" + data[offset:offset + 3])[0]
         if raw & 0x800000:
             raw -= 0x1000000
@@ -44,13 +63,13 @@ def decode_serial_type(
     elif serial_type == 4:
         # 4-byte big-endian signed integer
         if offset + 4 > len(data):
-            return 0, 0
+            return None, 0
         val = struct.unpack(">i", data[offset:offset + 4])[0]
         return val, 4
     elif serial_type == 5:
         # 6-byte big-endian signed integer (sign-extend bit 47)
         if offset + 6 > len(data):
-            return 0, 0
+            return None, 0
         raw = struct.unpack(">Q", b"\x00\x00" + data[offset:offset + 6])[0]
         if raw & 0x800000000000:
             raw -= 0x1000000000000
@@ -58,13 +77,13 @@ def decode_serial_type(
     elif serial_type == 6:
         # 8-byte big-endian signed integer
         if offset + 8 > len(data):
-            return 0, 0
+            return None, 0
         val = struct.unpack(">q", data[offset:offset + 8])[0]
         return val, 8
     elif serial_type == 7:
         # 8-byte IEEE 754 floating point
         if offset + 8 > len(data):
-            return 0.0, 0
+            return None, 0
         val = struct.unpack(">d", data[offset:offset + 8])[0]
         return val, 8
     elif serial_type == 8:
@@ -129,23 +148,31 @@ def decode_record(
     payload: bytes,
     text_encoding: str = "UTF-8",
     pos: int = 0
-) -> List[Any]:
+) -> "DecodedRecord":
     """
     Decodes an entire SQLite record payload into a list of column values.
+
+    A column whose bytes run past the end of the payload is returned as None and listed in ``.truncated``.
+    It used to come back as 0 (integers) or as a shortened string, which looked like recorded data.
     """
     header_size, serial_types = extract_serial_types(payload, pos)
     if header_size == 0:
-        return []
+        return DecodedRecord()
 
-    values = []
+    values: List[Any] = []
+    truncated: List[int] = []
     data_cursor = pos + header_size
     data_len = len(payload)
 
-    for st in serial_types:
+    for idx, st in enumerate(serial_types):
+        need = serial_type_length(st)
+        if data_cursor + need > data_len:
+            values.append(None)
+            truncated.append(idx)
+            data_cursor += need
+            continue
         val, consumed = decode_serial_type(st, payload, data_cursor, text_encoding)
         values.append(val)
         data_cursor += consumed
-        if data_cursor > data_len:
-            break
 
-    return values
+    return DecodedRecord(values, truncated)

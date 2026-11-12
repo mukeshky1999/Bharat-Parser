@@ -30,15 +30,36 @@ class JournalPage:
     page_data: bytes
     checksum: int
     file_byte_offset: int
+    # True/False when the journal header (and so the checksum nonce) is intact; None when it is not checkable
+    # (header zeroed after commit in PERSIST/TRUNCATE mode). A page that is not True is not proven current.
+    checksum_valid: Optional[bool] = None
+
+
+def page_checksum(nonce: int, page: bytes) -> int:
+    """SQLite's journal page checksum: the nonce plus the byte at every 200th position, counting down from page_size-200."""
+    total = nonce & 0xFFFFFFFF
+    i = len(page) - 200
+    while i > 0:
+        total = (total + page[i]) & 0xFFFFFFFF
+        i -= 200
+    return total
+
+
+def _valid_page_size(n: int) -> bool:
+    return 512 <= n <= 65536 and (n & (n - 1)) == 0
 
 
 class RollbackJournalReader:
     """Decodes pre-transaction rollback journal files."""
 
-    def __init__(self, journal_path: Union[str, Path]):
+    def __init__(self, journal_path: Union[str, Path], db_page_size: Optional[int] = None):
+        """``db_page_size`` is the page size from the database header. It is used when the journal header was zeroed
+        (PERSIST/TRUNCATE) or carries an impossible value, so a 1,024-byte-page database is not read as 4,096."""
         self.journal_path = Path(journal_path)
+        self.db_page_size = db_page_size if db_page_size and _valid_page_size(db_page_size) else None
         self.header: Optional[JournalSectorHeader] = None
         self.pages: List[JournalPage] = []
+        self.page_size_source: str = "NOT_READ"
 
     def read_all_pages(self) -> List[JournalPage]:
         """Reads and returns all valid pre-transaction page images from the journal."""
@@ -54,13 +75,15 @@ class RollbackJournalReader:
 
         # Check for magic at offset 0
         header_offset = 0
-        if len(data) >= 8 and data[:8] == JOURNAL_MAGIC:
+        header_intact = len(data) >= 8 and data[:8] == JOURNAL_MAGIC
+        if header_intact:
             header_offset = 0
         else:
             # Check if zeroed out in PERSIST/TRUNCATE mode; scan offset 512 and 4096
             for candidate in (512, 4096):
                 if len(data) >= candidate + 8 and data[candidate:candidate + 8] == JOURNAL_MAGIC:
                     header_offset = candidate
+                    header_intact = True
                     break
 
         if header_offset >= len(data) or len(data) < header_offset + 28:
@@ -78,8 +101,14 @@ class RollbackJournalReader:
 
         if sector_size <= 0:
             sector_size = 512
-        if page_size <= 0:
+        if _valid_page_size(page_size):
+            self.page_size_source = "JOURNAL_HEADER"
+        elif self.db_page_size:
+            page_size = self.db_page_size
+            self.page_size_source = "DATABASE_HEADER"
+        else:
             page_size = 4096
+            self.page_size_source = "ASSUMED_4096"
 
         self.header = JournalSectorHeader(
             page_count=page_count,
@@ -102,12 +131,14 @@ class RollbackJournalReader:
             chksum = struct.unpack(">I", rec_bytes[4 + page_size:record_size])[0]
 
             if 1 <= page_num <= 100000000:
+                valid: Optional[bool] = (chksum == page_checksum(nonce, page_data)) if header_intact else None
                 pages.append(
                     JournalPage(
                         page_number=page_num,
                         page_data=page_data,
                         checksum=chksum,
                         file_byte_offset=cursor,
+                        checksum_valid=valid,
                     )
                 )
 
