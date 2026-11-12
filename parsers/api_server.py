@@ -69,7 +69,7 @@ from parsers.multi_source_fusion import (
     reconcile_bank_statement_with_device,
 )
 from parsers.plugin_loader import PluginRegistry
-from parsers import examination_report
+from parsers import examination_report, review_package
 from src.audit.ledger import AuditLedger, AuditTamperError
 from parsers.ui_fts5_paginator import CaseUIPaginatorStore
 from tools.forensic_benchmark_recorder import ForensicBenchmarkRecorder
@@ -2052,6 +2052,40 @@ def get_audit_log():
     if not _case_state.get("loaded"):
         raise HTTPException(status_code=412, detail="No case is loaded.")
     return _audit_summary()
+
+
+class PackageItemIn(BaseModel):
+    path: str
+    disposition: Optional[str] = None   # INCLUDE or a WITHHOLD_* reason; there is no default
+    note: Optional[str] = ""
+
+
+class PackageRequest(BaseModel):
+    items: List[PackageItemIn] = []
+    mask_terms: List[str] = []          # e.g. a person's name, removed from names, notes and cards
+
+
+@app.post("/api/report/package")
+def build_review_package(req: PackageRequest):
+    """Portable review package. Fails closed: every item needs a decision or nothing is written."""
+    _require_case()
+    items = []
+    for it in req.items:
+        items.append(review_package.PackageItem(
+            source_path=_resolve_case_file(it.path), disposition=it.disposition, note=it.note or ""))
+    case_id = str(_case_state.get("case_id"))
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    out_dir = os.path.join(_active_store.case_workspace, "review_packages",
+                           re.sub(r"[^A-Za-z0-9._-]", "_", case_id)[:60] + "_" + stamp)
+    led, _err = _get_audit()
+    try:
+        res = review_package.build_package(case_id, items, out_dir, req.mask_terms,
+                                           audit_head=led.head_hash if led else "")
+    except review_package.PackageRefused as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    _audit_event("package_built", {"included": res.included, "withheld": res.withheld, "merkle_root": res.merkle_root})
+    return {"success": True, "directory": res.directory, "viewer_path": res.viewer_path,
+            "included": res.included, "withheld": res.withheld, "merkle_root": res.merkle_root}
 
 
 @app.get("/api/report/sec63-bsa")
