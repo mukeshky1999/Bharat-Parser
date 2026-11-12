@@ -62,8 +62,8 @@ def limitations(processing_log: List[Dict[str, Any]], hashes: Dict[str, Any]) ->
         out.append(f"Integrity comparison: {state}. {text}")
     for e in processing_log or []:
         status = str(e.get("status", "")).upper()
-        if status in ("FAILED", "WARNING"):
-            label = "Failed" if status == "FAILED" else "Warning"
+        if status in ("FAILED", "WARNING", "ENCRYPTED_NO_KEY"):
+            label = {"FAILED": "Failed", "WARNING": "Warning", "ENCRYPTED_NO_KEY": "Encrypted, no key"}[status]
             out.append(f"{label}: {e.get('stage', '?')} / {e.get('file', '?')}: {e.get('error', '') or 'no detail recorded'}")
     return out
 

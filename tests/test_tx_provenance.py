@@ -217,22 +217,85 @@ def test_recorded_offset_is_the_real_cell_in_the_file(ingested):
     assert seen == 3
 
 
-def test_locator_declines_when_a_wal_holds_frames(tmp_path):
-    from parsers.sqlite_locator import RowLocator
+def _wal_db(tmp_path):
+    """A database whose table lives partly in the main file and partly (newer rows) in the -wal file."""
     db = tmp_path / "w.db"
     keep = sqlite3.connect(db)
     keep.execute("PRAGMA journal_mode=WAL")
     keep.execute("PRAGMA wal_autocheckpoint=0")
     keep.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)")
-    keep.execute("INSERT INTO t(v) VALUES ('x')")
+    keep.execute("INSERT INTO t(v) VALUES ('in-main')")
     keep.commit()
+    keep.execute("PRAGMA wal_checkpoint(TRUNCATE)")        # row 1 is now in the main file, the WAL is empty
+    keep.execute("INSERT INTO t(v) VALUES ('in-wal')")
+    keep.commit()                                          # row 2 is only in the WAL
+    return db, keep
+
+
+def test_locator_reads_rows_that_live_in_the_wal_at_their_wal_offset(tmp_path):
+    from parsers.sqlite_locator import RowLocator
+    from src.sqlite.varint import decode_varint
+    db, keep = _wal_db(tmp_path)
     try:
+        wal_bytes = open(str(db) + "-wal", "rb").read()
+        assert len(wal_bytes) > 32, "the test needs frames in the WAL"
         loc = RowLocator(str(db))
-        assert loc.exact is False and "write-ahead log" in loc.reason
-        assert loc.locate("t", [1]) == {}
+        assert loc.exact is True
+        got = loc.locate_ex("t", [1, 2])
         loc.close()
     finally:
         keep.close()
+    page, offset, frame = got[2]
+    assert frame is not None, "row 2 exists only in the WAL"
+    payload_len, n1 = decode_varint(wal_bytes, offset)
+    rowid, n2 = decode_varint(wal_bytes, offset + n1)
+    assert rowid == 2 and b"in-wal" in wal_bytes[offset:offset + n1 + n2 + payload_len]
+    assert offset >= 32 + 24                              # inside a frame, past the headers
+    # the same table's page now has the WAL's version, so row 1 (same page) is located in the WAL as well
+    assert got[1][2] == frame
+
+
+def test_locator_uses_the_main_file_for_pages_without_a_committed_frame(tmp_path):
+    from parsers.sqlite_locator import RowLocator
+    db, keep = _wal_db(tmp_path)
+    keep.execute("CREATE TABLE u (id INTEGER PRIMARY KEY, v TEXT)")
+    keep.execute("INSERT INTO u(v) VALUES ('later')")
+    keep.commit()
+    keep.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    keep.execute("INSERT INTO t(v) VALUES ('newest')")
+    keep.commit()
+    try:
+        data = open(db, "rb").read()
+        loc = RowLocator(str(db))
+        got = loc.locate_ex("u", [1])
+        loc.close()
+    finally:
+        keep.close()
+    page, offset, frame = got[1]
+    assert frame is None and (offset // 4096) + 1 == page
+    assert b"later" in data[offset:offset + 40]
+
+
+def test_stale_wal_frames_are_ignored_like_sqlite_ignores_them(tmp_path):
+    from parsers.sqlite_locator import RowLocator
+    db, keep = _wal_db(tmp_path)
+    try:
+        wal = str(db) + "-wal"
+        raw = bytearray(open(wal, "rb").read())
+        raw[32 + 8] ^= 0x01                                # first frame's salt no longer matches the header
+        open(wal, "wb").write(bytes(raw))
+        loc = RowLocator(str(db))
+        assert loc.exact is True
+        assert all(w is None for _, _, w in loc.locate_ex("t", [1]).values())
+        loc.close()
+    finally:
+        keep.close()
+
+
+def test_provenance_line_names_the_wal_file_and_frame():
+    line = compose_tx_provenance("f.db", json.dumps(
+        [{"table": "t", "rowid": 3, "state": "Allocated B-Tree", "page": 2, "offset": 4152, "wal_frame": 1}]))
+    assert line.endswith(":: Page=2 :: Offset=0x00001038 :: In=f.db-wal frame 1")
 
 
 def test_rows_in_a_database_with_a_wal_say_offset_not_recorded():

@@ -4,9 +4,11 @@ Given a database file and a table, finds the page number and the absolute byte o
 requested rowid by walking that table's b-tree with the ``src.sqlite`` reader. It decodes only the two
 varints at the start of each cell, so it is cheap on large databases.
 
-The offset is reported only when the main file is the whole truth. If a write-ahead log holding frames sits
-next to the database, the newest version of a row may live in the log rather than at the main-file offset,
-so the locator reports nothing for that database and the provenance says "Not recorded".
+A database with a write-ahead log is read as SQLite reads it: the main file, with every page that has a committed
+frame in the log replaced by that frame (the newest committed one). A row on such a page is reported with an offset
+inside the -wal file and the frame number; a row on any other page with an offset inside the main file. Frames that
+are not part of the valid, committed chain (stale after a restart, torn, or uncommitted) are ignored, as SQLite
+ignores them. If the log cannot be read, the locator reports nothing and the provenance says "Not recorded".
 """
 from __future__ import annotations
 
@@ -18,6 +20,7 @@ from typing import Dict, Iterable, Optional, Tuple
 from src.sqlite.engine import ForensicSQLiteEngine
 from src.sqlite.header import parse_btree_page_header, parse_sqlite_header
 from src.sqlite.varint import decode_varint
+from src.sqlite.wal import WALFrameState, WALReader
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,8 @@ class RowLocator:
         self._page_size = 0
         self._file_size = 0
         self._fh = None
+        # page number -> the newest committed WAL frame for that page
+        self._wal_pages: Dict[int, "object"] = {}
         try:
             self._open()
         except Exception as exc:                                    # unreadable or not SQLite
@@ -50,8 +55,13 @@ class RowLocator:
         self._engine.db_header = header
         wal = self.db_path + "-wal"
         if os.path.isfile(wal) and os.path.getsize(wal) > WAL_HEADER_BYTES:
-            self.reason = "a write-ahead log with frames exists; main-file offsets could be out of date"
-            return
+            try:
+                for fr in WALReader(wal, page_size=header.page_size).read_all_frames():
+                    if fr.state == WALFrameState.LATEST_COMMITTED_WAL_FRAME:
+                        self._wal_pages[fr.page_number] = fr
+            except Exception as exc:
+                self.reason = f"the write-ahead log could not be read ({exc}); offsets are not given"
+                return
         self._fh = open(self.db_path, "rb")
         self._engine._parse_schema_from_page1(
             self._page(1), header.usable_page_size, header.text_encoding, self._page
@@ -71,6 +81,10 @@ class RowLocator:
         self.close()
 
     def _page(self, number: int) -> bytes:
+        """The current content of a page: the newest committed WAL frame if there is one, else the main file."""
+        frame = self._wal_pages.get(number)
+        if frame is not None:
+            return frame.page_data
         if self._fh is None or number < 1 or (number - 1) * self._page_size >= self._file_size:
             return b""
         self._fh.seek((number - 1) * self._page_size)
@@ -78,14 +92,21 @@ class RowLocator:
 
     # ------------------------------------------------------------------ lookup
     def locate(self, table: str, rowids: Iterable[int]) -> Dict[int, Tuple[int, int]]:
-        """{rowid: (page number, absolute byte offset of the cell)} for the rowids found in the live b-tree."""
+        """{rowid: (page number, byte offset of the cell)}. The offset is in the main file, or in the -wal file for a
+        row whose page has a committed frame; use locate_ex to know which."""
+        return {r: (p, o) for r, (p, o, _w) in self.locate_ex(table, rowids).items()}
+
+    def locate_ex(self, table: str, rowids: Iterable[int]) -> Dict[int, Tuple[int, int, Optional[int]]]:
+        """{rowid: (page number, byte offset of the cell, WAL frame number or None)}.
+
+        With a frame number the offset is inside the -wal file; without one it is inside the main file."""
         if not self.exact:
             return {}
         schema = self._engine.table_schemas.get(table)
         if schema is None or schema.is_without_rowid:
             return {}
         wanted = {int(r) for r in rowids}
-        found: Dict[int, Tuple[int, int]] = {}
+        found: Dict[int, Tuple[int, int, Optional[int]]] = {}
         for page_num, owner in self._engine.page_owner_map.items():
             if owner != table:
                 continue
@@ -94,7 +115,10 @@ class RowLocator:
             if len(data) < hdr_off + 8 or data[hdr_off] != 0x0D:
                 continue
             hdr = parse_btree_page_header(data, page_num)
-            base = (page_num - 1) * self._page_size
+            frame = self._wal_pages.get(page_num)
+            # inside the -wal file the page content starts after the 24-byte frame header
+            base = frame.file_byte_offset + 24 if frame is not None else (page_num - 1) * self._page_size
+            frame_no = frame.frame_index if frame is not None else None
             for i in range(hdr.cell_count):
                 pos = hdr_off + hdr.header_size + i * 2
                 if pos + 2 > len(data):
@@ -108,5 +132,5 @@ class RowLocator:
                 except Exception:
                     continue
                 if rowid in wanted:
-                    found[rowid] = (page_num, base + cell_off)
+                    found[rowid] = (page_num, base + cell_off, frame_no)
         return found

@@ -1035,16 +1035,34 @@ def _are_counterparties_compatible(c1: str, c2: str) -> bool:
     return False
 
 
+def _basis_series(df: pd.DataFrame) -> pd.Series:
+    """Timestamp_Basis per row: from its column when present, else from the row's ``_ts`` dict, else empty."""
+    if 'Timestamp_Basis' in df.columns:
+        return df['Timestamp_Basis'].fillna('').astype(str)
+    if '_ts' in df.columns:
+        return df['_ts'].map(lambda t: (t or {}).get('Timestamp_Basis') or '' if isinstance(t, dict) else '').astype(str)
+    return pd.Series('', index=df.index, dtype='object')
+
+
 def compute_transaction_risk_badges(df: pd.DataFrame) -> pd.Series:
     if df is None or df.empty:
         return pd.Series(dtype='object')
 
     badges = pd.Series('🟢 Normal', index=df.index, dtype='object')
     amts = pd.to_numeric(df.get('Amount'), errors='coerce').fillna(0.0)
-    ts = pd.to_datetime(df.get('Date'), errors='coerce')
+    date_clock = pd.to_datetime(df.get('Date'), errors='coerce')
 
-    odd_hour_mask = ts.notna() & (ts.dt.hour >= 0) & (ts.dt.hour < 5) & (amts >= 2000)
-    badges = badges.mask(odd_hour_mask, '🟡 Medium (Odd-Hour 12AM–5AM)')
+    # Which clock the hour is read from depends on what the source fixed (X-13):
+    #   EPOCH_UTC / OFFSET_CONVERTED_UTC  Date is a UTC clock, so the hour is read in IST (UTC + 5:30)
+    #   anything else (zone not recorded) Date is the phone's own clock string; the badge says so
+    # Reading a UTC hour as if it were local time marked ordinary evening payments as 12AM-5AM and missed real ones.
+    basis = _basis_series(df)
+    absolute = basis.isin(['EPOCH_UTC', 'OFFSET_CONVERTED_UTC'])
+    ist_clock = date_clock + pd.Timedelta(hours=5, minutes=30)
+    hour = date_clock.dt.hour.where(~absolute, ist_clock.dt.hour)
+    odd = date_clock.notna() & (hour < 5) & (amts >= 2000)
+    badges = badges.mask(odd & absolute, '🟡 Medium (Odd-Hour 12AM–5AM IST)')
+    badges = badges.mask(odd & ~absolute, '🟡 Medium (Odd-Hour 12AM–5AM on the recorded clock; zone not recorded)')
 
     high_val_mask = amts >= 50000
     badges = badges.mask(high_val_mask, '🟡 Medium (High Value ≥₹50k)')
@@ -1124,6 +1142,9 @@ def _row_sources(row: Dict[str, Any]) -> List[Dict[str, Any]]:
     if page is not None and offset is not None:
         entry['page'] = int(page)
         entry['offset'] = int(offset)
+        wal_frame = _clean_cell(row.get('Source_WAL_Frame'))
+        if wal_frame is not None:
+            entry['wal_frame'] = int(wal_frame)   # the offset is inside the -wal file, in this frame
     return [entry]
 
 
@@ -1156,6 +1177,9 @@ def compose_tx_provenance(source_file: str, source_rows_json: Any) -> Optional[s
         state = it.get('state') or 'Not recorded'
         where = (f"Page={it['page']} :: Offset=0x{int(it['offset']):08X}"
                  if it.get('offset') is not None else "Offset=Not recorded")
+        if it.get('offset') is not None and it.get('wal_frame') is not None:
+            # the page's newest committed version is in the write-ahead log, so the offset is in that file
+            where += f" :: In={source_file}-wal frame {int(it['wal_frame'])}"
         parts.append(
             f"{source_file} :: {table} :: RowID={rowid if rowid is not None else 'Not recorded'} :: State={state} :: {where}"
         )
@@ -2195,10 +2219,13 @@ def parse_database_artifacts(
                     tx_df = tx_df[valid_mask].copy()
                     tx_df['Source_Page'] = None
                     tx_df['Source_Offset'] = None
+                    tx_df['Source_WAL_Frame'] = None
                     if not tx_df.empty and src_rowids is not None:
                         loc = _locator()
                         if loc.exact:
-                            located = loc.locate(table, [int(x) for x in tx_df['Source_RowID'].dropna()])
+                            located = loc.locate_ex(table, [int(x) for x in tx_df['Source_RowID'].dropna()])
+                            tx_df['Source_WAL_Frame'] = [located[int(r)][2] if pd.notna(r) and int(r) in located else None
+                                                         for r in tx_df['Source_RowID']]
                             tx_df['Source_Page'] = [located[int(r)][0] if pd.notna(r) and int(r) in located else None
                                                     for r in tx_df['Source_RowID']]
                             tx_df['Source_Offset'] = [located[int(r)][1] if pd.notna(r) and int(r) in located else None
@@ -2208,6 +2235,7 @@ def parse_database_artifacts(
                             'Date', 'Transaction_ID', 'Amount', 'Counterparty', 'Status', 'Type',
                             'Timestamp_Raw', 'Timestamp_UTC', 'Timestamp_IST', 'Timestamp_Basis',
                             'Source_Table', 'Source_RowID', 'Recovery_State', 'Source_Page', 'Source_Offset',
+                            'Source_WAL_Frame',
                         ]])
                 except Exception:
                     continue

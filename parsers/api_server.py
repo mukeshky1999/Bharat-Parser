@@ -71,6 +71,8 @@ from parsers.multi_source_fusion import (
 )
 from parsers.plugin_loader import PluginRegistry
 from parsers import examination_report, review_package
+from parsers import encrypted_db
+from parsers.keychain_decryptor import extract_app_keys_and_decrypt
 from parsers.case_file import CaseFile, FILE_NAME as CASE_FILE_NAME, list_cases, safe_case_dir_name
 from src.audit.ledger import AuditLedger, AuditTamperError
 from parsers.ui_fts5_paginator import CaseUIPaginatorStore
@@ -262,6 +264,9 @@ class IngestCaseRequest(BaseModel):
     # existing case; the same source added again replaces only that item.
     mode: Optional[str] = "replace"
     label: Optional[str] = ""           # the examiner's name for this device, e.g. "Suspect's phone"
+    # Keys the examiner holds for encrypted databases: name -> hex, base64 or passphrase. Used only to open files in
+    # this ingest; never stored in the case file or the logs (the audit log keeps the name and a short fingerprint).
+    keys: Optional[Dict[str, str]] = None
 
 
 class BenchmarkRequest(BaseModel):
@@ -588,6 +593,7 @@ def _execute_ingestion_pipeline(
     agency_name: str,
     mode: str = "replace",
     label: str = "",
+    keys: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     global _active_store, _case_state
 
@@ -732,9 +738,58 @@ def _execute_ingestion_pipeline(
         "osType": _detect_os_type(discovered_files),
     }
 
+    # Keys for encrypted databases: what the examiner supplied plus what the evidence itself holds (key stores and
+    # preference files). Nothing is generated or guessed.
+    carved_keys: Dict[str, Any] = {}
+    key_scan_root = working_copy_dir or extracted_dbs_dir
+    if key_scan_root and os.path.isdir(key_scan_root):
+        try:
+            carved_keys = extract_app_keys_and_decrypt(key_scan_root, "")
+        except Exception as exc:
+            _log_failure("key_search", key_scan_root, exc)
+    key_candidates = encrypted_db.build_candidates(keys, carved_keys)
+    # The audit ledger belongs to a loaded case, which does not exist yet. These are written after the ingest event.
+    key_events: List[Tuple[str, Dict[str, Any]]] = []
+    if key_candidates:
+        key_events.append(("keys_available", {
+            "evidence_item": item_id,
+            "keys": [{"label": lab, "fingerprint": encrypted_db.key_fingerprint(mat)} for lab, mat in key_candidates],
+        }))
+
     # Iterate over discovered files
     for file_path in discovered_files:
         f_low = file_path.lower()
+        original_file_path = file_path  # the path in the evidence; a decrypted copy lives elsewhere
+
+        # An encrypted database is opened only with a key that was supplied or found in the evidence.
+        enc_reason = encrypted_db.encrypted_database_reason(file_path)
+        if enc_reason:
+            rel = os.path.basename(file_path)
+            out_dir = os.path.join(item_dir, "decrypted", hashlib.sha1(file_path.encode("utf-8", "replace")).hexdigest()[:8])
+            outcome = encrypted_db.try_decrypt(file_path, out_dir, key_candidates)
+            if outcome["status"] == "DECRYPTED":
+                note = f"decrypted with {outcome['key_label']} (key {outcome['key_fingerprint']}), profile {outcome['profile']}"
+                caveats = "; ".join(outcome.get("notes") or [])
+                processing_log.append({
+                    "stage": "decrypt_database", "file": rel,
+                    "status": "WARNING" if caveats else "OK",
+                    "error": (note + ("; " + caveats if caveats else "")),
+                })
+                key_events.append(("key_used", {"evidence_item": item_id, "file": rel, "key": outcome["key_label"],
+                                                "fingerprint": outcome["key_fingerprint"], "profile": outcome["profile"],
+                                                "caveats": outcome.get("notes") or []}))
+                file_path = outcome["out_path"]
+                f_low = file_path.lower()
+            elif outcome["status"] == "KEY_FOUND_OUTPUT_UNREADABLE":
+                processing_log.append({"stage": "decrypt_database", "file": rel, "status": "FAILED",
+                                       "error": "; ".join(outcome.get("notes") or [])})
+                continue
+            else:
+                processing_log.append({
+                    "stage": "decrypt_database", "file": rel, "status": "ENCRYPTED_NO_KEY",
+                    "error": f"{enc_reason}. " + "; ".join(outcome.get("notes") or []) + ". Its content was not read.",
+                })
+                continue
 
         # Check for build.prop / device info
         if f_low.endswith("build.prop"):
@@ -753,12 +808,12 @@ def _execute_ingestion_pipeline(
                 pass
 
         # Determine relative / virtual file system path for accurate plugin matching
-        if is_archive and file_path.startswith(extracted_dbs_dir):
-            vfs_path = os.path.relpath(file_path, extracted_dbs_dir).replace("\\", "/")
-        elif working_copy_dir and file_path.startswith(working_copy_dir):
-            vfs_path = os.path.relpath(file_path, working_copy_dir).replace("\\", "/")
+        if is_archive and original_file_path.startswith(extracted_dbs_dir):
+            vfs_path = os.path.relpath(original_file_path, extracted_dbs_dir).replace("\\", "/")
+        elif working_copy_dir and original_file_path.startswith(working_copy_dir):
+            vfs_path = os.path.relpath(original_file_path, working_copy_dir).replace("\\", "/")
         else:
-            vfs_path = file_path.replace("\\", "/")
+            vfs_path = original_file_path.replace("\\", "/")
 
         # Plugin match
         matched_plugin = _plugin_registry.match_path(clean_path=vfs_path)
@@ -1059,6 +1114,8 @@ def _execute_ingestion_pipeline(
         "integrity_match": hashes.get("integrityMatch"),
         "steps_failed": sum(1 for x in processing_log if x.get("status") == "FAILED"),
     })
+    for action, payload in key_events:
+        _audit_event(action, payload)
     return {
         "success": True,
         "case_id": case_id,
@@ -1339,6 +1396,7 @@ async def ingest_evidence_case(req: IngestCaseRequest):
                 agency,
                 mode,
                 req.label or "",
+                req.keys or None,
             )
             return result
     except HTTPException:
