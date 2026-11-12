@@ -69,6 +69,8 @@ class WalFrame:
         checksum2: int = 0,
         is_valid_checksum: bool = True,
         is_valid_salt: bool = True,
+        is_committed: bool = False,
+        residual_reason: str = '',
     ):
         self.frame_idx = frame_idx
         self.pgno = pgno
@@ -80,6 +82,10 @@ class WalFrame:
         self.checksum2 = checksum2
         self.is_valid_checksum = is_valid_checksum
         self.is_valid_salt = is_valid_salt
+        # True only for frames on the valid salt/checksum chain up to the last commit frame. These are
+        # the frames SQLite itself would replay. Everything else is residual data (M-01).
+        self.is_committed = is_committed
+        self.residual_reason = residual_reason
 
 
 def parse_wal_file(wal_path: str, page_size: int = 4096) -> Tuple[Dict[int, List[WalFrame]], int]:
@@ -117,13 +123,15 @@ def parse_wal_file(wal_path: str, page_size: int = 4096) -> Tuple[Dict[int, List
             wal_salt1, wal_salt2 = struct.unpack('>II', header[16:24])
             wal_ck1, wal_ck2 = struct.unpack('>II', header[24:32])
 
-            # Header checksum (over first 24 bytes)
+            # Header checksum (over first 24 bytes). An all-zero stored checksum is not valid.
             exp_s0, exp_s1 = compute_wal_checksum(header[:24], cksum_endian, 0, 0)
-            header_cksum_valid = (exp_s0 == wal_ck1 and exp_s1 == wal_ck2) or (wal_ck1 == 0 and wal_ck2 == 0)
+            header_cksum_valid = (exp_s0 == wal_ck1 and exp_s1 == wal_ck2)
 
-            # Rolling checksum state begins with header checksum if valid
-            prev_s0 = exp_s0 if header_cksum_valid and (wal_ck1 != 0 or wal_ck2 != 0) else 0
-            prev_s1 = exp_s1 if header_cksum_valid and (wal_ck1 != 0 or wal_ck2 != 0) else 0
+            # The rolling checksum chain starts from the header checksum. If the header is not valid
+            # no frame can be validated and every frame is reported as residual.
+            prev_s0, prev_s1 = (exp_s0, exp_s1) if header_cksum_valid else (0, 0)
+            chain_ok = header_cksum_valid
+            frames_in_order: List[WalFrame] = []
 
             frame_size = 24 + page_size
             frame_idx = 1
@@ -147,9 +155,21 @@ def parse_wal_file(wal_path: str, page_size: int = 4096) -> Tuple[Dict[int, List
                 c_s0, c_s1 = compute_wal_checksum(f_hdr[:8], cksum_endian, prev_s0, prev_s1)
                 # 2. Entire page data (page_size bytes)
                 c_s0, c_s1 = compute_wal_checksum(f_data, cksum_endian, c_s0, c_s1)
-                is_valid_checksum = (c_s0 == f_ck1 and c_s1 == f_ck2) or (f_ck1 == 0 and f_ck2 == 0)
-
-                if is_valid_checksum and (f_ck1 != 0 or f_ck2 != 0):
+                checksum_matches = (c_s0 == f_ck1 and c_s1 == f_ck2)
+                # SQLite stops at the first frame whose salt or checksum is wrong; nothing after it is
+                # part of the valid log, even if a later frame looks well formed.
+                if not chain_ok:
+                    reason = 'WAL header checksum invalid' if not header_cksum_valid else 'follows a frame that failed validation'
+                elif not is_valid_salt:
+                    reason = 'salt differs from WAL header (earlier WAL generation)'
+                elif not checksum_matches:
+                    reason = 'checksum chain broken'
+                else:
+                    reason = ''
+                is_valid_checksum = chain_ok and checksum_matches
+                if reason:
+                    chain_ok = False
+                else:
                     prev_s0, prev_s1 = c_s0, c_s1
 
                 wf = WalFrame(
@@ -163,9 +183,22 @@ def parse_wal_file(wal_path: str, page_size: int = 4096) -> Tuple[Dict[int, List
                     checksum2=f_ck2,
                     is_valid_checksum=is_valid_checksum,
                     is_valid_salt=is_valid_salt,
+                    residual_reason=reason,
                 )
                 revisions[pgno].append(wf)
+                frames_in_order.append(wf)
                 frame_idx += 1
+
+            # Only frames up to the last valid commit frame (commit_count != 0) were ever committed.
+            last_commit_idx = 0
+            for wf in frames_in_order:
+                if not wf.residual_reason and wf.commit_count != 0:
+                    last_commit_idx = wf.frame_idx
+            for wf in frames_in_order:
+                if not wf.residual_reason and wf.frame_idx <= last_commit_idx:
+                    wf.is_committed = True
+                elif not wf.residual_reason:
+                    wf.residual_reason = 'after the last commit frame (never committed)'
 
     except Exception:
         pass
@@ -240,7 +273,10 @@ def analyze_wal_revisions(
     for pgno, frames in revisions.items():
         if pgno in freelist_pages or not frames:
             continue
-        latest_frame = frames[-1]
+        committed = [fr for fr in frames if fr.is_committed]
+        if not committed:
+            continue
+        latest_frame = committed[-1]
         p_bytes = latest_frame.data
         is_leaf = (len(p_bytes) >= 8 and p_bytes[0] == 0x0D)
         hdr_off = 0 if is_leaf else (100 if pgno == 1 and len(p_bytes) >= 108 and p_bytes[100] == 0x0D else None)
@@ -270,9 +306,14 @@ def analyze_wal_revisions(
             continue
         is_freelist_page = (pgno in freelist_pages)
 
-        # Older frame revisions represent historical pre-commit versions of this page
-        if len(frames) > 1:
-            for old_frame in frames[:-1]:
+        # The live version of a page is its last committed frame. Every other frame is either an older
+        # committed version or residual data that was never part of the valid log; they are labelled
+        # differently because they mean different things to a court.
+        committed_frames = [fr for fr in frames if fr.is_committed]
+        live_frame = committed_frames[-1] if committed_frames else None
+        others = [fr for fr in frames if fr is not live_frame]
+        if others:
+            for old_frame in others:
                 historical_txs = parse_page_unallocated_cells(
                     old_frame.data,
                     pgno,
@@ -284,12 +325,19 @@ def analyze_wal_revisions(
                     if h_key not in latest_active_keys and h_key not in seen_recovered_keys:
                         seen_recovered_keys.add(h_key)
                         h_tx_copy = dict(h_tx)
-                        h_tx_copy['Status'] = f"MODIFIED / WIPED (Pre-Commit Frame #{old_frame.frame_idx})"
+                        if old_frame.is_committed:
+                            h_tx_copy['Status'] = f"OLDER VERSION OF PAGE (committed WAL frame #{old_frame.frame_idx})"
+                        else:
+                            h_tx_copy['Status'] = (
+                                f"RESIDUAL WAL FRAME #{old_frame.frame_idx} ({old_frame.residual_reason})"
+                            )
                         h_tx_copy['Transaction_ID'] = f"WAL_REV_P{pgno}_F{old_frame.frame_idx}"
                         recovered_historical_txs.append(h_tx_copy)
 
-        # Latest frame: if it is on the freelist, or contains deleted slack / freeblocks
-        latest_frame = frames[-1]
+        # Live frame: if it is on the freelist, or contains deleted slack / freeblocks
+        if live_frame is None:
+            continue
+        latest_frame = live_frame
         latest_txs = parse_page_unallocated_cells(
             latest_frame.data,
             pgno,

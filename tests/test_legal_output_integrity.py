@@ -271,3 +271,58 @@ def test_os_type_is_detected_from_layout_and_acquisition_time_is_not_processing_
     assert server._detect_os_type(["C:/x/private/var/mobile/Library/SMS/sms.db"]) == "ios"
     assert server._detect_os_type(["C:/x/paisa.db"]) == "unknown"
     assert server._detect_os_type(["C:/x/system/build.prop", "C:/x/Manifest.db"]) == "unknown"  # contradictory
+
+
+# ---------------- M-01: WAL validity chain ----------------
+def _build_wal(tmp_path, frames, salts=(0x1111, 0x2222)):
+    """frames: list of (pgno, commit_count, page_bytes, (salt1, salt2)). Checksums are computed correctly."""
+    import struct
+
+    from parsers.wal_rollback_analyzer import compute_wal_checksum
+
+    magic = 0x377F0682  # little-endian checksums
+    hdr = struct.pack(">IIIIII", magic, 3007000, 4096, 1, salts[0], salts[1])
+    s0, s1 = compute_wal_checksum(hdr, "<", 0, 0)
+    out = hdr + struct.pack(">II", s0, s1)
+    for pgno, commit, page, (fs1, fs2) in frames:
+        fh = struct.pack(">IIII", pgno, commit, fs1, fs2)
+        c0, c1 = compute_wal_checksum(fh[:8], "<", s0, s1)
+        c0, c1 = compute_wal_checksum(page, "<", c0, c1)
+        out += fh + struct.pack(">II", c0, c1) + page
+        s0, s1 = c0, c1
+    path = tmp_path / "t.db-wal"
+    path.write_bytes(out)
+    return str(path)
+
+
+def test_wal_frames_are_classified_by_the_valid_chain(tmp_path):
+    from parsers.wal_rollback_analyzer import parse_wal_file
+
+    page = bytes(4096)
+    good = (0x1111, 0x2222)
+    stale = (0x9999, 0x8888)  # a frame left over from an earlier WAL generation
+    wal = _build_wal(tmp_path, [
+        (2, 0, page, good),    # 1 valid, but before the commit frame -> committed (replayed up to frame 2)
+        (2, 1, page, good),    # 2 valid commit frame
+        (3, 0, page, good),    # 3 valid but after the last commit -> never committed
+        (4, 1, page, stale),   # 4 salt mismatch -> residual (earlier generation)
+    ])
+    revs, _ = parse_wal_file(wal)
+    by_idx = {f.frame_idx: f for fs in revs.values() for f in fs}
+    assert by_idx[1].is_committed and by_idx[2].is_committed
+    assert not by_idx[3].is_committed and "never committed" in by_idx[3].residual_reason
+    assert not by_idx[4].is_committed and "earlier WAL generation" in by_idx[4].residual_reason
+
+
+def test_zero_checksums_are_not_valid(tmp_path):
+    import struct
+
+    from parsers.wal_rollback_analyzer import parse_wal_file
+
+    hdr = struct.pack(">IIIIIIII", 0x377F0682, 3007000, 4096, 1, 1, 2, 0, 0)
+    frame = struct.pack(">IIIIII", 2, 1, 1, 2, 0, 0) + bytes(4096)
+    p = tmp_path / "z.db-wal"
+    p.write_bytes(hdr + frame)
+    revs, _ = parse_wal_file(str(p))
+    f = revs[2][0]
+    assert not f.is_committed and not f.is_valid_checksum

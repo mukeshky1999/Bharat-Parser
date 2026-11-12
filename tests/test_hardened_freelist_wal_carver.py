@@ -198,7 +198,10 @@ class TestHardenedFreelistWalCarver(unittest.TestCase):
         
         extracted_row = matches.iloc[0]
         self.assertEqual(extracted_row["Transaction_ID"], "WAL_REV_P2_F1")
-        self.assertIn("MODIFIED / WIPED", extracted_row["Status"])
+        # This hand-built WAL has all-zero checksums, so it is not a valid log (REVIEW M-01): the
+        # frame is still recovered but labelled residual, never as a committed pre-commit version.
+        self.assertIn("RESIDUAL WAL FRAME #1", extracted_row["Status"])
+        self.assertIn("checksum", extracted_row["Status"])
         self.assertEqual(extracted_row["Type"], "TRANSFER")
 
     # --------------------------------------------------------------------------
@@ -297,7 +300,7 @@ class TestHardenedFreelistWalCarver(unittest.TestCase):
         self.assertEqual(len(matched_rows), 10, "Must recover all 10 distinct deleted rows")
         for _, row in matched_rows.iterrows():
             self.assertTrue(
-                "MODIFIED / WIPED" in str(row["Status"]) or "DELETED" in str(row["Status"]),
+                "OLDER VERSION OF PAGE" in str(row["Status"]) or "DELETED" in str(row["Status"]),
                 f"Unexpected status: {row['Status']}",
             )
             self.assertEqual(row["Amount"], 5000.0)
