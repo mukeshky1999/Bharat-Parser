@@ -16,6 +16,8 @@ import { FileSystemExplorerTab } from '../views/FileSystemExplorerTab';
 import { FindingsView } from '../views/FindingsView';
 import { ReportExportView } from '../views/ReportExportView';
 import { SearchView } from '../views/SearchView';
+import { TagsView } from '../views/TagsView';
+import { TimelineView } from '../views/TimelineView';
 
 export const Workspace: React.FC = () => {
   const activeTab = useWorkbenchStore((s) => s.activeTab);
@@ -58,6 +60,8 @@ export const Workspace: React.FC = () => {
         {activeTab === 'FINDINGS' && <FindingsView />}
         {activeTab === 'REPORT_EXPORT' && <ReportExportView />}
         {activeTab === 'SEARCH' && <SearchView />}
+        {activeTab === 'TAGS' && <TagsView />}
+        {activeTab === 'TIMELINE' && <TimelineView />}
       </div>
     </main>
   );

@@ -40,8 +40,8 @@ export const STAGES: Stage[] = [
     views: [{ tab: 'CHATS', label: 'Chats' }, { tab: 'OS_SPILLOVER', label: 'System traces' }] },
   { id: 'places', no: 6, label: 'Places', hint: 'Locations and media', icon: MapPin,
     views: [{ tab: 'LOCATIONS_MEDIA', label: 'Locations and media' }] },
-  { id: 'findings', no: 7, label: 'Findings', hint: 'What you pinned, with your notes', icon: Pin,
-    views: [{ tab: 'FINDINGS', label: 'Pinned findings' }] },
+  { id: 'findings', no: 7, label: 'Findings', hint: 'What you pinned and tagged, and when', icon: Pin,
+    views: [{ tab: 'FINDINGS', label: 'Pinned findings' }, { tab: 'TAGS', label: 'Tagged records' }, { tab: 'TIMELINE', label: 'Timeline' }] },
   { id: 'report', no: 8, label: 'Report & export', hint: 'Report, facts, review package, audit log', icon: FileText,
     views: [{ tab: 'REPORT_EXPORT', label: 'Report and export' }] },
 ];
