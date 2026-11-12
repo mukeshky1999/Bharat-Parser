@@ -122,6 +122,21 @@ app = FastAPI(
 # BHARAT_API_TOKEN and to the renderer through the preload; every /api/ request must carry it in
 # X-Bharat-Token. Without the variable (tests, plain `python -m parsers.api_server` in development)
 # the check is skipped. Registered before CORS so that a 401 still carries CORS headers.
+# While the built-in validation swaps the server's case, store and workspace, nothing else may use the server: every
+# other /api request is answered 409. The validation's own requests carry the one-time nonce below.
+_validation_nonce: Optional[str] = None
+
+
+@app.middleware("http")
+async def _refuse_during_validation(request, call_next):
+    nonce = _validation_nonce
+    if nonce is not None and request.url.path.startswith("/api/") and request.url.path not in ("/api/health", "/api/validation/run"):
+        if not hmac.compare_digest(request.headers.get("x-validation-nonce", "").encode("utf-8"), nonce.encode("utf-8")):
+            return JSONResponse(status_code=409, content={"detail": "The validation record is running. Try again when it has finished; "
+                                                                    "the open case is not touched."})
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def _require_api_token(request, call_next):
     expected = os.environ.get("BHARAT_API_TOKEN", "")
@@ -2779,10 +2794,21 @@ def saved_filters_remove(body: SavedFilterRemoveIn):
 def validation_run():
     """Runs the built-in known-answer checks in a scratch workspace and returns the report. The open case is left as it was."""
     from parsers import validation
+    global _validation_nonce
+    if _validation_nonce is not None:
+        raise HTTPException(status_code=409, detail="The validation record is already running.")
+    _validation_nonce = uuid.uuid4().hex                   # from here no other request is served (middleware above)
+    validation.NONCE = _validation_nonce
     try:
-        report = validation.run_validation()
-    except validation.ValidationBusy as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
+        if _ingest_worker_lock.locked() or _ingest_progress.state == "running":
+            raise HTTPException(status_code=409, detail="An evidence ingest is running. Run the validation after it has finished.")
+        try:
+            report = validation.run_validation()
+        except validation.ValidationBusy as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+    finally:
+        _validation_nonce = None
+        validation.NONCE = None
     return {"report": report, "html": validation.render_html(report)}
 
 

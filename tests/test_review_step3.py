@@ -78,3 +78,31 @@ def test_second_ingest_is_refused_while_the_worker_runs(client, tmp_path):
         assert e.value.status_code == 409
     finally:
         api_server._ingest_worker_lock.release()
+
+
+def test_nothing_else_is_served_while_validation_runs(client, tmp_path, monkeypatch):
+    from parsers import validation
+    seen = {}
+
+    def fake_run(corpus_dir=None):
+        # while a run is in progress an ordinary request is refused, one with the run's nonce passes
+        seen["plain"] = client.get("/api/case/tags").status_code
+        seen["nonce"] = client.get("/api/health", headers={"X-Validation-Nonce": validation.NONCE or ""}).status_code
+        seen["tags_post"] = client.post("/api/case/tags", json={"tag": "x", "records": []}).status_code
+        return {"tally": {}, "checks": []}
+
+    monkeypatch.setattr(validation, "run_validation", fake_run)
+    monkeypatch.setattr(validation, "render_html", lambda r: "")
+    assert client.post("/api/validation/run").status_code == 200
+    assert seen["plain"] == 409 and seen["tags_post"] == 409
+    assert api_server._validation_nonce is None
+    assert client.get("/api/case/tags").status_code != 409
+
+
+def test_validation_is_refused_while_an_ingest_runs(client, monkeypatch):
+    assert api_server._ingest_worker_lock.acquire(blocking=False)
+    try:
+        assert client.post("/api/validation/run").status_code == 409
+    finally:
+        api_server._ingest_worker_lock.release()
+    assert api_server._validation_nonce is None

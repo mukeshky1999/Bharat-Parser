@@ -162,12 +162,18 @@ def _case_media_hashes_and_status(tmp: str) -> Any:
         conn.close()
 
 
+NONCE: Optional[str] = None   # set by the server for the duration of a run started through the API
+
+
 def _client(api_server: Any) -> Any:
     """A test client for the server's own app. When the server was started with an access token (as the desktop app
     does), the client carries it, because the validation talks to the same app in the same process."""
     from fastapi.testclient import TestClient
     token = os.environ.get("BHARAT_API_TOKEN", "")
-    return TestClient(api_server.app, headers={"X-Bharat-Token": token} if token else None)
+    headers = {"X-Bharat-Token": token} if token else {}
+    if NONCE:
+        headers["X-Validation-Nonce"] = NONCE
+    return TestClient(api_server.app, headers=headers or None)
 
 
 class ValidationBusy(RuntimeError):
