@@ -307,7 +307,15 @@ export class ForensicApiError extends Error {
   }
 }
 
-const BACKEND_BASE_URL = 'http://127.0.0.1:8000';
+const DEV_BACKEND_URL = 'http://127.0.0.1:8000';
+
+/** Backend address and per-launch token supplied by the Electron preload (absent in a plain browser). */
+function backendConfig(): { baseUrl: string; token: string } {
+  const b = (typeof window !== 'undefined' &&
+    (window as unknown as { electronAPI?: { backend?: { baseUrl?: string; token?: string } } }).electronAPI?.backend) || {};
+  return { baseUrl: b.baseUrl || DEV_BACKEND_URL, token: b.token || '' };
+}
+const backendBase = (): string => backendConfig().baseUrl;
 
 class ForensicClient {
   private hasElectron(): boolean {
@@ -359,13 +367,25 @@ class ForensicClient {
     }
   }
 
+  /** Absolute backend URL for an API path. */
+  public backendUrl(endpoint: string): string {
+    return `${backendBase()}${endpoint}`;
+  }
+
+  /** fetch() against the backend with the per-launch token attached. Use for every API call. */
+  public authFetch(endpoint: string, init: RequestInit = {}): Promise<Response> {
+    const { token } = backendConfig();
+    const headers = new Headers(init.headers || {});
+    if (token) headers.set('X-Bharat-Token', token);
+    return fetch(this.backendUrl(endpoint), { ...init, headers });
+  }
+
   private async fetchApi<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<{ data: T | null; error: string | null; status: number }> {
     try {
-      const url = `${BACKEND_BASE_URL}${endpoint}`;
-      const res = await fetch(url, {
+      const res = await this.authFetch(endpoint, {
         ...options,
         headers: {
           'Content-Type': 'application/json',
@@ -762,7 +782,7 @@ class ForensicClient {
    * Returns standalone PyVis interactive graph HTML.
    */
   public getNetworkHtmlUrl(): string {
-    return `${BACKEND_BASE_URL}/api/graph/network-html`;
+    return '/api/graph/network-html';
   }
 
   /**
@@ -880,7 +900,7 @@ class ForensicClient {
    * Returns Section 63(4)(c) BSA statutory certificate URL.
    */
   public getSec63BsaReportUrl(): string {
-    return `${BACKEND_BASE_URL}/api/report/sec63-bsa`;
+    return '/api/report/sec63-bsa';
   }
 
   /**
@@ -1067,8 +1087,7 @@ class ForensicClient {
    */
   public async getSankeySvg(signal?: AbortSignal): Promise<string> {
     try {
-      const url = `${BACKEND_BASE_URL}/api/graph/sankey-svg`;
-      const res = await fetch(url, { signal });
+      const res = await this.authFetch('/api/graph/sankey-svg', { signal });
       if (res.ok) {
         return await res.text();
       }

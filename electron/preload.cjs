@@ -6,7 +6,16 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Backend location and per-launch token, passed by the main process through additionalArguments.
+function launchArg(name) {
+  const prefix = `--${name}=`;
+  const hit = process.argv.find((a) => a.startsWith(prefix));
+  return hit ? hit.slice(prefix.length) : '';
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
+  backend: Object.freeze({ baseUrl: launchArg('bharat-api'), token: launchArg('bharat-token') }),
+
   // Native Windows File Dialog
   openFileDialog: async (options) => {
     try {

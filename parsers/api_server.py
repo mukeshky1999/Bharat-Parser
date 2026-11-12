@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 import hashlib
+import hmac
 import html
 import html as html_lib
 import json
@@ -27,6 +28,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel
 import pandas as pd
@@ -107,6 +109,20 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Per-launch API token. The Electron shell generates a random token, gives it to this process in
+# BHARAT_API_TOKEN and to the renderer through the preload; every /api/ request must carry it in
+# X-Bharat-Token. Without the variable (tests, plain `python -m parsers.api_server` in development)
+# the check is skipped. Registered before CORS so that a 401 still carries CORS headers.
+@app.middleware("http")
+async def _require_api_token(request, call_next):
+    expected = os.environ.get("BHARAT_API_TOKEN", "")
+    if expected and request.method != "OPTIONS" and request.url.path.startswith("/api/"):
+        supplied = request.headers.get("x-bharat-token", "")
+        if not hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8")):
+            return JSONResponse(status_code=401, content={"detail": "Missing or invalid API token."})
+    return await call_next(request)
+
 
 # The API only serves the local desktop shell. Restrict origins (a web page the examiner happens
 # to have open must not be able to read workstation files) and reject foreign Host headers

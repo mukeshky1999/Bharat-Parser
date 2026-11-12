@@ -55,8 +55,7 @@ export const MuleLinkGraphTab: React.FC = () => {
     setLoadingGraph(true);
     try {
       fetchSankey();
-      const htmlUrl = forensicClient.getNetworkHtmlUrl();
-      const res = await fetch(htmlUrl);
+      const res = await forensicClient.authFetch(forensicClient.getNetworkHtmlUrl());
       if (res.ok) {
         const text = await res.text();
         setNetworkHtml(text);

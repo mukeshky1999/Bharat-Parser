@@ -41,7 +41,6 @@ const FIELDS: Array<{ key: keyof OfficerFields; label: string; mono?: boolean }>
   { key: 'court_name', label: 'Court of competent jurisdiction' }
 ];
 
-const BACKEND = 'http://127.0.0.1:8000';
 
 export const Sec63BsaModal: React.FC<Sec63BsaModalProps> = ({ isOpen, onClose }) => {
   const store = useWorkbenchStore();
@@ -57,7 +56,7 @@ export const Sec63BsaModal: React.FC<Sec63BsaModalProps> = ({ isOpen, onClose })
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${BACKEND}/api/report/sec63-bsa`, {
+      const res = await forensicClient.authFetch('/api/report/sec63-bsa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(officer)

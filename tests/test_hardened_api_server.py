@@ -6,6 +6,7 @@ Validates:
 """
 
 import os
+import unittest
 import threading
 import time
 from unittest.mock import patch
@@ -145,3 +146,35 @@ class TestHardenedApiServer:
         assert response.status_code == 412, (
             f"Expected 412 Precondition Failed when no case is loaded, got {response.status_code}"
         )
+
+
+class TestApiToken(unittest.TestCase):
+    """Per-launch API token (H-12 remainder)."""
+
+    def setUp(self):
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        os.environ.pop("BHARAT_API_TOKEN", None)
+
+    def test_requests_without_token_are_rejected_when_token_configured(self):
+        os.environ["BHARAT_API_TOKEN"] = "s3cret-token"
+        self.assertEqual(self.client.get("/api/health").status_code, 401)
+        self.assertEqual(self.client.get("/api/health", headers={"X-Bharat-Token": "wrong"}).status_code, 401)
+        ok = self.client.get("/api/health", headers={"X-Bharat-Token": "s3cret-token"})
+        self.assertEqual(ok.status_code, 200)
+
+    def test_preflight_is_not_blocked_and_unconfigured_means_open(self):
+        os.environ["BHARAT_API_TOKEN"] = "s3cret-token"
+        pre = self.client.options("/api/health", headers={
+            "Origin": "http://localhost:3000", "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "x-bharat-token"})
+        self.assertEqual(pre.status_code, 200)
+        os.environ.pop("BHARAT_API_TOKEN")
+        self.assertEqual(self.client.get("/api/health").status_code, 200)
+
+    def test_rejection_carries_cors_headers_so_the_ui_can_report_it(self):
+        os.environ["BHARAT_API_TOKEN"] = "s3cret-token"
+        r = self.client.get("/api/health", headers={"Origin": "http://localhost:3000"})
+        self.assertEqual(r.status_code, 401)
+        self.assertEqual(r.headers.get("access-control-allow-origin"), "http://localhost:3000")

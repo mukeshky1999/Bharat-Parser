@@ -7,17 +7,70 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
 const path = require('path');
 const http = require('http');
-const { spawn, spawnSync, execSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
+const net = require('net');
+const crypto = require('crypto');
 
 let mainWindow = null;
 let backendProcess = null;
 let isShuttingDown = false;
 
-const BACKEND_PORT = 8000;
 const BACKEND_HOST = '127.0.0.1';
-const HEALTH_URL = `http://${BACKEND_HOST}:${BACKEND_PORT}/api/health`;
 const DEV_FRONTEND_URL = 'http://localhost:3000';
+
+// Per-launch secrets/ports. The shell never reuses a backend it did not start: a process that is
+// already listening on a fixed port could be anything, and would receive the evidence paths.
+const API_TOKEN = crypto.randomBytes(32).toString('hex');
+let backendPort = 0;
+const backendBase = () => `http://${BACKEND_HOST}:${backendPort}`;
+const healthUrl = () => `${backendBase()}/api/health`;
+
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.once('error', reject);
+    srv.listen(0, BACKEND_HOST, () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
+}
+
+// The backend does not need the examiner's whole environment (tokens, proxies, API keys).
+const ENV_ALLOW = ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'SystemDrive', 'windir', 'COMSPEC', 'PATHEXT',
+  'TEMP', 'TMP', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'ProgramData', 'ProgramFiles', 'HOMEDRIVE',
+  'HOMEPATH', 'USERNAME', 'LANG', 'LC_ALL'];
+function backendEnv() {
+  const env = {};
+  for (const k of ENV_ALLOW) if (process.env[k] !== undefined) env[k] = process.env[k];
+  return {
+    ...env,
+    PYTHONUNBUFFERED: '1',
+    PYTHONIOENCODING: 'utf-8',
+    HOST: BACKEND_HOST,
+    PORT: String(backendPort),
+    BHARAT_API_TOKEN: API_TOKEN,
+  };
+}
+
+// Only pages we ship may talk to the privileged IPC handlers.
+function isTrustedUrl(url) {
+  if (typeof url !== 'string') return false;
+  if (url === DEV_FRONTEND_URL || url.startsWith(DEV_FRONTEND_URL + '/')) return !app.isPackaged;
+  if (!url.startsWith('file://')) return false;
+  const dist = path.resolve(PROJECT_ROOT, 'dist');
+  try {
+    const p = path.resolve(require('url').fileURLToPath(url));
+    return p === dist || p.startsWith(dist + path.sep);
+  } catch {
+    return false;
+  }
+}
+function trustedSender(event) {
+  const url = event && event.senderFrame ? event.senderFrame.url : '';
+  return isTrustedUrl(url);
+}
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
@@ -26,7 +79,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 // -----------------------------------------------------------------------------
 function checkBackendHealth() {
   return new Promise((resolve) => {
-    const req = http.get(HEALTH_URL, { timeout: 1500 }, (res) => {
+    const req = http.get(healthUrl(), { timeout: 1500, headers: { 'X-Bharat-Token': API_TOKEN } }, (res) => {
       if (res.statusCode === 200) {
         resolve(true);
       } else {
@@ -47,7 +100,7 @@ async function waitForBackend(maxAttempts = 40, intervalMs = 500) {
     if (isShuttingDown) return false;
     const isHealthy = await checkBackendHealth();
     if (isHealthy) {
-      console.log(`[BharatAnalyzer] Backend online and healthy at ${HEALTH_URL} (Attempt ${attempt})`);
+      console.log(`[BharatAnalyzer] Backend online and healthy at ${healthUrl()} (Attempt ${attempt})`);
       return true;
     }
     await new Promise((res) => setTimeout(res, intervalMs));
@@ -92,12 +145,7 @@ function findProductionBackendExe() {
 }
 
 async function startBackend() {
-  // Check if backend is already running on port 8000
-  const alreadyRunning = await checkBackendHealth();
-  if (alreadyRunning) {
-    console.log('[BharatAnalyzer] Existing FastAPI backend detected on port 8000. Reusing active instance.');
-    return;
-  }
+  backendPort = await getFreePort();
 
   if (app.isPackaged) {
     // Packaged Production Mode: Launch bundled PyInstaller executable
@@ -115,7 +163,7 @@ async function startBackend() {
     try {
       backendProcess = spawn(backendExe, [], {
         cwd: path.dirname(backendExe),
-        env: { ...process.env, PYTHONUNBUFFERED: '1' },
+        env: backendEnv(),
         stdio: 'pipe',
         windowsHide: true,
       });
@@ -138,7 +186,7 @@ async function startBackend() {
     try {
       backendProcess = spawn(pythonExe, ['-m', 'parsers.api_server'], {
         cwd: PROJECT_ROOT,
-        env: { ...process.env, PYTHONUNBUFFERED: '1' },
+        env: backendEnv(),
         stdio: 'inherit',
       });
 
@@ -201,10 +249,20 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       webSecurity: true,
+      allowRunningInsecureContent: false,
+      // Read by preload.cjs: where this launch's backend is and the token it requires.
+      additionalArguments: [`--bharat-api=${backendBase()}`, `--bharat-token=${API_TOKEN}`],
     },
   });
+
+  // The window may only ever show our own UI: no navigation away, no new windows, no permissions.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isTrustedUrl(url)) event.preventDefault();
+  });
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.session.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
 
   Menu.setApplicationMenu(null);
 
@@ -269,7 +327,7 @@ async function loadAppUrl() {
       mainWindow.loadFile(foundDistPath);
     } else {
       console.error(`[BharatAnalyzer] Missing compiled UI bundle at: ${path.join(__dirname, '..', 'dist', 'index.html')}`);
-      mainWindow.loadURL(HEALTH_URL);
+      mainWindow.loadURL('data:text/plain,Missing compiled UI bundle (dist/index.html). Run the build.');
     }
   }
 }
@@ -280,7 +338,7 @@ async function loadAppUrl() {
 function registerIpcHandlers() {
   // Native Open File Dialog
   ipcMain.handle('dialog:openFile', async (event, customOptions = {}) => {
-    if (!mainWindow) return null;
+    if (!mainWindow || !trustedSender(event)) return null;
 
     const defaultFilters = [
       {
@@ -306,7 +364,7 @@ function registerIpcHandlers() {
 
   // Native Open Directory / Folder Dialog
   ipcMain.handle('dialog:openDirectory', async (event, customOptions = {}) => {
-    if (!mainWindow) return null;
+    if (!mainWindow || !trustedSender(event)) return null;
 
     const result = await dialog.showOpenDialog(mainWindow, {
       title: customOptions.title || 'Select Extracted Forensic Dump Folder',
@@ -323,7 +381,7 @@ function registerIpcHandlers() {
 
   // Native Save File Dialog (Court Certificates, NCRP CSV, BNSS Bundles)
   ipcMain.handle('dialog:saveFile', async (event, customOptions = {}) => {
-    if (!mainWindow) return null;
+    if (!mainWindow || !trustedSender(event)) return null;
 
     const result = await dialog.showSaveDialog(mainWindow, {
       title: customOptions.title || 'Save Court Evidence Report / Requisition',
@@ -344,7 +402,10 @@ function registerIpcHandlers() {
 
   // Native Open/Reveal File in Explorer
   ipcMain.handle('shell:showItemInFolder', async (event, fullPath) => {
-    if (fullPath && fs.existsSync(fullPath)) {
+    // Reveal only: a local absolute path that exists. No UNC/network paths, no relative paths.
+    const isUnc = typeof fullPath === 'string' && fullPath.slice(0, 2) === String.fromCharCode(92, 92);
+    if (!trustedSender(event) || typeof fullPath !== 'string' || !path.isAbsolute(fullPath) || isUnc) return false;
+    if (fs.existsSync(fullPath)) {
       shell.showItemInFolder(fullPath);
       return true;
     }
@@ -356,10 +417,11 @@ function registerIpcHandlers() {
   ipcMain.handle('app:isPackaged', () => app.isPackaged);
 
   // Fallback IPC handler for tree counts if needed
-  ipcMain.handle('api:getTreeCounts', async () => {
+  ipcMain.handle('api:getTreeCounts', async (event) => {
     try {
+      if (!trustedSender(event)) return null;
       return await new Promise((resolve) => {
-        http.get(`http://${BACKEND_HOST}:${BACKEND_PORT}/api/case/tree-counts`, (res) => {
+        http.get(`${backendBase()}/api/case/tree-counts`, { headers: { 'X-Bharat-Token': API_TOKEN } }, (res) => {
           let data = '';
           res.on('data', (chunk) => (data += chunk));
           res.on('end', () => {

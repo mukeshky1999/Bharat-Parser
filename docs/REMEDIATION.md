@@ -47,3 +47,25 @@ TypeScript suites all pass; `tsc --noEmit` and `vite build` succeed.
 - Legacy dashboard (`main.py`, `src/workstation_app`) still contains H-10 sample devices and figures; its evidence-modifying path (C-01) is fixed, but the review's recommendation to retire it stands.
 - No per-launch API token (Electron change); origin and Host checks and path confinement are in place instead.
 - Not exercised: real vendor containers, E01, and the Electron shell end to end.
+
+## Phase 2 (second review, `REVIEW_FINDINGS_2.md`), in progress
+
+Test status: Python 501 passed, 0 failed; TypeScript suites pass; `tsc --noEmit` and `vite build` succeed;
+the Electron app was launched and ran end to end (see X-09).
+
+| Finding | What changed | Tests |
+|---|---|---|
+| X-01 | NCRP sheet: State, Police Station, Officer and Crime Category come from the request; blank is written `NOT_PROVIDED`. "YES_DECONFLICTED" replaced by `AUTOMATED_RULES_PASSED`. Acknowledgement number required. NCRP dialog has the four fields | `test_legal_output_integrity.py` |
+| X-02 | Section 230 bundle fails closed: every item needs an explicit tag (`DISCLOSABLE` to release); an untagged item aborts before anything is written; `PROTECTED_VICTIM_IDENTITY` and `UNRELIED_PRIVATE_DATA` are withheld; UI and API require a decision per file | same |
+| X-03 | Exhibit file names reduced to a single sanitised component with an index prefix; writes verified to stay inside the bundle | same |
+| X-04 | Victim name masked (case-insensitive) in file names, cards, paths, timestamps, EXIF and HTML; HTML escaped; anonymisation without a name is refused | same |
+| X-05 | Biller match is whole-word (`francesca@ybl` no longer matches `cesc`); victim lock also compares VPA | same |
+| X-06 | NCRP CSV written with `csv` (quoting) and formula-injection neutralised | same |
+| X-07 | Section 94 draft: operator never inferred from a mobile number; officer, station, FIR and sections must be supplied; invented "48 hours" removed; marked DRAFT. (Drafter is still not called by the API.) | same |
+| X-08, L-07 | Benchmark endpoint disabled unless `BHARAT_ENABLE_BENCHMARK=1`; output directory check uses path containment, not a string prefix | same |
+| X-10 | SQLCipher open/decrypt uses a real SQLCipher driver (`sqlcipher3`) if installed, otherwise logs "not installed" and returns nothing; opened `mode=ro`; unexpected errors logged. Decryption is therefore **not available** until a driver is installed or `src/crypto/sqlcipher` is wired (Phase 4) | same |
+| X-11 | IST timestamps are real IST (`ist_now_str`), not machine local time | same |
+| X-09, H-12 (rest) | Per-launch API token (`X-Bharat-Token`, `BHARAT_API_TOKEN`) enforced for every `/api/` request; backend on a free random port and never reused; renderer window is `sandbox: true`; `will-navigate`, `window.open` and permission requests denied; IPC handlers accept only our own pages; `showItemInFolder` takes only local absolute paths; backend gets an allow-listed environment instead of the whole one | `TestApiToken`; launched `electron .`: backend came up on a random port, token passed through the sandboxed preload, renderer calls returned 200 |
+
+Not yet done from the second review: X-12 and the rest of U-01..U-05 (UI claims; part of the UI redesign), L-04..L-06,
+dossier_builder unconditional claims (unwired), and the Phase 1 review of the remaining modules.

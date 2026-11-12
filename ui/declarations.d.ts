@@ -4,6 +4,7 @@ declare module '*.css' {
 }
 
 interface ElectronAPI {
+  backend?: { baseUrl: string; token: string };
   openFileDialog: (options?: {
     title?: string;
     defaultPath?: string;
