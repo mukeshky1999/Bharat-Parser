@@ -63,6 +63,8 @@ class VFSReader:
 
     def __init__(self, catalog_db_path: Union[str, Path]):
         self.catalog_db_path = Path(catalog_db_path)
+        # The decompressed stream of the last Android backup read, so a backup is decompressed once and not once per file.
+        self._ab_cache: Optional[tuple] = None
 
     def _get_connection(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.catalog_db_path)
@@ -194,17 +196,20 @@ class VFSReader:
                 return io.BytesIO(f.read())
 
         elif comp_method == CompressionMethod.ANDROID_AB_STREAM.value:
-            from src.vfs.indexer import AbUnpacker
-            ab_info = AbUnpacker.parse_header(container_path)
-            with open(container_path, "rb") as f:
-                f.seek(ab_info.data_offset)
-                payload_bytes = f.read()
-            try:
-                uncompressed_stream = zlib.decompress(payload_bytes)
-            except Exception:
-                decompressor = zlib.decompressobj()
-                uncompressed_stream = decompressor.decompress(payload_bytes)
-            data = uncompressed_stream[offset:offset + uncomp_size]
+            key = (str(container_path), container_path.stat().st_mtime_ns, container_path.stat().st_size)
+            if self._ab_cache is None or self._ab_cache[0] != key:
+                from src.vfs.indexer import AbUnpacker
+                ab_info = AbUnpacker.parse_header(container_path)
+                with open(container_path, "rb") as f:
+                    f.seek(ab_info.data_offset)
+                    payload_bytes = f.read()
+                try:
+                    uncompressed_stream = zlib.decompress(payload_bytes)
+                except Exception:
+                    decompressor = zlib.decompressobj()
+                    uncompressed_stream = decompressor.decompress(payload_bytes)
+                self._ab_cache = (key, uncompressed_stream)
+            data = self._ab_cache[1][offset:offset + uncomp_size]
             return io.BytesIO(data)
 
         else:

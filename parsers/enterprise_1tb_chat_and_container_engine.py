@@ -281,6 +281,14 @@ def should_materialize_artifact(vfs_path: str, file_size: int) -> bool:
     return False
 
 
+class UnsupportedContainer(Exception):
+    """The evidence is a container this tool cannot read (for example an encrypted backup). Nothing was ingested."""
+
+
+# An Android backup is decompressed in memory to be read. Above this size it is refused rather than exhausting memory.
+AB_MAX_BYTES = 2 * 1024 * 1024 * 1024
+
+
 class TerabyteForensicContainerEngine:
     """
     Manages 1 TB to 1.5 TB extractions (.ufdr, .xry, .ofb, .tar, .zip, .bin, .e01, .ex01, .l01) without OOM.
@@ -297,6 +305,8 @@ class TerabyteForensicContainerEngine:
         self.catalog_db_path = os.path.join(self.workspace_dir, 'vfs_catalog.db')
 
         self.rejected_entries: List[str] = []
+        # (path in the container, reason) for entries that were selected but could not be read
+        self.read_errors: List[Tuple[str, str]] = []
         self._used_targets: Dict[str, str] = {}
 
         os.makedirs(self.extracted_dbs_dir, exist_ok=True)
@@ -499,7 +509,11 @@ class TerabyteForensicContainerEngine:
                 finally:
                     img_info.close()
 
-            # 4. Monolithic Raw Disk Image (.dd, .bin, .raw, .img)
+            # 4. Android backup (.ab) and iOS backup folder (Manifest.db): read through src/vfs
+            elif self.is_vfs_container(self.archive_path):
+                self._index_with_vfs(cur, conn, progress_cb)
+
+            # 5. Monolithic Raw Disk Image (.dd, .bin, .raw, .img)
             elif os.path.isfile(self.archive_path):
                 bname = os.path.basename(self.archive_path)
                 fsize = os.path.getsize(self.archive_path)
@@ -512,6 +526,94 @@ class TerabyteForensicContainerEngine:
             conn.close()
 
         return self.extracted_dbs_dir
+
+    @staticmethod
+    def is_vfs_container(path: str) -> bool:
+        """An Android backup file or an iOS backup folder: the two containers read through ``src.vfs``."""
+        if os.path.isdir(path):
+            return os.path.isfile(os.path.join(path, 'Manifest.db'))
+        if not path.lower().endswith('.ab'):
+            return False
+        try:
+            with open(path, 'rb') as f:
+                return f.read(15) == b'ANDROID BACKUP\n'
+        except OSError:
+            return False
+
+    def _index_with_vfs(self, cur, conn, progress_cb) -> None:
+        """Index an Android backup or iOS backup folder with src.vfs and extract the same forensic targets the
+        other containers give (same selection, same safe paths, same catalog)."""
+        import plistlib
+        from src.vfs.indexer import VFSIndexer
+        from src.vfs.reader import VFSReadError, VFSReader
+
+        is_ios = os.path.isdir(self.archive_path)
+        fmt = 'IOS_BACKUP' if is_ios else 'ANDROID_AB'
+        if is_ios:
+            try:
+                with open(os.path.join(self.archive_path, 'Manifest.plist'), 'rb') as pf:
+                    if plistlib.load(pf).get('IsEncrypted'):
+                        raise UnsupportedContainer(
+                            'This iOS backup is encrypted (Manifest.plist: IsEncrypted). Its Manifest.db cannot be read '
+                            'without the backup password, which this tool does not apply. Nothing was ingested.')
+            except (OSError, ValueError, plistlib.InvalidFileException):
+                pass  # no readable Manifest.plist: Manifest.db is tried as it is
+        elif os.path.getsize(self.archive_path) > AB_MAX_BYTES:
+            raise UnsupportedContainer(
+                f'This Android backup is larger than {AB_MAX_BYTES // (1024 ** 3)} GB. It is decompressed in memory '
+                'to be read, so it is refused rather than risk exhausting memory. Nothing was ingested.')
+
+        vfs_catalog = os.path.join(self.workspace_dir, 'vfs_index.sqlite')
+        for suffix in ('', '-wal', '-shm'):
+            if os.path.exists(vfs_catalog + suffix):
+                os.remove(vfs_catalog + suffix)
+        try:
+            total = VFSIndexer(vfs_catalog).index_archive(self.archive_path, 1)
+        except Exception as exc:
+            raise UnsupportedContainer(f'The {fmt} container could not be indexed ({type(exc).__name__}: {exc}). '
+                                       'Nothing was ingested.') from exc
+        if total == 0:
+            raise UnsupportedContainer(
+                'No files could be listed in this backup. An Android backup that is encrypted (AES-256) or damaged, '
+                'or an iOS backup whose Manifest.db is empty, gives this result. Nothing was ingested.')
+
+        reader = VFSReader(vfs_catalog)
+        vconn = sqlite3.connect(vfs_catalog)
+        try:
+            rows = vconn.execute(
+                "SELECT file_id, canonical_path, uncompressed_size, archive_data_offset FROM vfs_index "
+                "WHERE entry_type = 'REGULAR_FILE' ORDER BY file_id").fetchall()
+        finally:
+            vconn.close()
+
+        batch: List[Tuple[str, str, str, int, int, int, str]] = []
+        for idx, (file_id, vpath, fsize, offset) in enumerate(rows):
+            bname = os.path.basename(vpath)
+            local_out = ''
+            materialized = 0
+            if should_materialize_artifact(vpath, fsize):
+                target = self._safe_extract_target(vpath, idx)
+                if not target:
+                    self.rejected_entries.append(vpath)
+                else:
+                    try:
+                        data = reader.vfs_open_memory_stream(file_id).read()
+                        os.makedirs(os.path.dirname(target), exist_ok=True)
+                        with open(target, 'wb') as dst:
+                            dst.write(data)
+                        local_out, materialized = target, 1
+                    except (VFSReadError, FileNotFoundError, ValueError, OSError) as exc:
+                        self.read_errors.append((vpath, f'{type(exc).__name__}: {exc}'))
+            batch.append((vpath, fmt, bname, fsize, offset, materialized, local_out))
+            if len(batch) >= 5000:
+                cur.executemany('INSERT OR REPLACE INTO vfs_files VALUES (?,?,?,?,?,?,?)', batch)
+                conn.commit()
+                batch.clear()
+            if progress_cb and idx % 2500 == 0:
+                progress_cb(idx, len(rows), vpath)
+        if batch:
+            cur.executemany('INSERT OR REPLACE INTO vfs_files VALUES (?,?,?,?,?,?,?)', batch)
+            conn.commit()
 
     def extract_attachment_on_demand(self, vfs_path: str) -> Optional[str]:
         """

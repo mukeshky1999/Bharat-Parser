@@ -172,3 +172,12 @@ Python 565 passed. `tests/adversarial_m2_stress.py` (not collected by default) h
 2. **Rows served from a WAL have offsets.** `RowLocator` now reads the database as SQLite does: the main file with each page that has a committed frame in the valid WAL chain replaced by that frame. A row on such a page gets the offset inside the `-wal` file and the frame number (`... :: Offset=0x00000FBC :: In=payments.db-wal frame 1`); other rows get the main-file offset. Stale, torn and uncommitted frames are ignored, as SQLite ignores them. A test reads the `-wal` file at the recorded offset and finds that row's cell.
 3. **Odd-hour badge reads the right clock.** When the source fixed the instant (epoch or offset-aware), the hour is read in IST (the stored time is UTC); when only a bare clock string was recorded, the badge says "on the recorded clock; zone not recorded" and does not say IST. Before, a UTC hour was read as local time.
 Python 580 passed (565 before).
+
+### Phase 5B.1 step 5: stage A, backups read through `src/vfs` (2026-11-12)
+The ingest could not read two common containers: an Android backup (`.ab`) was copied as one file and nothing in it was parsed, and an iOS backup folder was copied as hash-named files with no real paths, so no plugin matched and nothing was parsed. Both now go through `src/vfs` inside `TerabyteForensicContainerEngine` (same target selection, same safe-path rules, same catalog as ZIP/TAR):
+- `.ab`, plain or compressed, is decompressed once and its members are extracted; an encrypted (AES-256) or damaged backup, or one over 2 GB (it is decompressed in memory), is refused with 422 and the reason, "Nothing was ingested".
+- An iOS backup folder is mapped through `Manifest.db` to the real device paths (`/private/var/mobile/Containers/Data/Application/<bundle>/...`), so plugins match. An encrypted backup (`Manifest.plist` IsEncrypted) is refused with the reason. A manifest entry whose file is missing from the backup is logged as a FAILED `extract` step. Directory and symlink rows are typed as such; a size missing from the manifest is taken from the file on disk.
+- Entries whose path would leave the extraction folder are now written to the processing log as warnings (they were dropped silently before, for every container type).
+- The evidence is unchanged after indexing (tested by hash, including `Manifest.db`).
+ZIP, UFDR, TAR and E01 handling is unchanged.
+Python 587 passed (580 before).

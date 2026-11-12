@@ -46,6 +46,7 @@ from parsers.corroboration_engine import (
 from parsers.crypto_p2p_parser import parse_crypto_p2p_artifacts
 from parsers.enterprise_1tb_chat_and_container_engine import (
     TerabyteForensicContainerEngine,
+    UnsupportedContainer,
     should_materialize_artifact,
 )
 from parsers.fiat_crypto_bridge import (
@@ -625,6 +626,10 @@ def _execute_ingestion_pipeline(
     # 2. Extract or Index Forensic DBs
     p_low = abs_evidence.lower()
     is_archive = p_low.endswith((".ufdr", ".ufd", ".tar", ".tar.gz", ".tgz", ".zip", ".xry", ".ofb", ".e01", ".ex01", ".l01"))
+    # An Android backup or an iOS backup folder is read through src/vfs (it was copied as a single file or as
+    # hash-named files before, and nothing in it was parsed).
+    if TerabyteForensicContainerEngine.is_vfs_container(abs_evidence):
+        is_archive = True
 
     catalog_entries: List[Dict[str, Any]] = []
     working_copy_dir: Optional[str] = None
@@ -647,7 +652,15 @@ def _execute_ingestion_pipeline(
 
     if is_archive:
         container_engine = TerabyteForensicContainerEngine(abs_evidence, item_dir)
-        container_engine.index_and_materialize_targets()
+        try:
+            container_engine.index_and_materialize_targets()
+        except UnsupportedContainer as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        for vpath in container_engine.rejected_entries:
+            processing_log.append({"stage": "extract", "file": os.path.basename(vpath), "status": "WARNING",
+                                   "error": f"Not extracted: the path {vpath!r} would leave the extraction folder"})
+        for vpath, why in container_engine.read_errors:
+            processing_log.append({"stage": "extract", "file": os.path.basename(vpath), "status": "FAILED", "error": why})
         # Collect materialized DBs
         discovered_files: List[str] = []
         for root, _, files in os.walk(extracted_dbs_dir):

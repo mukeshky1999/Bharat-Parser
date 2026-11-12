@@ -630,6 +630,15 @@ class VFSIndexer:
                     if disk_target.exists():
                         uncomp_size = disk_target.stat().st_size
 
+            if not uncomp_size:
+                # No size in the manifest entry: use the size of the file as it sits in the backup, if it is there.
+                on_disk = backup_dir / file_id[:2] / file_id
+                if on_disk.is_file():
+                    uncomp_size = on_disk.stat().st_size
+
+            # Manifest flags: 1 file, 2 directory, 4 symlink. A directory has no file behind it.
+            entry_kind = {2: EntryType.DIRECTORY, 4: EntryType.SYMLINK}.get(flags, EntryType.REGULAR_FILE)
+
             entry = VFSIndexEntry(
                 container_id=container_id,
                 canonical_path=canonical,
@@ -637,7 +646,7 @@ class VFSIndexer:
                 filename=bname,
                 file_extension=ext,
                 original_raw_path=f"{domain}:{rel_path}",
-                entry_type=EntryType.REGULAR_FILE,
+                entry_type=entry_kind,
                 symlink_target=None,
                 uncompressed_size=uncomp_size,
                 compressed_size=uncomp_size,
