@@ -106,3 +106,19 @@ def test_validation_is_refused_while_an_ingest_runs(client, monkeypatch):
     finally:
         api_server._ingest_worker_lock.release()
     assert api_server._validation_nonce is None
+
+
+def test_actions_are_refused_when_the_audit_log_fails_verification(client, tmp_path):
+    from parsers.case_file import case_dir_name
+    a = _phone(tmp_path, "phoneA", PHONE_A)
+    ws = client.post("/api/case/ingest", json={"evidence_path": str(a), "case_id": "C-6"}).json()["workspace_dir"]
+    rid = _first_tx_id(ws)
+    body = {"tag": "of_interest", "records": [{"table": "transactions", "id": rid}]}
+    assert client.post("/api/case/tags", json=body).status_code == 200
+    log = os.path.join(ws, f"audit_{case_dir_name('C-6')}.jsonl")
+    lines = open(log, encoding="utf-8").read().splitlines()
+    open(log, "w", encoding="utf-8").write("\n".join(lines[:-1]) + "\n")      # the newest entry is cut off
+    r = client.post("/api/case/tags", json=body)
+    assert r.status_code == 409 and "audit" in r.json()["detail"].lower()
+    assert client.get("/api/report/facts").status_code == 409
+    assert client.get("/api/case/summary").status_code == 200                  # reading the case still works

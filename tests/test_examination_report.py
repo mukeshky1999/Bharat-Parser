@@ -115,7 +115,7 @@ def test_tampered_audit_file_is_reported_as_failed(ingested):
     rec["payload_json"] = '{"evidence":"other.zip"}'
     lines[0] = json.dumps(rec, sort_keys=True)
     open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
-    api_server._audit_cache.pop(path, None)
+    api_server._audit_cache.clear()
     summary = api_server.get_audit_log()
     assert summary["verified"] is False and "failed verification" in summary["error"]
     html = _html(api_server.examination_report_post(ReportParticulars()))

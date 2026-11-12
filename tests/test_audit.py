@@ -1,5 +1,6 @@
 """Audit log and hash manifest: tamper detection, persistence, honest labels."""
 import json
+import os
 from dataclasses import replace
 from datetime import datetime
 
@@ -136,3 +137,77 @@ def test_merkle_root_changes_with_content_and_carries_odd_node_up(tmp_path):
     assert m.merkle_root() == expected != duplicated
     assert m.merkle_root() != build(["a", "b", "d"]).merkle_root()
     assert HashManifest().merkle_root() == "0" * 64
+
+
+# ---------------------------------------------------------------- review step 5
+import json as _json
+
+from src.audit.ledger import AuditLedger as _L, AuditTamperError as _T
+
+
+def _mk(tmp_path):
+    path = str(tmp_path / "a.jsonl")
+    led = _L("C1", path)
+    led.append("ex", "one", {"a": 1})
+    led.append("ex", "two", {"b": 2})
+    return led, path
+
+
+def test_displayed_time_is_covered_by_the_hash(tmp_path):
+    led, path = _mk(tmp_path)
+    lines = open(path, encoding="utf-8").read().splitlines()
+    e = _json.loads(lines[0])
+    e["ts_utc"] = "2020-01-01T00:00:00.000000Z"
+    lines[0] = _json.dumps(e, sort_keys=True)
+    open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+    assert not led.verify().ok
+    with pytest.raises(_T):
+        _L("C1", path)
+
+
+def test_verify_reads_the_file_not_memory(tmp_path):
+    led, path = _mk(tmp_path)
+    assert led.verify().ok
+    lines = open(path, encoding="utf-8").read().splitlines()
+    open(path, "w", encoding="utf-8").write(lines[0] + "\n")        # last entry removed behind the program's back
+    assert not led.verify().ok
+    with pytest.raises(_T):
+        led.append("ex", "three")
+
+
+def test_missing_file_is_a_failure_not_a_pass(tmp_path):
+    led, path = _mk(tmp_path)
+    os.remove(path)
+    assert not led.verify().ok
+
+
+def test_actor_and_action_cannot_trade_a_pipe(tmp_path):
+    a = _L("C1")
+    b = _L("C1")
+    ea = a.append("Z", "X|Y", {}, ts_ns=1_700_000_000_000_000_000)
+    eb = b.append("Y|Z", "X", {}, ts_ns=1_700_000_000_000_000_000)
+    assert ea.hash != eb.hash
+
+
+def test_old_version_entries_still_verify_and_new_ones_chain_after_them(tmp_path):
+    from src.audit.ledger import _entry_hash, genesis_hash, _stamp
+    path = str(tmp_path / "old.jsonl")
+    ts = 1_700_000_000_000_000_000
+    utc, ist = _stamp(ts)
+    h = _entry_hash(genesis_hash("C1"), 1, ts, "old", "ex", "{}")
+    open(path, "w", encoding="utf-8").write(_json.dumps(
+        {"seq": 1, "ts_ns": ts, "ts_utc": utc, "ts_ist": ist, "actor": "ex", "action": "old", "payload_json": "{}",
+         "prev_hash": genesis_hash("C1"), "hash": h}, sort_keys=True) + "\n")
+    led = _L("C1", path)
+    assert led.verify().ok
+    led.append("ex", "new")
+    assert _L("C1", path).verify().ok
+
+
+def test_two_objects_for_one_file_do_not_fork_the_chain(tmp_path):
+    path = str(tmp_path / "f.jsonl")
+    a, b = _L("C1", path), _L("C1", path)
+    a.append("ex", "x")
+    b.append("ex", "y")
+    a.append("ex", "z")
+    assert _L("C1", path).verify().ok and len(_L("C1", path).entries) == 3

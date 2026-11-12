@@ -137,6 +137,27 @@ async def _refuse_during_validation(request, call_next):
     return await call_next(request)
 
 
+# Actions that change the case or produce an output are not carried out when the case's audit log is missing or fails
+# verification: they would leave no trustworthy record.
+_AUDITED_ROUTES = (
+    ("POST", "/api/case/tags"), ("POST", "/api/case/tags/remove"), ("POST", "/api/case/findings"),
+    ("DELETE", "/api/case/findings/"), ("POST", "/api/report/"), ("GET", "/api/report/"), ("POST", "/api/review/marks/import"),
+    ("POST", "/api/case/hashsets"), ("POST", "/api/case/media/analyse"),
+)
+
+
+@app.middleware("http")
+async def _require_audit_log(request, call_next):
+    path = request.url.path
+    if _case_state.get("loaded") and any(request.method == m and path.startswith(p) for m, p in _AUDITED_ROUTES):
+        led, err = await asyncio.get_running_loop().run_in_executor(_thread_pool, _get_audit)
+        if led is None or not led.verify().ok:
+            reason = err or (led.verify().error if led else "")
+            return JSONResponse(status_code=409, content={"detail": f"The audit log of this case failed verification, so this action "
+                                                                    f"was not carried out: {reason}"})
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def _require_api_token(request, call_next):
     expected = os.environ.get("BHARAT_API_TOKEN", "")
@@ -215,6 +236,7 @@ _benchmark_lock = asyncio.Lock()
 
 TOOL_VERSION = "2.0.0"
 _audit_cache: Dict[str, AuditLedger] = {}
+_audit_cache_lock = threading.Lock()
 _log = __import__("logging").getLogger("bharat.api")
 
 
@@ -229,13 +251,15 @@ def _get_audit():
     old_path = os.path.join(folder, f"audit_{old_safe}.jsonl")
     if not os.path.exists(path) and os.path.exists(old_path):
         path = old_path  # a log started before ids were hashed keeps its name
-    led = _audit_cache.get(path)
-    if led is None:
-        try:
-            led = AuditLedger(cid, path)
-        except AuditTamperError as exc:
-            return None, f"Audit log failed verification: {exc}"
-        _audit_cache[path] = led
+    key = os.path.normcase(os.path.abspath(path))
+    with _audit_cache_lock:                  # one ledger object per file, even when two requests arrive together
+        led = _audit_cache.get(key)
+        if led is None:
+            try:
+                led = AuditLedger(cid, path)
+            except AuditTamperError as exc:
+                return None, f"Audit log failed verification: {exc}"
+            _audit_cache[key] = led
     return led, ""
 
 

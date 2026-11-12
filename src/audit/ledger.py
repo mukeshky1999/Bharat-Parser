@@ -44,6 +44,7 @@ class AuditEntry:
     payload_json: str
     prev_hash: str
     hash: str
+    hash_v: int = 1          # 1: fields joined with "|" (older logs); 2: every field in one JSON list, times included
 
 
 @dataclass(frozen=True)
@@ -64,6 +65,33 @@ def _entry_hash(prev_hash: str, seq: int, ts_ns: int, action: str, actor: str, p
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _entry_hash_v2(prev_hash: str, seq: int, ts_ns: int, ts_utc: str, ts_ist: str, action: str, actor: str,
+                   payload_json: str) -> str:
+    """Version 2: one JSON list, so no field can move into its neighbour, and the displayed times are covered."""
+    text = json.dumps([2, prev_hash, seq, ts_ns, ts_utc, ts_ist, action, actor, payload_json],
+                      ensure_ascii=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _expected_hash(e: "AuditEntry") -> str:
+    if e.hash_v >= 2:
+        return _entry_hash_v2(e.prev_hash, e.seq, e.ts_ns, e.ts_utc, e.ts_ist, e.action, e.actor, e.payload_json)
+    return _entry_hash(e.prev_hash, e.seq, e.ts_ns, e.action, e.actor, e.payload_json)
+
+
+_PATH_LOCKS: Dict[str, threading.RLock] = {}
+_PATH_LOCKS_GUARD = threading.Lock()
+
+
+def _lock_for(path: Optional[str]) -> threading.RLock:
+    """One lock per file, shared by every ledger object that writes it, so two objects cannot fork the chain."""
+    if not path:
+        return threading.RLock()
+    key = os.path.normcase(os.path.abspath(path))
+    with _PATH_LOCKS_GUARD:
+        return _PATH_LOCKS.setdefault(key, threading.RLock())
+
+
 def genesis_hash(case_id: str) -> str:
     return hashlib.sha256(("AUDIT_GENESIS_V1:" + str(case_id)).encode("utf-8")).hexdigest()
 
@@ -82,14 +110,14 @@ class AuditLedger:
             raise ValueError("case_id is required")
         self.case_id = str(case_id)
         self.path = path
-        self._lock = threading.Lock()
+        self._lock = _lock_for(path)
         self.entries: List[AuditEntry] = []
         self._genesis = genesis_hash(self.case_id)
         if path and os.path.exists(path):
             self._load(path)
 
     # ------------------------------------------------------------------ reading
-    def _load(self, path: str) -> None:
+    def _read_file(self, path: str) -> List[AuditEntry]:
         loaded: List[AuditEntry] = []
         with open(path, "r", encoding="utf-8") as fh:
             for n, line in enumerate(fh, 1):
@@ -100,8 +128,11 @@ class AuditLedger:
                     loaded.append(AuditEntry(**json.loads(line)))
                 except (ValueError, TypeError) as exc:
                     raise AuditTamperError(f"line {n} is not a valid audit entry: {exc}") from exc
-        self.entries = loaded
-        result = self.verify()
+        return loaded
+
+    def _load(self, path: str) -> None:
+        self.entries = self._read_file(path)
+        result = self._verify_entries(self.entries)
         if not result.ok:
             raise AuditTamperError(result.error)
 
@@ -116,6 +147,10 @@ class AuditLedger:
             raise ValueError("actor and action are required")
         payload_json = canonical_json(payload or {})
         with self._lock:
+            if self.path and os.path.exists(self.path):
+                err = self._sync()               # what is on disk is the log: a file edited since it was loaded is refused
+                if err:
+                    raise AuditTamperError(err)
             seq = len(self.entries) + 1
             prev = self.head_hash
             if ts_ns is None:
@@ -123,8 +158,8 @@ class AuditLedger:
             ts_utc, ts_ist = _stamp(ts_ns)
             entry = AuditEntry(
                 seq=seq, ts_ns=ts_ns, ts_utc=ts_utc, ts_ist=ts_ist, actor=str(actor), action=str(action),
-                payload_json=payload_json, prev_hash=prev,
-                hash=_entry_hash(prev, seq, ts_ns, str(action), str(actor), payload_json),
+                payload_json=payload_json, prev_hash=prev, hash_v=2,
+                hash=_entry_hash_v2(prev, seq, ts_ns, ts_utc, ts_ist, str(action), str(actor), payload_json),
             )
             if self.path:
                 os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
@@ -136,19 +171,49 @@ class AuditLedger:
             return entry
 
     # ------------------------------------------------------------------ checking
+    def _sync(self) -> str:
+        """Reads the file and checks it against what this object already holds. Entries another object appended are
+        taken over; a file that is shorter than, or differs from, what was loaded is an error. Returns the reason or ''."""
+        try:
+            on_disk = self._read_file(self.path)
+        except AuditTamperError as exc:
+            return str(exc)
+        res = self._verify_entries(on_disk)
+        if not res.ok:
+            return res.error
+        n = len(self.entries)
+        if len(on_disk) < n or on_disk[:n] != self.entries:
+            return "the file on disk no longer matches the log loaded by this program (entries were removed or changed)"
+        self.entries = on_disk
+        return ""
+
     def verify(self) -> VerifyResult:
+        """Checks the chain as it is on disk (when the log has a file), and that memory and file agree."""
+        with self._lock:
+            if self.path and os.path.exists(self.path):
+                err = self._sync()
+                if err:
+                    return VerifyResult(False, len(self.entries), self.head_hash, err)
+                return self._verify_entries(self.entries)
+            if self.path and self.entries:
+                return VerifyResult(False, len(self.entries), self.head_hash, "the audit file is missing")
+            return self._verify_entries(self.entries)
+
+    def _verify_entries(self, entries: List[AuditEntry]) -> VerifyResult:
         prev = self._genesis
-        for i, e in enumerate(self.entries, 1):
+        for i, e in enumerate(entries, 1):
             if e.seq != i:
-                return VerifyResult(False, len(self.entries), self.head_hash, f"sequence gap or reorder at entry {i} (found {e.seq})")
+                return VerifyResult(False, len(entries), self.head_hash, f"sequence gap or reorder at entry {i} (found {e.seq})")
             if e.prev_hash != prev:
-                return VerifyResult(False, len(self.entries), self.head_hash, f"chain broken at entry {e.seq}: previous hash does not match")
+                return VerifyResult(False, len(entries), self.head_hash, f"chain broken at entry {e.seq}: previous hash does not match")
             if not _SHA256_RE.match(e.hash):
-                return VerifyResult(False, len(self.entries), self.head_hash, f"entry {e.seq} has no valid hash")
-            if e.hash != _entry_hash(e.prev_hash, e.seq, e.ts_ns, e.action, e.actor, e.payload_json):
-                return VerifyResult(False, len(self.entries), self.head_hash, f"entry {e.seq} was altered: hash does not match its content")
+                return VerifyResult(False, len(entries), self.head_hash, f"entry {e.seq} has no valid hash")
+            if (e.ts_utc, e.ts_ist) != _stamp(e.ts_ns):
+                return VerifyResult(False, len(entries), self.head_hash, f"entry {e.seq}: the displayed time does not match its recorded instant")
+            if e.hash != _expected_hash(e):
+                return VerifyResult(False, len(entries), self.head_hash, f"entry {e.seq} was altered: hash does not match its content")
             prev = e.hash
-        return VerifyResult(True, len(self.entries), self.head_hash)
+        return VerifyResult(True, len(entries), entries[-1].hash if entries else self._genesis)
 
     def verify_against_head(self, recorded_head: str) -> VerifyResult:
         """Check that a head hash quoted by an earlier report is still part of this chain (detects tail removal)."""
