@@ -261,3 +261,13 @@ def test_derived_contacts_are_labelled_and_have_no_invented_identifier():
     contacts = heal_counterparties_across_apps(arts)["A"]["contacts"]
     assert "Verified Counterparty" not in set(contacts["Identifier"])
     assert set(contacts["Forensic_Provenance"]) == {"DERIVED: payee seen in transactions (not an address-book entry)"}
+
+
+# ---------------- M-06 ----------------
+def test_os_type_is_detected_from_layout_and_acquisition_time_is_not_processing_time():
+    import parsers.api_server as server
+
+    assert server._detect_os_type(["C:/x/data/data/com.whatsapp/databases/msgstore.db"]) == "android"
+    assert server._detect_os_type(["C:/x/private/var/mobile/Library/SMS/sms.db"]) == "ios"
+    assert server._detect_os_type(["C:/x/paisa.db"]) == "unknown"
+    assert server._detect_os_type(["C:/x/system/build.prop", "C:/x/Manifest.db"]) == "unknown"  # contradictory

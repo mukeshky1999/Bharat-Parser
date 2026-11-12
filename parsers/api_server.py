@@ -574,13 +574,17 @@ def _execute_ingestion_pipeline(
         "extractionType": "Not recorded",
         "evidenceSourcePath": abs_evidence,
         "hashes": hashes,
+        # M-06: when the phone was acquired is not known from the files alone. It is not the time this
+        # tool processed them, so it stays unrecorded; processing time is reported separately.
         "acquisitionTimestamp": {
-            "rawValue": int(datetime.now(timezone.utc).timestamp() * 1000),
+            "rawValue": 0,
             "sourceFormat": "UNIX_MS",
-            "utcIso": datetime.now(timezone.utc).isoformat(),
-            "istFormatted": (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d %H:%M:%S IST"),
-            "epochMs": int(datetime.now(timezone.utc).timestamp() * 1000),
+            "utcIso": "Not recorded",
+            "istFormatted": "Not recorded",
+            "epochMs": 0,
         },
+        "processedAtUtc": datetime.now(timezone.utc).isoformat(),
+        "osType": _detect_os_type(discovered_files),
     }
 
     # Iterate over discovered files
@@ -645,7 +649,7 @@ def _execute_ingestion_pipeline(
 
             # Heuristic database parsing
             try:
-                arts = parse_database_artifacts(file_path, os_type="android", app_label=app_label)
+                arts = parse_database_artifacts(file_path, os_type=device_meta["osType"], app_label=app_label)
                 if arts:
                     # H-08: stamp every record with its application and source file at parse time.
                     for frame_name in ("chats", "transactions", "contacts", "calls", "locations"):
@@ -1931,6 +1935,25 @@ def generate_sec230_bnss_report(req: Sec230BnssRequest):
         "html_viewer_path": result.html_viewer_path,
         "statutory_mandate": "Section 230 BNSS 2023 / P. Gopalkrishnan v. State of Kerala (2019)",
     }
+
+
+def _detect_os_type(files: List[str]) -> str:
+    """'ios', 'android' or 'unknown', from the layout of the extraction (not assumed)."""
+    norm = [f.replace(chr(92), "/").lower() for f in files]
+    ios = any(
+        n.endswith(("/manifest.db", "/info.plist", "/chatstorage.sqlite")) or "/private/var/" in n
+        or "/library/sms/sms.db" in n
+        for n in norm
+    )
+    android = any(
+        n.endswith("/build.prop") or "/data/data/" in n or "/com.whatsapp/" in n or "/shared_prefs/" in n
+        for n in norm
+    )
+    if ios and not android:
+        return "ios"
+    if android and not ios:
+        return "android"
+    return "unknown"
 
 
 def _derive_ncrp_candidates(complainant_account: str = "") -> List[Dict[str, Any]]:
