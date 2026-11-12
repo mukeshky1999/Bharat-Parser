@@ -251,6 +251,31 @@ async function runForensicClientTests() {
     globalThis.fetch = async (): Promise<Response> => new Response('{}', { status: 500 });
     assert((await forensicClient.getIngestProgress()) === null, 'A failing server gives null, not an invented progress');
 
+    // =========================================================================
+    // TEST CASE 5: search, record and coverage calls
+    // =========================================================================
+    console.log('\n--- Test Suite 5: Search and coverage ---');
+    globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
+      askedUrl = String(input);
+      return new Response(JSON.stringify({ query: 'x', mode: 'contains', total: 1, hits: [], tables: {}, complete: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    const found = await forensicClient.searchCase('भुगतान 1500', { mode: 'contains', tables: ['chats', 'transactions'], evidenceItem: 'EV-002', limit: 10 });
+    const asked = new URL(askedUrl, 'http://x');
+    assert(asked.pathname === '/api/case/search' && asked.searchParams.get('q') === 'भुगतान 1500' && asked.searchParams.get('mode') === 'contains'
+      && asked.searchParams.get('tables') === 'chats,transactions' && asked.searchParams.get('evidence_item') === 'EV-002', 'Search sends the text, mode and filters unchanged');
+    assert(found.data?.total === 1 && found.error === null, 'Search returns what the server sent');
+    globalThis.fetch = async (): Promise<Response> => new Response(JSON.stringify({ detail: 'The pattern is not valid: missing )' }), { status: 422, headers: { 'Content-Type': 'application/json' } });
+    const refused = await forensicClient.searchCase('(', { mode: 'regex' });
+    assert(refused.data === null && (refused.error ?? '').includes('not valid'), 'A refused search gives the reason, not an empty result');
+    globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
+      askedUrl = String(input);
+      return new Response(JSON.stringify({ table: 'chats', id: 3, record: { id: 3, Decoded_By: null } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    const rec = await forensicClient.getRecord('chats', 3);
+    assert(askedUrl.endsWith('/api/case/record?table=chats&id=3') && rec.data !== null && rec.data.Decoded_By === null, 'A value that was not recorded stays null');
+    await forensicClient.getCoverage('EV-001');
+    assert(askedUrl.endsWith('/api/case/coverage?evidence_item=EV-001'), 'Coverage can be asked for one device');
+
     console.log(`=== RESULTS: ALL ${passedTests}/${totalTests} FORENSIC CLIENT TESTS PASSED (100% SUCCESS) ===\n`);
   } finally {
     // Restore original fetch

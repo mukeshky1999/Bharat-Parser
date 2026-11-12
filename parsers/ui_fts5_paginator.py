@@ -74,6 +74,8 @@ def adapt_legacy_chat_frame(df: pd.DataFrame) -> pd.DataFrame:
     rec = col('Recovery_Method').astype(str)
     prov = prov + ' :: State=' + rec.where(rec.str.strip().ne(''), 'Allocated B-Tree')
     out['Forensic_Provenance'] = prov
+    if 'Decoded_By' in df.columns:
+        out['Decoded_By'] = df['Decoded_By']
     return out
 
 
@@ -442,10 +444,100 @@ class CaseUIPaginatorStore:
                 tbl_cols = {r[1] for r in cur.execute(f"PRAGMA table_info({tbl})")}
                 if "Evidence_Item" not in tbl_cols:
                     cur.execute(f"ALTER TABLE {tbl} ADD COLUMN Evidence_Item TEXT")
+                # Phase 5B.4: every record says which decoder produced it.
+                if "Decoded_By" not in tbl_cols:
+                    cur.execute(f"ALTER TABLE {tbl} ADD COLUMN Decoded_By TEXT")
                 if tbl in ("chats", "transactions"):
                     cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{tbl}_evidence_item ON {tbl}(Evidence_Item)")
 
+            # Phase 5B.4: one row per file the tool looked at, with what became of it.
+            cur.executescript("""
+                CREATE TABLE IF NOT EXISTS coverage (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Evidence_Item TEXT,
+                    File TEXT,
+                    Size_Bytes INTEGER,
+                    Kind TEXT,
+                    Outcome TEXT,
+                    Reason TEXT,
+                    Decoded_By TEXT,
+                    Records TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_coverage_item ON coverage(Evidence_Item, Outcome);
+            """)
             conn.commit()
+        finally:
+            conn.close()
+
+    # ==========================================================================
+    # PARSER TRANSPARENCY (5B.4) AND SEARCH (5B.5)
+    # ==========================================================================
+
+    def add_coverage(self, evidence_item: str, rows: List[Dict[str, Any]]) -> int:
+        """Stores the coverage rows of one evidence item (replacing any stored earlier for the same item)."""
+        conn = self._get_connection()
+        try:
+            conn.execute("DELETE FROM coverage WHERE Evidence_Item = ?", (evidence_item,))
+            conn.executemany(
+                "INSERT INTO coverage(Evidence_Item, File, Size_Bytes, Kind, Outcome, Reason, Decoded_By, Records) VALUES (?,?,?,?,?,?,?,?)",
+                [(evidence_item, r.get("file"), r.get("size_bytes"), r.get("kind"), r.get("outcome"), r.get("reason"),
+                  r.get("decoded_by"), json.dumps(r.get("records") or {}, sort_keys=True)) for r in rows],
+            )
+            conn.commit()
+            return len(rows)
+        finally:
+            conn.close()
+
+    def get_coverage(self, evidence_item: Optional[str] = None) -> List[Dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            sql = "SELECT * FROM coverage" + (" WHERE Evidence_Item = ?" if evidence_item else "") + " ORDER BY id"
+            out = []
+            for r in conn.execute(sql, (evidence_item,) if evidence_item else ()):
+                d = dict(r)
+                try:
+                    d["Records"] = json.loads(d.get("Records") or "{}")
+                except ValueError:
+                    d["Records"] = {}
+                out.append(d)
+            return out
+        finally:
+            conn.close()
+
+    def decoder_summary(self, evidence_item: Optional[str] = None) -> List[Dict[str, Any]]:
+        """For every decoder named in Decoded_By: how many records of each table it produced."""
+        conn = self._get_connection()
+        try:
+            present = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            agg: Dict[str, Dict[str, int]] = {}
+            for tbl in sorted(ALLOWED_TABLES):
+                if tbl not in present or tbl == 'vfs_files':
+                    continue
+                sql = f"SELECT Decoded_By, COUNT(*) FROM {tbl}" + (" WHERE Evidence_Item = ?" if evidence_item else "") + " GROUP BY Decoded_By"
+                for by, n in conn.execute(sql, (evidence_item,) if evidence_item else ()):
+                    agg.setdefault(by or "", {})[tbl] = n
+            return [{"decoded_by": k or None, "records": v, "total": sum(v.values())} for k, v in sorted(agg.items(), key=lambda kv: -sum(kv[1].values()))]
+        finally:
+            conn.close()
+
+    def search(self, query: str, **kw: Any) -> Dict[str, Any]:
+        """Search every table (see parsers.case_search). Read-only."""
+        from parsers.case_search import search_case
+        conn = self._get_connection()
+        try:
+            return search_case(conn, query, allowed_tables=ALLOWED_TABLES, **kw)
+        finally:
+            conn.close()
+
+    def get_record(self, table: str, record_id: int) -> Optional[Dict[str, Any]]:
+        """One whole record as stored. Missing values stay None."""
+        tbl = table.lower().strip()
+        if tbl not in ALLOWED_TABLES:
+            raise ValueError(f"Not a table of the case store: {table}")
+        conn = self._get_connection()
+        try:
+            r = conn.execute(f"SELECT * FROM {tbl} WHERE id = ?", (record_id,)).fetchone()
+            return dict(r) if r else None
         finally:
             conn.close()
 
@@ -461,6 +553,7 @@ class CaseUIPaginatorStore:
                 if removed[tbl] and f"{tbl}_fts" in existing:
                     # chats and transactions have a delete trigger; the others do not, so rebuild their index
                     conn.execute(f"INSERT INTO {tbl}_fts({tbl}_fts) VALUES('rebuild')")
+            conn.execute("DELETE FROM coverage WHERE Evidence_Item = ?", (item_id,))
             conn.commit()
         finally:
             conn.close()

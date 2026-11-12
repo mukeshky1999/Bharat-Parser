@@ -172,6 +172,69 @@ export interface IngestProgress {
   processing_log_tail: Array<{ stage: string; file: string; status: string; error: string }>;
 }
 
+export type SearchMode = 'keyword' | 'phrase' | 'contains' | 'regex';
+
+/** One place a search text was found. `table` and `id` identify the record; fetch it whole with `getRecord`. */
+export interface SearchHit {
+  table: string;
+  id: number;
+  evidence_item: string | null;
+  application: string;
+  source_file: string;
+  time: string;
+  /** Parser and version that produced the record; null when it was not recorded. */
+  decoded_by: string | null;
+  matched_fields: string[];
+  snippet: string;
+  provenance: string | null;
+  rank: number | null;
+}
+
+export interface SearchResult {
+  query: string;
+  mode: SearchMode;
+  total: number;
+  /** False when a scan was stopped by its time limit: `total` is then "at least". */
+  total_is_exact: boolean;
+  offset: number;
+  limit: number;
+  hits: SearchHit[];
+  tables: Record<string, { count: number; count_is_exact: boolean; searched_fields: string[]; skipped?: string }>;
+  complete: boolean;
+  stopped_reason: string | null;
+  cells_cut: number;
+  elapsed_ms: number;
+}
+
+export interface SearchQuery {
+  mode?: SearchMode;
+  tables?: string[];
+  evidenceItem?: string;
+  application?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** What became of one file the tool looked at. */
+export interface CoverageFile {
+  evidence_item: string;
+  file: string;
+  size_bytes: number | null;
+  kind: string;
+  outcome: 'DECODED' | 'PARTIAL' | 'NOT_DECODED' | 'FAILED' | 'ENCRYPTED_NO_KEY' | 'COMPANION' | 'METADATA_ONLY' | 'NOT_EXTRACTED';
+  reason: string | null;
+  decoded_by: string | null;
+  records: Record<string, number>;
+}
+
+export interface CoverageReport {
+  evidence_item: string | null;
+  scope: string;
+  summary: { files: number; by_outcome: Record<string, number> };
+  decoders: Array<{ decoded_by: string | null; records: Record<string, number>; total: number }>;
+  files: CoverageFile[];
+}
+
 export interface IngestOptions {
   /** "replace" starts the case again from this evidence; "add" puts another device into the existing case. */
   mode?: 'replace' | 'add';
@@ -609,6 +672,33 @@ class ForensicClient {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Search all tables of the open case. A refused query (bad pattern, unknown mode) comes back as `error` with the
+   * reason in words; it is not turned into an empty result.
+   */
+  public async searchCase(text: string, opts: SearchQuery = {}): Promise<{ data: SearchResult | null; error: string | null }> {
+    const p = new URLSearchParams({ q: text, mode: opts.mode ?? 'keyword', limit: String(opts.limit ?? 50), offset: String(opts.offset ?? 0) });
+    if (opts.tables && opts.tables.length) p.set('tables', opts.tables.join(','));
+    if (opts.evidenceItem) p.set('evidence_item', opts.evidenceItem);
+    if (opts.application) p.set('application', opts.application);
+    const res = await this.fetchApi<SearchResult>(`/api/case/search?${p.toString()}`);
+    return { data: res.data, error: res.error };
+  }
+
+  /** One record exactly as stored; a value that was not recorded is null. */
+  public async getRecord(table: string, id: number): Promise<{ data: Record<string, unknown> | null; error: string | null }> {
+    const res = await this.fetchApi<{ record: Record<string, unknown> }>(
+      `/api/case/record?table=${encodeURIComponent(table)}&id=${encodeURIComponent(String(id))}`);
+    return { data: res.data?.record ?? null, error: res.error };
+  }
+
+  /** Which decoder produced the records, and which files were seen but not decoded, with the reason. */
+  public async getCoverage(evidenceItem?: string): Promise<{ data: CoverageReport | null; error: string | null }> {
+    const q = evidenceItem ? `?evidence_item=${encodeURIComponent(evidenceItem)}` : '';
+    const res = await this.fetchApi<CoverageReport>(`/api/case/coverage${q}`);
+    return { data: res.data, error: res.error };
   }
 
   /**

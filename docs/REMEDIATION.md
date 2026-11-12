@@ -197,3 +197,19 @@ Still open from the earlier lists: M-01 to M-06 in the live (`parsers/`) path, a
 - `forensicClient.getIngestProgress(since)` and the `IngestProgress` type (null when the server cannot be reached).
 - Not done: cancelling a running ingest (aborting the request does not stop the server thread); the progress screen itself (5C.9).
 Python 594 passed (587 before; 7 new in `tests/test_ingest_progress.py`, which read the real endpoint from inside the running pipeline); `npm run test:ts` 21/21; `tsc` clean.
+
+### Phase 5B.4: parser transparency (2026-11-12)
+- **`Decoded_By` on every stored record** (chats, transactions, contacts, calls, locations, os_spillover, p2p_orders; also fiat_crypto_bridge, which says it is derived): the parser function, the tool version, the app profile that matched (or "none (generic)"), and for a decrypted database the key's 8-digit fingerprint. Null when not recorded; it is never defaulted. Older case files get the column added (null for records written before).
+- **Coverage report**, `GET /api/case/coverage?evidence_item=`: one row per file the tool opened, with `outcome` (DECODED, PARTIAL, NOT_DECODED, FAILED, ENCRYPTED_NO_KEY, COMPANION for -wal/-shm/-journal, METADATA_ONLY for build.prop, NOT_EXTRACTED), the reason, the decoder, and records kept per table. Also a per-decoder record count. A SQLite database that no decoder matched is NOT_DECODED ("no table in it matched a decoder"); a SQLite database without a .db/.sqlite/.sqlite3 name is reported as not opened, because the tool chooses databases by extension. Stored in the case file with its evidence item and removed with it.
+- **Limitations**: PARTIAL and NOT_DECODED databases are written to the processing log as warnings, and the non-database files as one summary line, so the examination report lists them. The coverage report has the full list.
+- **Scope is stated in the response**: for a folder or single file every file is listed; for a container only the entries the tool extracts, plus any it failed to extract.
+- Found on the way: notifications and custodial-wallet records are decoded but never written to the case. Coverage marks such a file PARTIAL with that reason. Storing them is not done.
+
+### Phase 5B.5: global search (2026-11-12)
+- **`GET /api/case/search?q=&mode=&tables=&evidence_item=&application=&limit=&offset=`** over every table; a hit gives table, id, device, application, source file, time, `decoded_by`, matched fields, a snippet and the provenance line. **`GET /api/case/record?table=&id=`** returns the whole record (nulls kept).
+- Modes: `keyword` (every word, words match longer words that start with them, full-text index), `phrase`, `contains` (anywhere inside a field, including numbers and identifiers; text is NFKC-normalised, zero-width characters dropped, digits of any script read as 0-9, case folded; reads every row), `regex` (case-insensitive, reads every row).
+- The response says how far it looked: `searched_fields` per table (the full-text index does not cover numeric fields such as Amount; `contains` and `regex` do), `complete` and `total_is_exact` (a scan stops at 20 s and says so), `cells_cut` (fields over 20,000 characters are compared up to that length).
+- Query text cannot break the index syntax (every word is quoted). Regex: at most 200 characters; a repeated group inside a repeat such as `(a+)+` is refused. **Limit:** other patterns that can run long (for example `(a|aa)+$`) are not detected, and Python cannot interrupt a single match, so the time limit only applies between rows.
+- Not done: date-range filter and saved filters (5C.4), transliteration between scripts, stemming. A search never changes the case file (tested).
+- Client: `searchCase`, `getRecord`, `getCoverage` and their types. No search or coverage screen yet (5C).
+Python 610 passed (594 before; 16 new in `tests/test_coverage_and_search.py`); `npm run test:ts` 26/26; `tsc` clean.

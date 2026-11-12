@@ -21,7 +21,7 @@ Rules for this file:
 | 2 | "Unknown" as a first-class value through parser, store, UI and export, with tests that fail if any layer substitutes a default (direction, status, time, page, counterparty) | exists | R-01..R-20, U-07 (see `REVIEW_FINDINGS_2.md`) | `tests/test_review_regressions.py`, `tests/test_financial_integrity.py`, `ui/tests/workbench_store_test.ts` |
 | 3 | Merged (clustered) records that keep the list of contributing source rows, with page and byte offset where the main file is the whole truth | exists (rows, state, page and offset for live rows; offsets for WAL-served rows still planned) | Phase 5B.1 commits on `feature/parity-and-independence`: `parsers/heuristic_engine.py`, `parsers/sqlite_locator.py` | `tests/test_tx_provenance.py` (`test_merged_record_lists_every_contributing_row`, `test_recorded_offset_is_the_real_cell_in_the_file`) |
 | 4 | Hash-chained audit log; chain head embedded in every report, annexure and package | exists | f3a931c, 69b4704, 13644e9 (2026-11-12) `src/audit/ledger.py` | `tests/test_audit.py`, `tests/test_examination_report.py` |
-| 5 | "Limitations" section generated from the processing log: what was not decoded, truncated, or encrypted without a key | partly exists (failures and warnings; encrypted-without-key outcome not yet logged) | 69b4704 `parsers/examination_report.py` | `tests/test_examination_report.py` |
+| 5 | "Limitations" section generated from the processing log: what was not decoded, truncated, or encrypted without a key | exists (failures, warnings, encrypted-without-key, and files seen but not decoded, from the per-file coverage record, 2026-11-12) | 69b4704 `parsers/examination_report.py`; 5B.4 `parsers/api_server.py`, `parsers/ui_fts5_paginator.py` | `tests/test_examination_report.py`, `tests/test_coverage_and_search.py` |
 | 6 | Fail-closed disposition gate: no export is built until every item has an explicit decision; masking applied to data before rendering | exists | 50cadf9, 13644e9 `parsers/review_package.py` | `tests/test_review_package.py` |
 | 7 | Machine-readable facts bundle kept separate from any legal form (the tool refuses to generate the form) | exists | 69b4704 `/api/report/facts` | `tests/test_examination_report.py` (`test_no_statutory_form_routes_exist`) |
 | 8 | Reviewer round trip: tags exported from a portable package as a file bound to the package hash, merged with an audit entry | planned | - | - |
@@ -47,6 +47,11 @@ the technical effect; who decided what (human contribution); earliest date and c
 ### Entry 2: unknown as a first-class value
 * Problem: parsers and viewers that fill missing fields with a plausible default (incoming, success, now) put invented facts in reports.
 * Method: a pipeline-wide rule that a missing value stays missing from parser to export, enforced by tests that inject records with each field absent and assert the output says unknown.
+* Human contribution: _to be written by the named inventor._
+
+### Entry 5: limitations and coverage from the record of what was done
+* Problem: a report that lists only what was found hides what was not read; a reviewer cannot tell an empty result from a file that was never decoded.
+* Method: the ingest writes one coverage row per file it looked at (decoded, partly decoded, not decoded with the reason, failed, encrypted with no key), and every stored record carries the parser and version that produced it (null if unknown). The report's Limitations section is generated from the same record, so it cannot omit a file the coverage lists.
 * Human contribution: _to be written by the named inventor._
 
 ## Independence notes

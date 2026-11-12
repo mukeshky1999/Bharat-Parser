@@ -731,6 +731,45 @@ def _item_summaries(state: Dict[str, Any]) -> List[Dict[str, Any]]:
 # Core Ingestion Pipeline Implementation
 # ------------------------------------------------------------------------------
 
+_STORED_FRAMES = ("chats", "transactions", "contacts", "calls", "locations", "os_spillover", "p2p_orders")
+
+
+def decoder_name(function: str, app_profile: str = "") -> str:
+    """Parser and version, as written into Decoded_By on every record it produces."""
+    return f"parsers.heuristic_engine.{function} {TOOL_VERSION}; app profile: {app_profile or 'none (generic)'}"
+
+
+def db_coverage(counts: Dict[str, int], error: str = "") -> Tuple[str, str, Dict[str, int]]:
+    """What became of a SQLite file: (outcome, reason, records kept per table)."""
+    if error:
+        return "FAILED", error, {}
+    kept = {k: v for k, v in counts.items() if k in _STORED_FRAMES and v}
+    dropped = {k: v for k, v in counts.items() if k not in _STORED_FRAMES and v}
+    if kept and not dropped:
+        return "DECODED", "", kept
+    if dropped:
+        why = "Decoded but not written to the case: " + ", ".join(f"{k} ({v})" for k, v in sorted(dropped.items()))
+        return "PARTIAL", why, kept
+    return "NOT_DECODED", "Opened as a SQLite database, but no table in it matched a decoder, so no records were produced.", {}
+
+
+def non_database_coverage(path: str, f_low: str) -> Tuple[str, str, str]:
+    """What became of a file that is not opened as a database: (outcome, reason, kind)."""
+    if f_low.endswith(("-wal", "-shm", "-journal")):
+        return "COMPANION", "Side file of a database; its content is read together with that database.", "SQLite side file"
+    if f_low.endswith("build.prop"):
+        return "METADATA_ONLY", "Read for device details only (model, manufacturer, Android version, build).", "Device properties"
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(16)
+    except OSError as exc:
+        return "FAILED", f"Could not be read: {exc}", "File"
+    if head.startswith(b"SQLite format 3\x00"):
+        return ("NOT_DECODED", "A SQLite database whose name does not end in .db, .sqlite or .sqlite3. The tool chooses "
+                "databases by file extension, so it was not opened.", "SQLite database (not opened)")
+    return "NOT_DECODED", "Not opened: the tool has no decoder for this file type.", "File"
+
+
 def _execute_ingestion_pipeline(
     evidence_path: str,
     case_id: str,
@@ -792,6 +831,18 @@ def _execute_ingestion_pipeline(
             "error": f"{type(exc).__name__}: {exc}",
         })
 
+    # Phase 5B.4: one row for every file the tool looked at, saying what became of it.
+    coverage: List[Dict[str, Any]] = []
+
+    def _cov(name: str, outcome: str, reason: str = "", kind: str = "", decoded_by: str = "",
+             records: Optional[Dict[str, int]] = None, path: str = "") -> None:
+        try:
+            size = os.path.getsize(path) if path else None
+        except OSError:
+            size = None
+        coverage.append({"file": name, "size_bytes": size, "kind": kind, "outcome": outcome, "reason": reason,
+                         "decoded_by": decoded_by or None, "records": records or {}})
+
     if p_low.endswith((".ufd", ".xry", ".ofb")) and not zipfile.is_zipfile(abs_evidence):
         raise HTTPException(
             status_code=422,
@@ -810,8 +861,10 @@ def _execute_ingestion_pipeline(
         for vpath in container_engine.rejected_entries:
             processing_log.append({"stage": "extract", "file": os.path.basename(vpath), "status": "WARNING",
                                    "error": f"Not extracted: the path {vpath!r} would leave the extraction folder"})
+            _cov(vpath, "NOT_EXTRACTED", "The path would leave the extraction folder, so the entry was not extracted.")
         for vpath, why in container_engine.read_errors:
             processing_log.append({"stage": "extract", "file": os.path.basename(vpath), "status": "FAILED", "error": why})
+            _cov(vpath, "NOT_EXTRACTED", why)
         # Collect materialized DBs
         discovered_files: List[str] = []
         for root, _, files in os.walk(extracted_dbs_dir):
@@ -927,6 +980,17 @@ def _execute_ingestion_pipeline(
         prog.progress(_file_no, len(discovered_files), os.path.basename(file_path))
         f_low = file_path.lower()
         original_file_path = file_path  # the path in the evidence; a decrypted copy lives elsewhere
+        # Determine relative / virtual file system path for accurate plugin matching
+        if is_archive and original_file_path.startswith(extracted_dbs_dir):
+            vfs_path = os.path.relpath(original_file_path, extracted_dbs_dir).replace("\\", "/")
+        elif working_copy_dir and original_file_path.startswith(working_copy_dir):
+            vfs_path = os.path.relpath(original_file_path, working_copy_dir).replace("\\", "/")
+        else:
+            vfs_path = original_file_path.replace("\\", "/")
+
+        decrypted_note = ""
+        file_counts: Dict[str, int] = {}
+        file_error = ""
 
         # An encrypted database is opened only with a key that was supplied or found in the evidence.
         enc_reason = encrypted_db.encrypted_database_reason(file_path)
@@ -946,16 +1010,21 @@ def _execute_ingestion_pipeline(
                                                 "fingerprint": outcome["key_fingerprint"], "profile": outcome["profile"],
                                                 "caveats": outcome.get("notes") or []}))
                 file_path = outcome["out_path"]
+                decrypted_note = f"; opened after decryption with key {outcome['key_fingerprint']} (src.crypto.sqlcipher)"
                 f_low = file_path.lower()
             elif outcome["status"] == "KEY_FOUND_OUTPUT_UNREADABLE":
                 processing_log.append({"stage": "decrypt_database", "file": rel, "status": "FAILED",
                                        "error": "; ".join(outcome.get("notes") or [])})
+                _cov(vfs_path, "FAILED", "; ".join(outcome.get("notes") or []),
+                     kind="SQLite database (encrypted)", path=original_file_path)
                 continue
             else:
                 processing_log.append({
                     "stage": "decrypt_database", "file": rel, "status": "ENCRYPTED_NO_KEY",
                     "error": f"{enc_reason}. " + "; ".join(outcome.get("notes") or []) + ". Its content was not read.",
                 })
+                _cov(vfs_path, "ENCRYPTED_NO_KEY", f"{enc_reason}. Its content was not read.",
+                     kind="SQLite database (encrypted)", path=original_file_path)
                 continue
 
         # Check for build.prop / device info
@@ -973,14 +1042,6 @@ def _execute_ingestion_pipeline(
                             device_meta["buildNumber"] = line.split("=", 1)[1].strip()
             except Exception:
                 pass
-
-        # Determine relative / virtual file system path for accurate plugin matching
-        if is_archive and original_file_path.startswith(extracted_dbs_dir):
-            vfs_path = os.path.relpath(original_file_path, extracted_dbs_dir).replace("\\", "/")
-        elif working_copy_dir and original_file_path.startswith(working_copy_dir):
-            vfs_path = os.path.relpath(original_file_path, working_copy_dir).replace("\\", "/")
-        else:
-            vfs_path = original_file_path.replace("\\", "/")
 
         # Plugin match
         matched_plugin = _plugin_registry.match_path(clean_path=vfs_path)
@@ -1017,7 +1078,12 @@ def _execute_ingestion_pipeline(
             # Heuristic database parsing
             try:
                 arts = parse_database_artifacts(file_path, os_type=device_meta["osType"], app_label=app_label)
+                decoder = decoder_name("parse_database_artifacts", matched_plugin.app_name if matched_plugin else "") + decrypted_note
                 if arts:
+                    for _name, _fr in arts.items():
+                        if isinstance(_fr, pd.DataFrame) and not _fr.empty:
+                            _fr["Decoded_By"] = decoder
+                            file_counts[_name] = len(_fr)
                     # H-08: stamp every record with its application and source file at parse time.
                     for frame_name in ("chats", "transactions", "contacts", "calls", "locations"):
                         fr = arts.get(frame_name)
@@ -1061,14 +1127,26 @@ def _execute_ingestion_pipeline(
                 processing_log.append({"stage": "parse_database", "file": os.path.basename(file_path), "status": "OK", "error": ""})
             except Exception as exc:
                 _log_failure("parse_database", file_path, exc)
+                file_error = f"{type(exc).__name__}: {exc}"
 
             # Crypto P2P parsing
             try:
                 crypto_df = parse_crypto_p2p_artifacts(file_path, app_name=app_label)
                 if crypto_df is not None and not crypto_df.empty:
+                    crypto_df["Decoded_By"] = decoder_name("parse_crypto_p2p_artifacts", app_label) + decrypted_note
+                    file_counts["p2p_orders"] = len(crypto_df)
                     crypto_p2p_records.append(crypto_df)
             except Exception as exc:
                 _log_failure("crypto_p2p", file_path, exc)
+
+            _outcome, _reason, _stored = db_coverage(file_counts, file_error)
+            _cov(vfs_path, _outcome, _reason, kind="SQLite database", path=original_file_path,
+                 decoded_by=(decoder_name("parse_database_artifacts", matched_plugin.app_name if matched_plugin else "") + decrypted_note) if _stored else "",
+                 records=_stored)
+        else:
+            _outcome, _reason, _kind = non_database_coverage(file_path, f_low)
+            _cov(vfs_path, _outcome, _reason, kind=_kind, path=file_path,
+                 decoded_by=("device property reader (parsers.api_server)" if _outcome == "METADATA_ONLY" else ""))
 
     prog.progress(len(discovered_files), len(discovered_files))
     # 4. Reconciliation and Cross-App Enrichment
@@ -1200,6 +1278,8 @@ def _execute_ingestion_pipeline(
         ingested["p2p_orders"] = store.ingest_dataframe_chunked("p2p_orders", combined_crypto_df, evidence_item=item_id)
 
     if not aligned_fiat_crypto_df.empty:
+        aligned_fiat_crypto_df = aligned_fiat_crypto_df.assign(
+            Decoded_By="derived by the tool from the p2p and transaction records (not read from a file)")
         prog.note("writing fiat_crypto_bridge")
         ingested["fiat_crypto_bridge"] = store.ingest_dataframe_chunked("fiat_crypto_bridge", aligned_fiat_crypto_df, evidence_item=item_id)
 
@@ -1214,6 +1294,16 @@ def _execute_ingestion_pipeline(
                 "stage": "ingest_schema", "file": tbl, "status": "WARNING",
                 "error": f"Columns with data not stored: {', '.join(cols)}",
             })
+
+    # 5B.4: files seen but not (fully) decoded are limitations; the full list is the coverage report.
+    for c in coverage:
+        if c["outcome"] == "PARTIAL" or (c["outcome"] == "NOT_DECODED" and c["kind"].startswith("SQLite")):
+            processing_log.append({"stage": "coverage", "file": os.path.basename(c["file"]), "status": "WARNING", "error": c["reason"]})
+    n_other = sum(1 for c in coverage if c["outcome"] == "NOT_DECODED" and not c["kind"].startswith("SQLite"))
+    if n_other:
+        processing_log.append({"stage": "coverage", "file": f"{n_other} file(s)", "status": "WARNING",
+                               "error": "Seen, but the tool has no decoder for them; they are listed in the coverage report"})
+    store.add_coverage(item_id, coverage)
 
     # Post-ingestion integrity check: re-hash the original evidence and compare.
     prog.stage("verify", total=_evidence_size(abs_evidence), unit="bytes")
@@ -1597,6 +1687,71 @@ def get_ingest_progress(since: int = Query(0, ge=0, description="Only events wit
     """What the ingest is doing now (or did last): the step, the work counted inside it, the events so far and the tail
     of the processing log. Poll this while ``POST /api/case/ingest`` is running."""
     return _ingest_progress.snapshot(since)
+
+
+COVERAGE_SCOPE = (
+    "Every file the tool opened for examination. For a folder or a single file that is every file. For a container "
+    "(archive, backup, image) it is the entries the tool chose to extract (databases, key stores, device property files), "
+    "plus any entry it failed to extract; other entries of the container are not listed."
+)
+
+
+@app.get("/api/case/coverage")
+def case_coverage(evidence_item: Optional[str] = Query(None, description="Limit to one evidence item (device)")):
+    """Parser transparency: which decoder produced the records, and which files were seen but not decoded, with the reason."""
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=412, detail="No case is loaded.")
+    rows = _active_store.get_coverage(evidence_item)
+    by_outcome: Dict[str, int] = {}
+    for r in rows:
+        by_outcome[r["Outcome"]] = by_outcome.get(r["Outcome"], 0) + 1
+    files = [{
+        "evidence_item": r["Evidence_Item"], "file": r["File"], "size_bytes": r["Size_Bytes"], "kind": r["Kind"],
+        "outcome": r["Outcome"], "reason": r["Reason"] or None, "decoded_by": r["Decoded_By"], "records": r["Records"],
+    } for r in rows]
+    return {
+        "evidence_item": evidence_item,
+        "scope": COVERAGE_SCOPE,
+        "summary": {"files": len(rows), "by_outcome": by_outcome},
+        "decoders": _active_store.decoder_summary(evidence_item),
+        "files": files,
+    }
+
+
+@app.get("/api/case/search")
+def case_search(
+    q: str = Query(..., description="Search text"),
+    mode: str = Query("keyword", description="keyword, phrase, contains (Unicode and Indic digits folded) or regex"),
+    tables: Optional[str] = Query(None, description="Comma separated table names; default all"),
+    evidence_item: Optional[str] = Query(None),
+    application: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """Search all tables of the open case. Each hit names its table and id; fetch the whole record with /api/case/record."""
+    from parsers.case_search import SearchError
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=412, detail="No case is loaded.")
+    try:
+        return _active_store.search(
+            q, mode=mode, tables=[t for t in (tables or "").split(",") if t.strip()] or None,
+            evidence_item=evidence_item, application=application, limit=limit, offset=offset)
+    except SearchError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.get("/api/case/record")
+def case_record(table: str = Query(...), id: int = Query(..., ge=1)):
+    """One record exactly as stored; values that were not recorded are null."""
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=412, detail="No case is loaded.")
+    try:
+        rec = _active_store.get_record(table, id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if rec is None:
+        raise HTTPException(status_code=404, detail=f"No record {id} in {table}.")
+    return {"table": table, "id": id, "record": rec}
 
 
 @app.get("/api/case/tree-counts")
