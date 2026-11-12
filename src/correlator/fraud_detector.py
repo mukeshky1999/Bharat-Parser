@@ -42,9 +42,10 @@ class MuleAccountAndFraudDetector:
         # Group balance-bearing transactions by account tail
         acct_groups: Dict[str, List[UnifiedTransactionRecord]] = defaultdict(list)
         for tx in transactions:
-            if tx.post_tx_balance_inr is not None:
-                key = tx.account_tail_digits or "UNKNOWN_ACCT"
-                acct_groups[key].append(tx)
+            # Balances of different accounts cannot be compared, so a transaction whose account is not
+            # known is left out rather than pooled with other unknown accounts.
+            if tx.post_tx_balance_inr is not None and tx.account_tail_digits:
+                acct_groups[tx.account_tail_digits].append(tx)
 
         for acct_tail, tx_list in acct_groups.items():
             if len(tx_list) < 2:
@@ -61,6 +62,9 @@ class MuleAccountAndFraudDetector:
                 b_curr = curr_tx.post_tx_balance_inr
                 if b_prev is None or b_curr is None:
                     continue
+
+                if curr_tx.tx_direction not in ("DEBIT", "CREDIT"):
+                    continue  # direction unknown: the expected balance cannot be computed
 
                 # Signed amount
                 signed_amt = -curr_tx.amount_inr_decimal if curr_tx.tx_direction == "DEBIT" else curr_tx.amount_inr_decimal
@@ -98,9 +102,10 @@ class MuleAccountAndFraudDetector:
                         account_tail_digits=acct_tail,
                         discrepancy_amount_inr=abs_delta,
                         narrative_summary=(
-                            f"CRITICAL: Unexplained balance discrepancy of {abs_delta:.2f} INR "
-                            f"between {prev_tx.tx_utc_iso} and {curr_tx.tx_utc_iso} indicates "
-                            f"missing/deleted bank alert for Account {acct_tail}"
+                            f"Unexplained balance discrepancy of {abs_delta:.2f} INR "
+                            f"between {prev_tx.tx_utc_iso} and {curr_tx.tx_utc_iso} for Account {acct_tail}: "
+                            f"possibly a missing or deleted bank alert (other causes, such as a transaction through "
+                            f"another channel, are not excluded)"
                         ),
                         flagged_utc_iso=curr_tx.tx_utc_iso,
                     )
