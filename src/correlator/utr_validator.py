@@ -114,13 +114,14 @@ class NPCIUTRJulianAndVerhoeffValidator:
         # Aadhaar numbers never start with 0 or 1
         is_aadhaar_prefix_valid = d1 in (2, 3, 4, 5, 6, 7, 8, 9)
 
-        # Aadhaar test criteria
+        # Aadhaar test criteria. A random 12-digit number passes Verhoeff about 1 time in 10, so this is a
+        # strong hint to withhold the number from exports, not proof that it is an Aadhaar number.
         if is_verhoeff_valid and is_aadhaar_prefix_valid:
             if julian_day_utr > 366 or julian_day_utr == 0 or not is_explicit_utr_labeled:
                 return UTRValidationResult(
                     candidate_number=clean_num,
                     is_aadhaar_number=True,
-                    utr_validation_status="AADHAAR_NUMBER_NOT_UTR",
+                    utr_validation_status="POSSIBLE_AADHAAR_NUMBER",
                     extracted_year_digit=year_digit_utr,
                     extracted_julian_day=julian_day_utr,
                 )
@@ -159,11 +160,11 @@ class NPCIUTRJulianAndVerhoeffValidator:
                         extracted_julian_day=julian_day_utr,
                     )
 
-        # Default fallback if no timestamp provided but Julian day is structurally valid
+        # No transaction time was supplied, so nothing was compared: the number is only well formed.
         return UTRValidationResult(
             candidate_number=clean_num,
             is_aadhaar_number=False,
-            utr_validation_status="VALID_NPCI_YDDD_MATCH",
+            utr_validation_status="STRUCTURALLY_VALID_DATE_NOT_CHECKED",
             extracted_year_digit=year_digit_utr,
             extracted_julian_day=julian_day_utr,
         )

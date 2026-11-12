@@ -141,7 +141,7 @@ def test_verhoeff_aadhaar_vs_julian_day_utr_disambiguation(tmp_correlator_dir):
     1. Evaluates Aadhaar number "248211223343":
        - Satisfies Verhoeff D5 dihedral checksum.
        - Digits 2-4 are 482 > 366 (impossible Julian day!).
-       Verifies: is_aadhaar = True, utr_validation_status = "AADHAAR_NUMBER_NOT_UTR".
+       Verifies: is_aadhaar = True, utr_validation_status = "POSSIBLE_AADHAAR_NUMBER".
     2. Evaluates UTR "630914829104":
        - Digit 1 = 6 (Year 2026).
        - Digits 2-4 = 309 (Nov 5, 2026, Julian day 309).
@@ -158,7 +158,7 @@ def test_verhoeff_aadhaar_vs_julian_day_utr_disambiguation(tmp_correlator_dir):
         tx_utc_iso="2026-11-05T12:00:00.000000Z",
     )
     assert aadhaar_res.is_aadhaar_number is True
-    assert aadhaar_res.utr_validation_status == "AADHAAR_NUMBER_NOT_UTR"
+    assert aadhaar_res.utr_validation_status == "POSSIBLE_AADHAAR_NUMBER"
 
     # 2. Test Genuine NPCI UTR
     utr_num = "630914829104"
