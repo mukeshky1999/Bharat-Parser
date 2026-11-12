@@ -135,7 +135,7 @@ def test_endpoints_report_and_accounts(tmp_path, monkeypatch):
     assert "Records tagged by the examiner" in html and "Records relied upon" in html
     assert "tags.relied_upon" in client.get("/api/report/facts", params={"format": "csv"}).text
     j = client.get("/api/report/accounts-of-interest").json()
-    assert set(j) == {"accounts", "left_out", "note"}
+    assert set(j) == {"accounts", "left_out", "keep_out_tags_not_traced", "note"}
     assert client.get("/api/report/accounts-of-interest", params={"format": "csv"}).text.startswith("section,vpa")
 
 

@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
@@ -107,6 +108,10 @@ def build_package(
     if not items:
         raise PackageRefused("No items were selected.")
     terms = [t.strip() for t in (mask_terms or []) if t and t.strip()]
+    short = [t for t in terms if len(t) < 3]
+    if short:
+        raise PackageRefused("A masking term needs at least 3 characters (a shorter one would damage unrelated words): "
+                             + ", ".join(repr(t) for t in short))
 
     # ---- validate everything before writing anything
     missing = [os.path.basename(i.source_path) for i in items if i.disposition is None]
@@ -124,15 +129,36 @@ def build_package(
     unreadable = [os.path.basename(i.source_path) for i in items if not os.path.isfile(i.source_path)]
     if unreadable:
         raise PackageRefused("File not found: " + ", ".join(unreadable))
-    out = os.path.abspath(output_dir)
-    if os.path.exists(out) and os.listdir(out):
+    final = os.path.abspath(output_dir)
+    if os.path.exists(final) and os.listdir(final):
         raise PackageRefused("The package folder already exists and is not empty. Nothing was changed.")
+    # Built beside the final folder and moved into place only when complete, so a failure leaves nothing half-made.
+    out = final + ".building-" + uuid.uuid4().hex[:8]
+    try:
+        return _build_into(out, final, case_id, items, terms, audit_head, acknowledge_tagged)
+    except BaseException:
+        shutil.rmtree(out, ignore_errors=True)
+        raise
+
+
+def _sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _build_into(out: str, final: str, case_id: str, items: List[PackageItem], terms: List[str], audit_head: str,
+                acknowledge_tagged: bool) -> PackageResult:
+    # One pass, longest term first, so "Ramesh Kumar" is not half-replaced by an earlier "Ram"; the marker number is the
+    # position of the term in the examiner's list.
+    number = {t.lower(): n for n, t in reversed(list(enumerate(terms, 1)))}
+    pattern = re.compile("|".join(re.escape(t) for t in sorted(set(terms), key=len, reverse=True)), re.IGNORECASE) if terms else None
 
     def mask(text: object) -> str:
         t = str(text)
-        for n, term in enumerate(terms, 1):
-            t = re.sub(re.escape(term), f"[REDACTED_{n:02d}]", t, flags=re.IGNORECASE)
-        return t
+        return pattern.sub(lambda m: f"[REDACTED_{number[m.group(0).lower()]:02d}]", t) if pattern else t
 
     def esc(text: object) -> str:
         return html.escape(mask(text), quote=True)
@@ -156,6 +182,9 @@ def build_package(
             if os.path.dirname(os.path.abspath(dest)) != os.path.join(out, "exhibits"):
                 raise PackageRefused(f"Refusing to write outside the package: {safe}")
             shutil.copyfile(it.source_path, dest)
+            if _sha256_file(dest) != mi.sha256:
+                raise PackageRefused(f"The copy of {os.path.basename(it.source_path)} does not match the file that was hashed "
+                                     "(it changed while the package was being built). Nothing was kept.")
             entry["file"] = "exhibits/" + safe
             included += 1
         else:
@@ -208,6 +237,11 @@ def build_package(
         "<table><tr><th>#</th><th>Name</th><th>Decision</th><th>File</th><th>SHA-256 of original</th><th>Note</th><th>Your mark</th></tr>"
         f"{rows}</table><p class=\"m\">Package id: {package_id}</p><script>{script}</script></body></html>"
     )
-    viewer_path = _write_inside(out, "index.html", viewer.encode("utf-8"))
-    return PackageResult(out, viewer_path, manifest_path, included, withheld, root, package_id,
+    _write_inside(out, "index.html", viewer.encode("utf-8"))
+    if os.path.isdir(final):
+        os.rmdir(final)                      # it was empty (checked above)
+    os.replace(out, final)
+    viewer_path = os.path.join(final, "index.html")
+    manifest_path = os.path.join(final, "manifest.json")
+    return PackageResult(final, viewer_path, manifest_path, included, withheld, root, package_id,
                          [{"index": e["index"], "name": e["name"], "sha256": e["sha256"]} for e in entries])

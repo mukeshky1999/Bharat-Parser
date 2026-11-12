@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import sqlite3
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 from parsers import case_tags
 
@@ -36,12 +37,15 @@ def tag_facts(conn: sqlite3.Connection) -> Dict[str, Any]:
         return empty
     summary = case_tags.list_tags(conn)
     privileged = {(t, r) for t, r in conn.execute("SELECT Tbl, Record_Id FROM tags WHERE Tag = 'privileged' AND Detached = 0")}
+    # a privileged tag that lost its record still names the source location it was placed on: that location is withheld too
+    privileged_prov = {(t, p) for t, p in conn.execute("SELECT Tbl, Provenance FROM tags WHERE Tag = 'privileged' AND Detached = 1")
+                       if p}
     rows = conn.execute(
         "SELECT Tbl, Record_Id, Evidence_Item, Summary, Provenance, Note, Tagged_At_UTC FROM tags "
         "WHERE Tag = 'relied_upon' AND Detached = 0 ORDER BY Tagged_At_UTC, id").fetchall()
     listed, withheld = [], 0
     for tbl, rid, item, summ, prov, note, at in rows:
-        if (tbl, rid) in privileged:
+        if (tbl, rid) in privileged or (tbl, prov) in privileged_prov:
             withheld += 1
             continue
         listed.append({"table": tbl, "id": rid, "evidence_item": item, "summary": summ, "provenance": prov,
@@ -59,17 +63,32 @@ def _norm(v: Any) -> str:
 def accounts_of_interest(conn: sqlite3.Connection) -> Dict[str, Any]:
     """Accounts (VPA / account number) from tagged payment records, with those left out and why."""
     if not _has_tags(conn):
-        return {"accounts": [], "left_out": [], "note": "No tags exist in this case."}
+        return {"accounts": [], "left_out": [], "keep_out_tags_not_traced": 0, "note": "No tags exist in this case."}
     marks: Dict[int, set] = {}
     for rid, tag in conn.execute("SELECT Record_Id, Tag FROM tags WHERE Tbl = 'transactions' AND Detached = 0"):
         marks.setdefault(rid, set()).add(tag)
     if not marks:
-        return {"accounts": [], "left_out": [], "note": "No payment records are tagged."}
-    q = ",".join("?" * len(marks))
-    rows = conn.execute(f"SELECT id, Counterparty, VPA, Account, Evidence_Item, Application FROM transactions WHERE id IN ({q})",
-                        list(marks)).fetchall()
+        return {"accounts": [], "left_out": [], "keep_out_tags_not_traced": 0, "note": "No payment records are tagged."}
+    ids = list(marks)
+    rows = []
+    for i in range(0, len(ids), 500):           # SQLite limits the number of parameters in one statement
+        part = ids[i:i + 500]
+        rows += conn.execute("SELECT id, Counterparty, VPA, Account, Evidence_Item, Application FROM transactions WHERE id IN (%s)"
+                             % ",".join("?" * len(part)), part).fetchall()
     # every identifier that appears on a payment record carrying a keep-out tag
     blocked: Dict[str, set] = {}
+    untraced = 0
+    # a keep-out tag set aside after processing again has no record id, but it kept the source location: every payment
+    # record at that location is treated as carrying it. If no record is found there, the tag cannot be traced to an account.
+    for tag, prov in conn.execute("SELECT Tag, Provenance FROM tags WHERE Tbl = 'transactions' AND Detached = 1 AND Tag IN (%s)"
+                                  % ",".join("?" * len(KEEP_OUT)), list(KEEP_OUT)).fetchall():
+        found = conn.execute("SELECT VPA, Account FROM transactions WHERE Forensic_Provenance = ?", (prov,)).fetchall() if prov else []
+        if not found:
+            untraced += 1
+        for r in found:
+            for kind, val in (("vpa", _norm(r["VPA"])), ("account", _norm(r["Account"]))):
+                if val:
+                    blocked.setdefault(kind + ":" + val, set()).add(tag + " (tag set aside)")
     for r in rows:
         why = marks[r["id"]] & set(KEEP_OUT)
         if not why:
@@ -108,8 +127,9 @@ def accounts_of_interest(conn: sqlite3.Connection) -> Dict[str, Any]:
             left_out.append(row)
         else:
             accounts.append(row)
-    return {"accounts": accounts, "left_out": left_out,
-            "note": "Built from payment records tagged of_interest or relied_upon. Accounts that also appear on a record tagged "
+    return {"accounts": accounts, "left_out": left_out, "keep_out_tags_not_traced": untraced,
+            "note": ("%d complainant/excluded/privileged tag(s) were set aside by processing again and could not be traced to an "
+                     "account; check them by hand before using this sheet. " % untraced if untraced else "") + "Built from payment records tagged of_interest or relied_upon. Accounts that also appear on a record tagged "
                     "complainant, excluded or privileged are listed apart. Matching is by exact VPA or account number only."}
 
 
@@ -132,23 +152,42 @@ def accounts_csv(data: Dict[str, Any]) -> str:
     return buf.getvalue()
 
 
+_COMPANION = re.compile(r"-(wal|shm|journal)$", re.I)
+
+
+def _file_names_in(prov: str) -> set:
+    """The file names a provenance line names: the path before the first ' :: ', and any 'In=<file> frame n' part.
+    Journal / WAL / SHM companions count as the database they belong to."""
+    names = set()
+    path_part = prov.split(" :: ", 1)[0]
+    cands = [path_part] + re.findall(r"In=(\S+)", prov)
+    for c in cands:
+        base = c.replace("\\", "/").rsplit("/", 1)[-1].strip().lower()
+        if base:
+            names.add(_COMPANION.sub("", base))
+    return names
+
+
 def files_with_keep_out_records(conn: sqlite3.Connection, file_names: Iterable[str]) -> Dict[str, Dict[str, int]]:
     """For each file name, how many records tagged privileged / complainant / excluded name that file in their provenance.
 
-    The match is the file's base name inside the stored provenance line; a file whose name is not there matches nothing.
+    A tag set aside after processing again is counted too (it still holds its provenance). The match is the file's whole
+    name, as a path component of the stored provenance line (a -wal / -shm / -journal file counts as its database);
+    a file whose name is not there matches nothing.
     """
     out: Dict[str, Dict[str, int]] = {}
     if not _has_tags(conn):
         return out
-    rows = conn.execute(f"SELECT Tag, Provenance FROM tags WHERE Detached = 0 AND Tag IN ({','.join('?' * len(KEEP_OUT))})",
+    rows = conn.execute(f"SELECT Tag, Provenance FROM tags WHERE Tag IN ({','.join('?' * len(KEEP_OUT))})",
                         list(KEEP_OUT)).fetchall()
+    parsed: List[Tuple[str, set]] = [(tag, _file_names_in(prov)) for tag, prov in rows if prov]
     for name in file_names:
-        base = str(name).replace("\\", "/").rsplit("/", 1)[-1]
+        base = _COMPANION.sub("", str(name).replace("\\", "/").rsplit("/", 1)[-1].strip().lower())
         if not base:
             continue
         hit: Dict[str, int] = {}
-        for tag, prov in rows:
-            if prov and base in prov:
+        for tag, names in parsed:
+            if base in names:
                 hit[tag] = hit.get(tag, 0) + 1
         if hit:
             out[name] = hit
