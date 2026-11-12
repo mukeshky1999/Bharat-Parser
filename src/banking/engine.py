@@ -6,6 +6,7 @@ and maintains the Master Case Ledger inside indian_banking_sandbox_engine.sqlite
 Adheres strictly to AGENTS.md Forensic Invariants and Section 9 of Module 3.3 Spec.
 """
 
+from src.core.sqlite_uri import ro_uri
 from pathlib import Path
 import sqlite3
 from typing import Dict, List, Optional, Tuple, Union
@@ -222,7 +223,7 @@ class IndianBankingSandboxEngine:
             db_dir = pkg_dir / "databases"
             if db_dir.exists():
                 for db_file in db_dir.glob("*.db"):
-                    conn = sqlite3.connect(f"file:{db_file.resolve()}?mode=ro", uri=True)
+                    conn = sqlite3.connect(ro_uri(db_file.resolve()), uri=True)
                     conn.row_factory = sqlite3.Row
                     cur = conn.cursor()
 

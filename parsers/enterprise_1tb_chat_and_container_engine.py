@@ -5,6 +5,7 @@ with SQLite FTS5 artifact store, mmap freelist carver, and the 28-column canonic
 """
 
 from __future__ import annotations
+from src.core.sqlite_uri import ro_uri
 
 import binascii
 import json
@@ -116,7 +117,7 @@ def _open_ro_sqlite(db_path: str) -> Optional[sqlite3.Connection]:
         return None
     try:
         norm_path = os.path.abspath(db_path).replace('\\', '/')
-        uri = f"file:{norm_path}?mode=ro"
+        uri = ro_uri(norm_path)
         conn = sqlite3.connect(uri, uri=True, timeout=15.0)
         conn.row_factory = sqlite3.Row
         return conn

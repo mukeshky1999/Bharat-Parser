@@ -15,6 +15,7 @@ Seven data classes + fiat orders, extracted with:
 """
 
 from __future__ import annotations
+from src.core.sqlite_uri import ro_uri
 
 import json
 import logging
@@ -297,7 +298,7 @@ def detect_chain_from_address(addr: Optional[str]) -> Optional[str]:
 
 def _open_ro(db_path: str) -> sqlite3.Connection:
     p = Path(db_path).resolve()
-    return sqlite3.connect(f"file:{p.as_posix()}?mode=ro", uri=True)
+    return sqlite3.connect(ro_uri(p.as_posix()), uri=True)
 
 
 def _safe_tables(conn: sqlite3.Connection) -> List[str]:

@@ -4,6 +4,7 @@ Monotonic ROWID Inversion, sqlite_sequence Tail-Deletion Gaps & Device Migration
 Complies with Sections 4 & 5 of Phase 6 Module 6.5 Specification and AGENTS.md Constitution.
 """
 
+from src.core.sqlite_uri import ro_uri
 from datetime import datetime, timezone
 import os
 from pathlib import Path
@@ -48,7 +49,7 @@ class ClockTamperGapDetector:
         if not os.path.exists(db_path):
             return records
 
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         cur = conn.cursor()
 
         # 1. Fetch rows ordered by ROWID ascending

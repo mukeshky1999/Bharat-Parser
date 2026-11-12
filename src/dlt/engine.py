@@ -5,6 +5,7 @@ and iOS sms.db (including binary attributedBody streams), and ingests OS push no
 Adheres strictly to AGENTS.md Forensic Invariants and Section 7 of Module 3.4 Spec.
 """
 
+from src.core.sqlite_uri import ro_uri
 from pathlib import Path
 import sqlite3
 from typing import Dict, List, Optional, Union
@@ -46,7 +47,7 @@ class DLTFinancialSMSNotificationEngine:
             return []
 
         records: List[DLTFinancialSMSLedgerRecord] = []
-        conn = sqlite3.connect(f"file:{target.resolve()}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(target.resolve()), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -159,7 +160,7 @@ class DLTFinancialSMSNotificationEngine:
             return []
 
         records: List[DLTFinancialSMSLedgerRecord] = []
-        conn = sqlite3.connect(f"file:{target.resolve()}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(target.resolve()), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 

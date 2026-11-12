@@ -6,6 +6,7 @@ to attribute suspected field cash-out runners.
 Adheres strictly to AGENTS.md Forensic Invariants and Section 7.2 of Module 3.3 Spec.
 """
 
+from src.core.sqlite_uri import ro_uri
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
@@ -61,7 +62,7 @@ class CardlessRunnerCorrelator:
             if not db_path.exists():
                 continue
 
-            conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path.resolve()), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 

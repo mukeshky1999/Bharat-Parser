@@ -6,6 +6,7 @@ of SQLCipher-protected databases before parsing.
 """
 
 from __future__ import annotations
+from src.core.sqlite_uri import ro_uri
 
 import base64
 import hashlib
@@ -85,7 +86,7 @@ def attempt_sqlcipher_open(db_path: str, keyring: Optional[CaseKeyring] = None):
     for name, key_bytes in candidates.items():
         conn = None
         try:
-            conn = _SQLCIPHER.connect(f"file:{Path(db_path).as_posix()}?mode=ro", uri=True)
+            conn = _SQLCIPHER.connect(ro_uri(Path(db_path).as_posix()), uri=True)
             conn.execute(f"PRAGMA key = \"x'{key_bytes.hex()}'\";")
             conn.execute("SELECT count(*) FROM sqlite_master;").fetchone()
             return conn
@@ -113,7 +114,7 @@ def extract_app_keys_and_decrypt(target_dir: str, bundle_id: str) -> Dict[str, A
             if f_low in ('keychain-2.db', 'keychain.db'):
                 conn = None
                 try:
-                    conn = sqlite3.connect(f'file:{os.path.abspath(full_path)}?mode=ro', uri=True)
+                    conn = sqlite3.connect(ro_uri(os.path.abspath(full_path)), uri=True)
                     cursor = conn.cursor()
                     cursor.execute(
                         "SELECT agrp, svce, v_Data FROM genp WHERE agrp LIKE ? OR svce LIKE ?",
@@ -218,7 +219,7 @@ def attempt_sqlcipher_decryption(
             try:
                 if os.path.exists(decrypted_dest):
                     os.remove(decrypted_dest)
-                conn = _SQLCIPHER.connect(f"file:{Path(encrypted_db_path).as_posix()}?mode=ro", uri=True)
+                conn = _SQLCIPHER.connect(ro_uri(Path(encrypted_db_path).as_posix()), uri=True)
                 cur = conn.cursor()
                 if isinstance(cand, bytes):
                     key_hex = cand.hex()

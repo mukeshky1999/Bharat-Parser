@@ -16,6 +16,7 @@ import hashlib
 import math
 import os
 import re
+import pathlib
 import sqlite3
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -128,12 +129,18 @@ def build_candidates(supplied: Optional[Dict[str, Any]], carved: Optional[Dict[s
             if evidence_passphrases > MAX_EVIDENCE_PASSPHRASES:
                 continue
         kept.append(c)
-    return kept[:MAX_CANDIDATES]
+    # The cap applies to what the tool found in the evidence. A key the examiner supplied is never cut, however many
+    # readings the evidence offers.
+    supplied_kept = [c for c in kept if c[0].startswith("supplied:")]
+    room = max(0, MAX_CANDIDATES - len(supplied_kept))
+    found_kept = [c for c in kept if not c[0].startswith("supplied:")][:room]
+    allowed = {id(c) for c in supplied_kept + found_kept}
+    return [c for c in kept if id(c) in allowed]
 
 
 def _opens_as_sqlite(path: str) -> bool:
     try:
-        c = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        c = sqlite3.connect(pathlib.Path(os.path.abspath(path)).as_uri() + "?mode=ro", uri=True)
         try:
             c.execute("SELECT count(*) FROM sqlite_master").fetchone()
             return True

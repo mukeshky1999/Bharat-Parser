@@ -6,6 +6,7 @@ Instagram, Google Play Services, WebView, Contacts, Settings).
 """
 
 from __future__ import annotations
+from src.core.sqlite_uri import ro_uri
 
 import os
 import re
@@ -144,7 +145,7 @@ def inspect_unindexed_database(db_path: str, clean_path: str) -> Optional[Tuple[
 
     conn = None
     try:
-        conn = sqlite3.connect(f'file:{os.path.abspath(db_path)}?mode=ro', uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type IN ('table', 'view');")
         tables = [r[0] for r in cursor.fetchall() if not r[0].startswith('sqlite_')]

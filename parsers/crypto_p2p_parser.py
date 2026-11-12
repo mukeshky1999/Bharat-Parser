@@ -1,6 +1,7 @@
 """
 Phase 3: Cryptocurrency Exchange P2P & Wallet Artifact Parser.
 Reconstructs peer-to-peer orders, escrow dispute logs, and linked counterparty bank accounts/VPAs
+from src.core.sqlite_uri import ro_uri
 from Binance, Bybit, KuCoin, CoinDCX, WazirX, and Trust Wallet sandboxes.
 """
 
@@ -57,7 +58,7 @@ def parse_crypto_p2p_artifacts(db_path: str, app_name: str) -> pd.DataFrame:
 
     conn = None
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type IN ('table', 'view');")
         tables = [r[0] for r in cursor.fetchall() if not r[0].startswith('sqlite_')]

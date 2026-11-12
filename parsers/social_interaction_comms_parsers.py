@@ -16,6 +16,7 @@ Supported Platforms:
 """
 
 from __future__ import annotations
+from src.core.sqlite_uri import ro_uri
 
 import binascii
 import json
@@ -93,7 +94,7 @@ def parse_facebook_messenger_database(
     file_size = os.path.getsize(db_path)
 
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -307,7 +308,7 @@ def parse_facebook_contacts_database(db_path: str) -> pd.DataFrame:
 
     contacts: List[Dict[str, Any]] = []
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -351,7 +352,7 @@ def parse_discord_database(db_path_or_dir: str) -> pd.DataFrame:
 
     def _parse_sqlite(path: str):
         try:
-            conn = sqlite3.connect(f"file:{os.path.abspath(path)}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(os.path.abspath(path)), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -503,7 +504,7 @@ def parse_skype_teams_database(db_path: str) -> pd.DataFrame:
 
     records: List[Dict[str, Any]] = []
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -659,7 +660,7 @@ def parse_viber_database(db_path: str) -> pd.DataFrame:
 
     records: List[Dict[str, Any]] = []
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -754,7 +755,7 @@ def parse_wechat_database(db_path: str) -> pd.DataFrame:
 
     records: List[Dict[str, Any]] = []
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -841,7 +842,7 @@ def parse_line_database(db_path: str) -> pd.DataFrame:
 
     records: List[Dict[str, Any]] = []
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -926,7 +927,7 @@ def parse_imo_kakaotalk_database(db_path: str) -> pd.DataFrame:
 
     records: List[Dict[str, Any]] = []
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -1061,7 +1062,7 @@ def parse_twitter_threads_reddit_linkedin(db_path: str) -> pd.DataFrame:
     base_name = os.path.basename(db_path).lower()
 
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -1209,7 +1210,7 @@ def parse_truecaller_database(db_path: str) -> pd.DataFrame:
 
     records: List[Dict[str, Any]] = []
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -1353,7 +1354,7 @@ def parse_olx_database(db_path: str) -> pd.DataFrame:
 
     records: List[Dict[str, Any]] = []
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -1436,7 +1437,7 @@ def parse_sharechat_moj_database(db_path: str) -> pd.DataFrame:
 
     records: List[Dict[str, Any]] = []
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 

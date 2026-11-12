@@ -3,6 +3,7 @@ Unknown & Unclassified Artifacts Sweeper (The UNK & PHY Ledger).
 Phase 1, Module 1.4, Section 4.
 """
 
+from src.core.sqlite_uri import ro_uri
 import json
 import logging
 import math
@@ -103,7 +104,7 @@ class UnclassifiedArtifactsSweeper:
         """Opens database in read-only mode and computes table row counts."""
         tables_dict: Dict[str, int] = {}
         try:
-            uri_path = f"file:{sqlite_path.resolve().as_posix()}?mode=ro"
+            uri_path = ro_uri(sqlite_path.resolve().as_posix())
             conn = sqlite3.connect(uri_path, uri=True)
             cur = conn.cursor()
             cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")

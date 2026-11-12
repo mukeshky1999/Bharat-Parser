@@ -4,6 +4,7 @@ Hooking Framework (LSPosed/Xposed), and iOS Jailbreak/TrollStore Auditor.
 Complies with Section 3 of Phase 6 Module 6.5 Specification and AGENTS.md Constitution.
 """
 
+from src.core.sqlite_uri import ro_uri
 import os
 from pathlib import Path
 import sqlite3
@@ -40,7 +41,7 @@ class OSIntegrityAuditor:
         if not os.path.exists(db_path):
             return records
 
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         cur = conn.cursor()
 
         # 1. Audit policies table
@@ -139,7 +140,7 @@ class OSIntegrityAuditor:
         if not os.path.exists(db_path):
             return records
 
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         cur = conn.cursor()
         try:
             cur.execute("""

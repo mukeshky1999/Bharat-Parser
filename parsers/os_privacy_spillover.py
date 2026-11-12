@@ -6,6 +6,7 @@ ephemeral privacy apps (Zangi, Signal, Session, Snapchat, Telegram Secret Chats)
 """
 
 from __future__ import annotations
+from src.core.sqlite_uri import ro_uri
 
 import os
 import re
@@ -85,7 +86,7 @@ class OsPrivacySpilloverRecovery:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -166,7 +167,7 @@ class OsPrivacySpilloverRecovery:
         # If SQLite database (user_dict.db)
         if file_path.endswith('.db') or file_path.endswith('.sqlite'):
             try:
-                conn = sqlite3.connect(f"file:{file_path}?mode=ro", uri=True)
+                conn = sqlite3.connect(ro_uri(file_path), uri=True)
                 cur = conn.cursor()
                 cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
                 tables = [r[0] for r in cur.fetchall()]
@@ -285,7 +286,7 @@ class OsPrivacySpilloverRecovery:
         # Parse iOS knowledgeC.db
         if usagestats_path.endswith('.db') or 'knowledgec' in usagestats_path.lower():
             try:
-                conn = sqlite3.connect(f"file:{usagestats_path}?mode=ro", uri=True)
+                conn = sqlite3.connect(ro_uri(usagestats_path), uri=True)
                 conn.row_factory = sqlite3.Row
                 conn.row_factory = sqlite3.Row  # dict(row) below needs named columns
                 cur = conn.cursor()

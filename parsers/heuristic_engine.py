@@ -9,6 +9,7 @@ Fixes:
 """
 
 from __future__ import annotations
+from src.core.sqlite_uri import ro_uri
 
 from collections import Counter
 from functools import lru_cache
@@ -732,7 +733,7 @@ def extract_profile_from_sqlite(db_path: str) -> Dict[str, Any]:
 
     conn = None
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         cur = conn.cursor()
         cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = [r[0] for r in cur.fetchall() if not r[0].startswith(('sqlite_', 'android_'))]
@@ -1551,7 +1552,7 @@ def parse_database_artifacts(
 
     conn = None
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type IN ('table', 'view');")
         tables = [

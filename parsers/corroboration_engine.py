@@ -11,6 +11,7 @@ Fixes:
 """
 
 from __future__ import annotations
+from src.core.sqlite_uri import ro_uri
 
 import os
 import re
@@ -202,7 +203,7 @@ def harvest_corroboration_signals(db_path: str) -> Tuple[List[Dict[str, Any]], L
 
     conn = None
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         cur = conn.cursor()
         cur.execute("SELECT name FROM sqlite_master WHERE type IN ('table', 'view');")
         tables = [r[0] for r in cur.fetchall() if not r[0].startswith('sqlite_')]

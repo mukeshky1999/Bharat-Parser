@@ -28,6 +28,8 @@ say so.
 from __future__ import annotations
 
 import os
+import re
+import pathlib
 import sqlite3
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -102,10 +104,18 @@ def _tables(conn: sqlite3.Connection) -> Dict[str, List[str]]:
     return out
 
 
+def _ro_uri(path: str) -> str:
+    """A read-only SQLite URI. as_uri() percent-encodes '#', '%' and '?' in the name, which a hand-built URI does not."""
+    return pathlib.Path(os.path.abspath(path)).as_uri() + "?mode=ro"
+
+
+_DATE_LIKE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+
+
 def sms_database_kind(path: str) -> Optional[str]:
     """'android', 'ios' or None, from the tables the database holds."""
     try:
-        conn = sqlite3.connect(f"file:{os.path.abspath(path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(_ro_uri(path), uri=True)
     except sqlite3.Error:
         return None
     try:
@@ -127,7 +137,7 @@ def _times(raw: Any, hint: str) -> Tuple[Any, str, str]:
 
 
 def _row(vfs_path: str, table: str, rowid: Any, sender: str, body: str, raw_time: Any, hint: str, source_db: str, app: str,
-         smsc: Optional[str], sub_id: Optional[int], spoof: Optional[int]) -> Optional[Dict[str, Any]]:
+         smsc: Optional[str], sub_id: Optional[int], spoof: Optional[int], raw_as_read: Any = None) -> Optional[Dict[str, Any]]:
     info = _header.parse_header(sender)
     f = _grammar.parse_sms(body=body, dlt_header_info=info)
     cat = f.sms_event_category
@@ -137,6 +147,13 @@ def _row(vfs_path: str, table: str, rowid: Any, sender: str, body: str, raw_time
     if cat == FinancialSMSCategory.UNCLASSIFIED.value and not known_sender:
         return None
     raw, utc, ist = _times(raw_time, hint)
+    # a value the converter could not place comes back as the raw number in the time fields: that is not a time
+    if not (utc and _DATE_LIKE.match(str(utc))):
+        utc = None
+    if not (ist and _DATE_LIKE.match(str(ist))):
+        ist = None
+    if raw_as_read is not None:
+        raw = raw_as_read
     rail = f.payment_rail if cat in _TRANSACTION_CATEGORIES else None     # a rail is not guessed for other kinds of notice
     return {
         "Received_UTC": utc or None, "Received_IST": ist or None, "Received_Raw": None if raw is None else str(raw),
@@ -156,7 +173,7 @@ def read_alerts(path: str, vfs_path: str) -> Tuple[pd.DataFrame, Dict[str, int]]
     if kind is None:
         return pd.DataFrame(columns=COLUMNS), stats
     rows: List[Dict[str, Any]] = []
-    conn = sqlite3.connect(f"file:{os.path.abspath(path)}?mode=ro", uri=True)
+    conn = sqlite3.connect(_ro_uri(path), uri=True)
     conn.row_factory = sqlite3.Row
     try:
         if kind == "android":
@@ -171,8 +188,9 @@ def read_alerts(path: str, vfs_path: str) -> Tuple[pd.DataFrame, Dict[str, int]]
                 smsc = str(r["service_center"]) if "service_center" in cols and r["service_center"] else None
                 creator = str(r["creator"]) if "creator" in cols and r["creator"] else None
                 # the indicator needs the service-centre or creator fields; without them it is unknown, not "suspect"
+                # (and it is only meaningful for received messages: a sent one has no service centre)
                 spoof: Optional[int] = None
-                if "service_center" in cols or "creator" in cols:
+                if has_type and ("service_center" in cols or "creator" in cols):
                     spoof = 1 if _header.detect_smsc_spoof(service_center=smsc, creator=creator, msg_type=1) else 0
                 sub_id = int(r["sub_id"]) if "sub_id" in cols and r["sub_id"] is not None else None
                 row = _row(vfs_path, "sms", r["_id"] if "_id" in cols else None, str(r["address"] or ""), body,
@@ -189,10 +207,11 @@ def read_alerts(path: str, vfs_path: str) -> Tuple[pd.DataFrame, Dict[str, int]]
                 if not body.strip():
                     continue
                 stats["read"] += 1
-                raw = r["date"]
+                raw = as_read = r["date"]
                 if isinstance(raw, (int, float)) and raw > 10_000_000_000_000:       # Cocoa nanoseconds
                     raw = raw / 1_000_000_000.0
-                row = _row(vfs_path, "message", r["rid"], str(r["sender"] or ""), body, raw, "cocoa", source, "SMS (iOS)", None, None, None)
+                row = _row(vfs_path, "message", r["rid"], str(r["sender"] or ""), body, raw, "cocoa", source, "SMS (iOS)", None, None, None,
+                           raw_as_read=as_read)
                 _collect(row, rows, stats)
     finally:
         conn.close()

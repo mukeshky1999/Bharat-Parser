@@ -5,6 +5,7 @@ and cross-app Syndication ("Shared with You") attribution.
 Complies with Section 3 of Phase 7 Module 7.1 Specification and AGENTS.md Constitution.
 """
 
+from src.core.sqlite_uri import ro_uri
 from datetime import datetime, timezone
 import json
 import os
@@ -46,7 +47,7 @@ class IOSPhotosDecoder:
         if not os.path.exists(db_path):
             return records
 
-        conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(os.path.abspath(db_path)), uri=True)
         cur = conn.cursor()
 
         query = """

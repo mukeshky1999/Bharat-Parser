@@ -5,6 +5,7 @@ Apple Biome streams, and Android Notification History archives.
 Adheres strictly to AGENTS.md Forensic Invariants and Section 6 of Module 3.4 Spec.
 """
 
+from src.core.sqlite_uri import ro_uri
 from pathlib import Path
 import re
 import sqlite3
@@ -62,7 +63,7 @@ class OSNotificationParser:
             return []
 
         records: List[OSFinancialNotificationRecord] = []
-        conn = sqlite3.connect(f"file:{target.resolve()}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(target.resolve()), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 

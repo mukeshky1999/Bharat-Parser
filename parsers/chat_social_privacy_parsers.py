@@ -16,6 +16,7 @@ J. Dating Apps (Tinder, Bumble, Hinge, Grindr romance scam & sextortion vectors)
 """
 
 from __future__ import annotations
+from src.core.sqlite_uri import ro_uri
 
 import binascii
 import hashlib
@@ -232,7 +233,7 @@ class WhatsAppDeepParser:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -556,7 +557,7 @@ class TelegramTLDeserializer:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -661,7 +662,7 @@ class SignalDeepParser:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -790,7 +791,7 @@ class ZangiDeepParser:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -959,7 +960,7 @@ class ElementMatrixDeepParser:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -1051,7 +1052,7 @@ class SessionDeepParser:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -1135,7 +1136,7 @@ class PrivacyNicheDeepParsers:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -1192,7 +1193,7 @@ class PrivacyNicheDeepParsers:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -1325,7 +1326,7 @@ class SnapchatDeepParser:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -1394,7 +1395,7 @@ class SnapchatDeepParser:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -1444,7 +1445,7 @@ class InstagramDirectDeepParser:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -1517,7 +1518,7 @@ class DatingAppsDeepParser:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -1576,7 +1577,7 @@ class DatingAppsDeepParser:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -1632,7 +1633,7 @@ class DatingAppsDeepParser:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -1687,7 +1688,7 @@ class DatingAppsDeepParser:
             return results
 
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
 
@@ -1784,7 +1785,7 @@ def parse_whatsapp_full_forensics(
 
     if wa_db_path and os.path.exists(wa_db_path):
         try:
-            conn_wa = sqlite3.connect(f"file:{wa_db_path}?mode=ro", uri=True)
+            conn_wa = sqlite3.connect(ro_uri(wa_db_path), uri=True)
             conn_wa.row_factory = sqlite3.Row
             cur_wa = conn_wa.cursor()
             cur_wa.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -1852,7 +1853,7 @@ def parse_session_threema_simplex(db_path: str, app_label: str = "auto") -> pd.D
         records = PrivacyNicheDeepParsers.parse_simplex(db_path)
     else:
         try:
-            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn = sqlite3.connect(ro_uri(db_path), uri=True)
             cur = conn.cursor()
             cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
             tables = {r[0].lower() for r in cur.fetchall()}

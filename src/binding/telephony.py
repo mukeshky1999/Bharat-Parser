@@ -5,6 +5,7 @@ and iOS CellularUsage.db / CommCenter artifacts.
 Adheres strictly to AGENTS.md Forensic Invariants and Section 3 of Module 3.2 Spec.
 """
 
+from src.core.sqlite_uri import ro_uri
 from pathlib import Path
 import sqlite3
 from typing import List, Optional, Union
@@ -35,7 +36,7 @@ class TelephonyProviderDecoder:
             return []
 
         records: List[DeviceSIMCardHistoryRecord] = []
-        conn = sqlite3.connect(f"file:{target.resolve()}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(target.resolve()), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
@@ -152,7 +153,7 @@ class TelephonyProviderDecoder:
             return []
 
         records: List[DeviceSIMCardHistoryRecord] = []
-        conn = sqlite3.connect(f"file:{target.resolve()}?mode=ro", uri=True)
+        conn = sqlite3.connect(ro_uri(target.resolve()), uri=True)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
