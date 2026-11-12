@@ -32,7 +32,7 @@ export const STAGES: Stage[] = [
   { id: 'money', no: 4, label: 'Money', hint: 'UPI, bank, crypto, links', icon: IndianRupee,
     views: [
       { tab: 'UPI_LEDGER', label: 'UPI ledger' },
-      { tab: 'CALL_LOGS', label: 'Bank statement and CDR fusion' },
+      { tab: 'CALL_LOGS', label: 'Bank and call records' },
       { tab: 'CRYPTO', label: 'Crypto wallets' },
       { tab: 'MULE_GRAPH', label: 'Link graph (leads)' },
     ] },

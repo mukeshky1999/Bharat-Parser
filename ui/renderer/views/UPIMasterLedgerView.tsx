@@ -94,7 +94,7 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
   const columns: Array<GridColumn<UnifiedUPITransaction>> = [
     { key: 'source', label: 'Where found', width: '11rem', cell: (t) => RECOVERY_TEXT[t.provenance?.recoveryState ?? ''] ?? <Unset />, text: (t) => RECOVERY_TEXT[t.provenance?.recoveryState ?? ''] ?? 'not recorded' },
     {
-      key: 'time', label: tz === 'IST' ? 'Time (IST)' : 'Time (UTC)', width: '14rem',
+      key: 'time', label: tz === 'IST' ? 'Time (IST)' : 'Time (UTC)', width: '19rem',
       cell: (t) => {
         const s = timeText(t);
         return <>{s === 'not recorded' ? <Unset /> : s}{t.clockTamperDetected && <span className="ml-1 text-amber-300" title="The device clock differs from the transaction's own sequence token.">clock differs</span>}</>;

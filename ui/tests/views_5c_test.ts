@@ -71,6 +71,15 @@ ok(interpret(Uint8Array.from([])).length === 0 && !('Unsigned 32-bit, little-end
 ok(parseOffset('0x1F4') === 500 && parseOffset('500') === 500 && parseOffset('1f4') === 500 && parseOffset('zz') === null && parseOffset('') === null, 'offsets parse as hex or decimal, or not at all');
 ok(/readings, not findings/.test(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'inspectors', 'DataInterpreter.tsx'), 'utf8')), 'the interpreter says its values are readings');
 
+// 5C.2: the money views share one grid, and its rules hold
+const grid = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace', 'DataGrid.tsx'), 'utf8');
+ok(/columns\.map\(\(c\) => csvCell\(c\.label\)\)/.test(grid) && /rows\.map\(\(r\) => columns\.map/.test(grid), 'the grid export carries every column and every row');
+ok(/Export keeps every column/.test(grid) && /rows\.slice\(start, end\)/.test(grid), 'the grid says export keeps every column and draws only the rows in view');
+ok(/not recorded/.test(grid), 'the grid has a "not recorded" cell');
+for (const f of ['UPIMasterLedgerView.tsx', 'BankCdrFusionView.tsx']) ok(/DataGrid/.test(view(f)), `${f} is built on the shared grid`);
+ok(/Leads, not findings/.test(view('MuleLinkGraphTab.tsx')), 'the link graph says its content is leads');
+ok(!/byteOffset: 0/.test(view('BankCdrFusionView.tsx')), 'fusion rows do not invent a byte offset of 0');
+
 // none of the new screens keeps case data in browser storage
 for (const f of ['ReviewerMarksCard.tsx', 'ValidationCard.tsx', 'SearchView.tsx', 'TimelineView.tsx', 'TagsView.tsx', 'MediaLibraryView.tsx', 'IngestProgressPanel.tsx']) {
   ok(!/localStorage|sessionStorage|indexedDB/.test(view(f)), `${f} does not use browser storage`);

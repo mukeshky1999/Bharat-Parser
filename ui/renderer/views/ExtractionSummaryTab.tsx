@@ -228,12 +228,12 @@ export const ExtractionSummaryTab: React.FC<ExtractionSummaryTabProps> = ({
       desc: 'OTP intercepts & keyboard cache'
     },
     {
-      title: 'Syndicate Link Graph',
+      title: 'Link graph',
       active: backendSummary?.mule_alerts?.length || 0,
       deleted: 0,
       icon: <Network className="w-5 h-5 text-blue-400" />,
       tab: 'MULE_GRAPH' as ActiveTabType,
-      desc: 'Mule accounts & syndicate roles'
+      desc: 'Who paid whom (leads)'
     },
     {
       title: 'Raw SQLite & B-Tree Explorer',

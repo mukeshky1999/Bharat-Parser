@@ -61,6 +61,7 @@ const banned: Array<[RegExp, string]> = [
   [/-\[#[0-9a-fA-F]{3,8}\]/, 'hard-coded colour in a class (use the theme scale)'],
   [/text-\[(?:[0-9]|10)(?:\.\d+)?px\]/, 'text smaller than 11px'],
   [/animate-(?:pulse|ping|bounce)/, 'blinking or pulsing animation'],
+  [/\(WIPED\)|Pre-Transaction \(Lure\)|High-Risk \/ Structuring|Mule Intermediary|Critical Mule|Syndicate Link|Charge Sheet Chain/, 'a verdict worded as fact or a default label that names a role the evidence did not give'],
   [/BIT-FOR-BIT SEAL PASS|Air-Gapped PASS|SHA-256 Verified|Verified Both|Bit-Verified/, 'a status label that claims more than was checked'],
 ];
 for (const f of files) {
