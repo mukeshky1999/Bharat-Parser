@@ -467,6 +467,8 @@ class CaseUIPaginatorStore:
             """)
             from parsers.case_tags import SCHEMA as _TAGS_SCHEMA      # Phase 5B.6
             cur.executescript(_TAGS_SCHEMA)
+            from parsers.case_media import SCHEMA as _MEDIA_SCHEMA    # Phase 5B.8
+            cur.executescript(_MEDIA_SCHEMA)
             conn.commit()
         finally:
             conn.close()
@@ -608,6 +610,8 @@ class CaseUIPaginatorStore:
                     # chats and transactions have a delete trigger; the others do not, so rebuild their index
                     conn.execute(f"INSERT INTO {tbl}_fts({tbl}_fts) VALUES('rebuild')")
             conn.execute("DELETE FROM coverage WHERE Evidence_Item = ?", (item_id,))
+            if "media_items" in existing:
+                conn.execute("DELETE FROM media_items WHERE Evidence_Item = ?", (item_id,))      # hash lists are case-level and stay
             conn.commit()
         finally:
             conn.close()

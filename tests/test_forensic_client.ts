@@ -313,6 +313,26 @@ async function runForensicClientTests() {
     await forensicClient.getAccountsOfInterest();
     assert(askedUrl.endsWith('/api/report/accounts-of-interest'), 'Accounts of interest has its own call');
 
+    // Suite 8: media
+    console.log('\n--- Test Suite 8: Media ---');
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      askedUrl = String(input);
+      sentPkg = String(init?.body ?? '');
+      return new Response(JSON.stringify({ total: 0, items: [], hash_sets: [], entries: 1, skipped_lines: 0, matching_files_now: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    await forensicClient.getMedia({ kind: 'image', inSet: 'Lab list', outsideSets: true, hasGps: false, limit: 20 });
+    const mq = new URL(askedUrl, 'http://x');
+    assert(mq.pathname === '/api/case/media' && mq.searchParams.get('kind') === 'image' && mq.searchParams.get('in_set') === 'Lab list'
+      && mq.searchParams.get('outside_sets') === 'true' && mq.searchParams.get('has_gps') === 'false', 'Media listing sends its filters');
+    await forensicClient.importHashSet('Lab list', 'known_notable', 'a'.repeat(32), 'note');
+    assert(askedUrl.endsWith('/api/case/hashsets') && JSON.parse(sentPkg).kind === 'known_notable' && JSON.parse(sentPkg).source_note === 'note', 'Hash list import sends the values you supply');
+    await forensicClient.analyseMedia({ redo: true, limit: 5 });
+    assert(askedUrl.endsWith('/api/case/media/analyse') && JSON.parse(sentPkg).redo === true && JSON.parse(sentPkg).limit === 5, 'Analyse sends redo and the limit');
+    await forensicClient.getSimilarMedia(7, 3);
+    assert(askedUrl.endsWith('/api/case/media/7/similar?max_distance=3'), 'Similarity asks for a distance');
+    globalThis.fetch = async (): Promise<Response> => new Response('nope', { status: 404 });
+    assert((await forensicClient.getMediaThumbnail(1)) === null, 'A missing thumbnail gives null, not a broken URL');
+
     console.log(`=== RESULTS: ALL ${passedTests}/${totalTests} FORENSIC CLIENT TESTS PASSED (100% SUCCESS) ===\n`);
   } finally {
     // Restore original fetch

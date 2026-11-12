@@ -2565,6 +2565,118 @@ def build_review_package(req: PackageRequest):
             "included": res.included, "withheld": res.withheld, "merkle_root": res.merkle_root}
 
 
+# ---------------------------------------------------------------------------
+# Media (5B.8): hashes, EXIF, thumbnails, examiner-imported hash lists, visual similarity (a lead)
+# ---------------------------------------------------------------------------
+class HashSetIn(BaseModel):
+    name: str
+    kind: str                      # known_ignorable or known_notable
+    text: str                      # one MD5 or SHA-256 value per line
+    source_note: str = ""
+
+
+class HashSetRemoveIn(BaseModel):
+    name: str
+
+
+class MediaAnalyseIn(BaseModel):
+    evidence_item: Optional[str] = None
+    redo: bool = False
+    limit: int = 2000              # files per call; the reply says how many are left
+
+
+def _media_call(fn):
+    from parsers.case_media import MediaError
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=412, detail="No case is loaded.")
+    conn = _active_store._get_connection()
+    try:
+        return fn(conn)
+    except MediaError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    finally:
+        conn.close()
+
+
+@app.get("/api/case/hashsets")
+def media_hash_sets():
+    from parsers import case_media
+    return {"hash_sets": _media_call(case_media.list_hash_sets)}
+
+
+@app.post("/api/case/hashsets")
+def media_hash_set_import(body: HashSetIn):
+    from parsers import case_media
+    res = _media_call(lambda c: case_media.import_hash_set(c, body.name, body.kind, body.text, body.source_note))
+    _audit_event("hash_set_imported", {"name": res["name"], "kind": res["kind"], "entries": res["entries"]})
+    return res
+
+
+@app.post("/api/case/hashsets/remove")
+def media_hash_set_remove(body: HashSetRemoveIn):
+    from parsers import case_media
+    res = _media_call(lambda c: case_media.remove_hash_set(c, body.name))
+    _audit_event("hash_set_removed", {"name": body.name})
+    return res
+
+
+@app.post("/api/case/media/analyse")
+def media_analyse(body: MediaAnalyseIn):
+    """Hash and examine the media files of the case that are on disk. Runs up to `limit` files; call again for the rest."""
+    from parsers import case_media
+    limit = max(1, min(int(body.limit), 20000))
+
+    def run(conn):
+        q = ("SELECT Evidence_Item, vfs_path, file_name, local_disk_path FROM vfs_files "
+             "WHERE is_materialized = 1 AND local_disk_path <> ''" + (" AND Evidence_Item = ?" if body.evidence_item else "") + " ORDER BY id")
+        rows = conn.execute(q, ([body.evidence_item] if body.evidence_item else [])).fetchall()
+        files = [{"evidence_item": r["Evidence_Item"], "vfs_path": r["vfs_path"], "file_name": r["file_name"], "local_path": r["local_disk_path"]}
+                 for r in rows if case_media.media_kind(r["file_name"] or "") and os.path.isfile(r["local_disk_path"])]
+        if not body.redo:
+            done = {(r[0] or "", r[1]) for r in conn.execute("SELECT Evidence_Item, Vfs_Path FROM media_items")}
+            files = [f for f in files if (f["evidence_item"] or "", f["vfs_path"]) not in done]
+        batch, rest = files[:limit], max(0, len(files) - limit)
+        res = case_media.analyse_files(conn, batch, os.path.join(os.path.abspath(_active_store.case_workspace), "media_thumbs"), redo=body.redo)
+        res["remaining"] = rest
+        return res
+
+    res = _media_call(run)
+    _audit_event("media_analysed", {k: v for k, v in res.items() if isinstance(v, int)})
+    return res
+
+
+@app.get("/api/case/media")
+def media_list(evidence_item: Optional[str] = Query(None), kind: Optional[str] = Query(None), in_set: Optional[str] = Query(None),
+               set_kind: Optional[str] = Query(None), outside_sets: bool = Query(False), has_gps: Optional[bool] = Query(None),
+               status: Optional[str] = Query(None), limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):
+    from parsers import case_media
+    return _media_call(lambda c: case_media.list_media(c, evidence_item, kind, in_set, set_kind, outside_sets, has_gps, status, limit, offset))
+
+
+@app.get("/api/case/media/summary")
+def media_summary():
+    from parsers import case_media
+    return _media_call(case_media.summary)
+
+
+@app.get("/api/case/media/{media_id}/similar")
+def media_similar(media_id: int, max_distance: int = Query(6, ge=0, le=16), limit: int = Query(50, ge=1, le=500)):
+    from parsers import case_media
+    return _media_call(lambda c: case_media.similar(c, media_id, max_distance, limit))
+
+
+@app.get("/api/case/media/{media_id}/thumbnail")
+def media_thumbnail(media_id: int):
+    from parsers import case_media
+    path = _media_call(lambda c: case_media.thumbnail_path(c, media_id))
+    root = os.path.join(os.path.abspath(_active_store.case_workspace), "media_thumbs")
+    if not path or not _is_within(path, root) or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="No thumbnail for this item.")
+    with open(path, "rb") as fh:
+        data = fh.read()
+    return Response(content=data, media_type="image/jpeg", headers=_NO_STORE)
+
+
 _MEDIA_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".bmp", ".mp4", ".mov", ".3gp", ".avi", ".mkv")
 
 

@@ -118,6 +118,7 @@ def test_endpoints_report_and_accounts(tmp_path, monkeypatch):
     monkeypatch.setattr(api_server, "_case_state", dict(api_server._case_state))
     monkeypatch.setattr(api_server, "_active_store", api_server._active_store)
     monkeypatch.setattr(api_server, "DEFAULT_WORKSPACE_ROOT", str(tmp_path / "cases"))
+    monkeypatch.setitem(api_server._case_state, "loaded", False)       # other tests leave a case loaded
     client = TestClient(api_server.app)
     assert client.get("/api/report/accounts-of-interest").status_code == 412
     ev = tmp_path / "phone"

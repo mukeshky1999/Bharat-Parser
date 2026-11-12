@@ -1,5 +1,6 @@
 """5B.8 media: hashes, EXIF, thumbnails, hash-set matching, similarity (a lead), honest statuses."""
 import hashlib
+import json
 import os
 import sqlite3
 
@@ -183,3 +184,42 @@ def test_filters_and_summary(conn, tmp_path):
         case_media.list_media(conn, kind="audio")
     s = case_media.summary(conn)
     assert s["total"] == 2 and s["with_gps"] == 1 and s["by_status"] == {"OK": 2}
+
+
+# ------------------------------------------------------------------------------------------------ endpoints
+def test_media_endpoints_end_to_end(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from parsers import api_server
+    monkeypatch.setattr(api_server, "_case_state", dict(api_server._case_state))
+    monkeypatch.setattr(api_server, "_active_store", api_server._active_store)
+    monkeypatch.setattr(api_server, "DEFAULT_WORKSPACE_ROOT", str(tmp_path / "cases"))
+    monkeypatch.setitem(api_server._case_state, "loaded", False)       # other tests leave a case loaded
+    client = TestClient(api_server.app)
+    assert client.get("/api/case/media").status_code == 412
+    ev = tmp_path / "phone" / "DCIM"
+    ev.mkdir(parents=True)
+    a = _gradient(str(ev / "a.jpg"), exif=_exif())
+    _gradient(str(ev / "b.jpg"), flip=True)
+    sqlite3.connect(tmp_path / "phone" / "x.db").close()
+    assert client.post("/api/case/ingest", json={"evidence_path": str(tmp_path / "phone"), "case_id": "M-1"}).json()["success"]
+    r = client.post("/api/case/media/analyse", json={}).json()
+    assert r["analysed"] == 2 and r["remaining"] == 0
+    assert client.post("/api/case/media/analyse", json={}).json()["analysed"] == 0            # nothing new
+    items = client.get("/api/case/media").json()["items"]
+    assert len(items) == 2 and any(i["gps_lat"] for i in items)
+    mid = [i for i in items if i["file_name"] == "a.jpg"][0]["id"]
+    th = client.get(f"/api/case/media/{mid}/thumbnail")
+    assert th.status_code == 200 and th.headers["content-type"] == "image/jpeg" and th.content[:2] == b"\xff\xd8"
+    assert th.headers["x-content-type-options"] == "nosniff"
+    assert client.get("/api/case/media/99999/thumbnail").status_code == 404
+    sha = hashlib.sha256(open(a, "rb").read()).hexdigest()
+    imp = client.post("/api/case/hashsets", json={"name": "L", "kind": "known_notable", "text": sha}).json()
+    assert imp["entries"] == 1 and imp["matching_files_now"] == 1
+    assert client.post("/api/case/hashsets", json={"name": "L", "kind": "known_notable", "text": sha}).status_code == 422
+    assert client.get("/api/case/media", params={"in_set": "L"}).json()["total"] == 1
+    assert client.get(f"/api/case/media/{mid}/similar").json()["label"] == "LEAD"
+    assert client.get(f"/api/case/media/{mid}/similar", params={"max_distance": 99}).status_code == 422
+    assert client.get("/api/case/media/summary").json()["total"] == 2
+    assert client.post("/api/case/hashsets/remove", json={"name": "L"}).json() == {"removed": "L"}
+    log = json.dumps(client.get("/api/audit").json())
+    assert "hash_set_imported" in log and "media_analysed" in log

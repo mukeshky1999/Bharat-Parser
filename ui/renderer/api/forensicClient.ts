@@ -304,6 +304,40 @@ export interface TimelineQuery {
   offset?: number;
 }
 
+export interface MediaItem {
+  id: number;
+  evidence_item: string | null;
+  vfs_path: string;
+  file_name: string | null;
+  file_size: number | null;
+  kind: 'image' | 'video';
+  sha256: string | null;
+  md5: string | null;
+  width: number | null;
+  height: number | null;
+  format: string | null;
+  camera_make: string | null;
+  camera_model: string | null;
+  software: string | null;
+  /** The camera's own clock as written; it carries no zone and is not converted. */
+  exif_clock: string | null;
+  gps_lat: number | null;
+  gps_lon: number | null;
+  dhash: string | null;
+  has_thumbnail: boolean;
+  status: 'OK' | 'HASHED_ONLY' | 'NOT_DECODED' | 'UNREADABLE';
+  status_detail: string | null;
+  decoded_by: string | null;
+  hash_set_matches: string[];
+}
+
+export interface HashSetInfo { id: number; name: string; kind: 'known_ignorable' | 'known_notable'; entries: number; skipped_lines: number; source_note: string | null; imported_at_utc: string }
+
+export interface MediaQuery {
+  evidenceItem?: string; kind?: 'image' | 'video'; inSet?: string; setKind?: 'known_ignorable' | 'known_notable';
+  outsideSets?: boolean; hasGps?: boolean; status?: string; limit?: number; offset?: number;
+}
+
 export interface IngestOptions {
   /** "replace" starts the case again from this evidence; "add" puts another device into the existing case. */
   mode?: 'replace' | 'add';
@@ -754,6 +788,48 @@ class ForensicClient {
     if (opts.application) p.set('application', opts.application);
     const res = await this.fetchApi<SearchResult>(`/api/case/search?${p.toString()}`);
     return { data: res.data, error: res.error };
+  }
+
+  /** Hash and examine the media files of the case. Runs up to `limit` files; `remaining` says how many are left. */
+  public async analyseMedia(opts: { evidenceItem?: string; redo?: boolean; limit?: number } = {}): Promise<{ data: { analysed: number; already_done: number; unreadable: number; not_decoded: number; video: number; remaining: number; pillow: string | null } | null; error: string | null }> {
+    return this.fetchApi('/api/case/media/analyse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ evidence_item: opts.evidenceItem, redo: !!opts.redo, limit: opts.limit ?? 2000 }) });
+  }
+
+  public async getMedia(q: MediaQuery = {}): Promise<{ data: { total: number; items: MediaItem[]; note: string } | null; error: string | null }> {
+    const p = new URLSearchParams({ limit: String(q.limit ?? 100), offset: String(q.offset ?? 0) });
+    for (const [k, v] of [['evidence_item', q.evidenceItem], ['kind', q.kind], ['in_set', q.inSet], ['set_kind', q.setKind], ['status', q.status]] as const) if (v) p.set(k, v);
+    if (q.outsideSets) p.set('outside_sets', 'true');
+    if (q.hasGps !== undefined) p.set('has_gps', String(q.hasGps));
+    return this.fetchApi(`/api/case/media?${p.toString()}`);
+  }
+
+  /** Images with a similar 64-bit fingerprint. Always a lead, never an identity. */
+  public async getSimilarMedia(id: number, maxDistance = 6): Promise<{ data: { label: 'LEAD'; note: string; total: number; matches: Array<{ id: number; distance: number; file_name: string | null; identical_bytes: boolean }> } | null; error: string | null }> {
+    return this.fetchApi(`/api/case/media/${id}/similar?max_distance=${maxDistance}`);
+  }
+
+  /** The thumbnail as an object URL (the call needs the access token, so an image tag cannot fetch it). Revoke it when done. */
+  public async getMediaThumbnail(id: number, signal?: AbortSignal): Promise<string | null> {
+    try {
+      const res = await this.authFetch(`/api/case/media/${id}/thumbnail`, { signal });
+      if (!res.ok) return null;
+      return URL.createObjectURL(await res.blob());
+    } catch {
+      return null;
+    }
+  }
+
+  public async getHashSets(): Promise<{ data: { hash_sets: HashSetInfo[] } | null; error: string | null }> {
+    return this.fetchApi('/api/case/hashsets');
+  }
+
+  /** Import a list of MD5 / SHA-256 values you supply. The tool ships no list of its own. */
+  public async importHashSet(name: string, kind: HashSetInfo['kind'], text: string, sourceNote = ''): Promise<{ data: { name: string; entries: number; skipped_lines: number; matching_files_now: number } | null; error: string | null }> {
+    return this.fetchApi('/api/case/hashsets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, kind, text, source_note: sourceNote }) });
+  }
+
+  public async removeHashSet(name: string): Promise<{ data: { removed: string } | null; error: string | null }> {
+    return this.fetchApi('/api/case/hashsets/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
   }
 
   /** Tags with the number of records carrying each. */
