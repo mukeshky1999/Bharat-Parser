@@ -262,7 +262,7 @@ def test_workstation_ui_state_and_bookmarks_sqlite_export():
         source_vfs_file_id=142,
         physical_byte_offset=40948,
         tag_category_badge=TagCategoryBadge.KEY_SMOKING_GUN,
-        is_relied_upon_for_sec230_bnss=1,
+        is_relied_upon=1,
         examiner_narrative_note="Recovered pre-revoke message instructing mule coordinator to wipe UTR ledger.",
         created_by_examiner="Inspector Rajesh Kumar Verma",
         created_at_ist_iso="2026-11-05 14:30:00 IST (+05:30)",

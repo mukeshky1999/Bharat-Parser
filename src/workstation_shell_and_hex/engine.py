@@ -27,7 +27,7 @@ class WorkstationShellEngine:
         source_vfs_file_id INTEGER NOT NULL,
         physical_byte_offset INTEGER,
         tag_category_badge TEXT NOT NULL,
-        is_relied_upon_for_sec230_bnss INTEGER DEFAULT 1,
+        is_relied_upon INTEGER DEFAULT 1,
         examiner_narrative_note TEXT,
         created_by_examiner TEXT NOT NULL,
         created_at_ist_iso TEXT NOT NULL
@@ -37,7 +37,7 @@ class WorkstationShellEngine:
         ON examiner_bookmarks_and_tags_ledger(target_domain_table, target_record_uid);
 
     CREATE INDEX IF NOT EXISTS idx_bookmarks_relied_upon
-        ON examiner_bookmarks_and_tags_ledger(is_relied_upon_for_sec230_bnss);
+        ON examiner_bookmarks_and_tags_ledger(is_relied_upon);
     """
 
     def initialize_ui_state_db(self, db_path: str) -> None:
@@ -63,7 +63,7 @@ class WorkstationShellEngine:
                     source_vfs_file_id,
                     physical_byte_offset,
                     tag_category_badge,
-                    is_relied_upon_for_sec230_bnss,
+                    is_relied_upon,
                     examiner_narrative_note,
                     created_by_examiner,
                     created_at_ist_iso
@@ -77,7 +77,7 @@ class WorkstationShellEngine:
                     bookmark.tag_category_badge.value
                     if isinstance(bookmark.tag_category_badge, TagCategoryBadge)
                     else str(bookmark.tag_category_badge),
-                    bookmark.is_relied_upon_for_sec230_bnss,
+                    bookmark.is_relied_upon,
                     bookmark.examiner_narrative_note,
                     bookmark.created_by_examiner,
                     bookmark.created_at_ist_iso,
@@ -105,7 +105,7 @@ class WorkstationShellEngine:
                         source_vfs_file_id,
                         physical_byte_offset,
                         tag_category_badge,
-                        is_relied_upon_for_sec230_bnss,
+                        is_relied_upon,
                         examiner_narrative_note,
                         created_by_examiner,
                         created_at_ist_iso
@@ -125,7 +125,7 @@ class WorkstationShellEngine:
                         source_vfs_file_id,
                         physical_byte_offset,
                         tag_category_badge,
-                        is_relied_upon_for_sec230_bnss,
+                        is_relied_upon,
                         examiner_narrative_note,
                         created_by_examiner,
                         created_at_ist_iso
@@ -144,7 +144,7 @@ class WorkstationShellEngine:
                         source_vfs_file_id=row[3],
                         physical_byte_offset=row[4],
                         tag_category_badge=TagCategoryBadge(row[5]),
-                        is_relied_upon_for_sec230_bnss=row[6],
+                        is_relied_upon=row[6],
                         examiner_narrative_note=row[7],
                         created_by_examiner=row[8],
                         created_at_ist_iso=row[9],
@@ -182,12 +182,12 @@ class WorkstationShellEngine:
                     source_vfs_file_id,
                     physical_byte_offset,
                     tag_category_badge,
-                    is_relied_upon_for_sec230_bnss,
+                    is_relied_upon,
                     examiner_narrative_note,
                     created_by_examiner,
                     created_at_ist_iso
                 FROM examiner_bookmarks_and_tags_ledger
-                WHERE is_relied_upon_for_sec230_bnss = 1
+                WHERE is_relied_upon = 1
                 ORDER BY bookmark_uid ASC;
                 """
             )
@@ -201,7 +201,7 @@ class WorkstationShellEngine:
                         source_vfs_file_id=row[3],
                         physical_byte_offset=row[4],
                         tag_category_badge=TagCategoryBadge(row[5]),
-                        is_relied_upon_for_sec230_bnss=row[6],
+                        is_relied_upon=row[6],
                         examiner_narrative_note=row[7],
                         created_by_examiner=row[8],
                         created_at_ist_iso=row[9],

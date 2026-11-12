@@ -9,7 +9,7 @@ import os
 import sqlite3
 from typing import Any
 
-from src.unk_triage_and_bsa_studio.models import (
+from src.unk_triage.models import (
     PromotedSchemaRecord,
     SemanticColumnRole,
 )
@@ -50,7 +50,7 @@ class ZeroCodeSchemaMapper:
         table_name: str,
         column_roles: dict[str, SemanticColumnRole],
         raw_rows: list[dict[str, Any]],
-        examiner_name: str = "Examiner",
+        examiner_name: str = "",
     ) -> PromotedSchemaRecord:
         """Promotes rows from an unrecognized table into the case and records an audit entry."""
         now_dt = datetime.now(timezone.utc)

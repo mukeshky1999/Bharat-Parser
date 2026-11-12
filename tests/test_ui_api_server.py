@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-from tests.legal_fixtures import ncrp_candidates, sec230_items
 import shutil
 import tempfile
 import unittest
@@ -21,10 +20,7 @@ from fastapi import HTTPException
 import parsers.api_server as server
 from parsers.api_server import (
     ChatRedlineRequest,
-    NcrpFreezeRequest,
     OcrAnalyzeRequest,
-    Sec63BsaRequest,
-    Sec230BnssRequest,
     ArtifactCategoryEnum,
 )
 from parsers.ui_fts5_paginator import CaseUIPaginatorStore
@@ -239,89 +235,8 @@ class TestUIAPIServer(unittest.TestCase):
         self.assertNotIn("FixedFloat", svg_content)
         self.assertEqual(svg_res.media_type, "image/svg+xml")
 
-    def test_09_report_sec63_bsa_certificate(self):
-        """Validates Section 63 BSA 2023 statutory certificate generation."""
-        cert_res = server.generate_sec63_bsa_certificate()
-        html_text = cert_res.body.decode("utf-8")
-        self.assertIn("Section 63(4)(c)", html_text)
-        self.assertIn("Bharatiya Sakshya Adhiniyam, 2023", html_text)
-        self.assertIn("TEST_CASE_M4_001", html_text)
-        self.assertIn("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", html_text)
 
-        # Test POST route
-        post_req = Sec63BsaRequest(
-            case_id="TEST_CASE_POST_63",
-            examiner_name="Inspector S. K. Gupta"
-        )
-        post_res = server.generate_sec63_bsa_certificate_post(post_req)
-        self.assertIn("TEST_CASE_POST_63", post_res.body.decode("utf-8"))
 
-    def test_10_report_sec230_bnss_defense_bundle(self):
-        """Validates Section 230 BNSS statutory defense disclosure bundle generation."""
-        out_dir = os.path.join(self.workspace, "sec230_test_out")
-        req = Sec230BnssRequest(items=sec230_items(self.workspace), 
-            case_id="TEST_SEC230_CASE",
-            output_dir=out_dir,
-            anonymize_victim_identity=True,
-            victim_name="Ananya Sharma"
-        )
-        res = server.generate_sec230_bnss_report(req)
-        self.assertTrue(res["success"])
-        self.assertEqual(res["pocso_withheld_count"], 1)
-        self.assertTrue(os.path.isdir(res["bundle_path"]))
-        self.assertTrue(os.path.isfile(res["html_viewer_path"]))
-
-        # Check victim anonymization in Open_Case_Dossier.html
-        with open(res["html_viewer_path"], "r", encoding="utf-8") as f:
-            dossier_html = f.read()
-        self.assertNotIn("Ananya Sharma", dossier_html)
-        self.assertIn("[VICTIM_PROTECTED_ID_01]", dossier_html)
-
-        # Check that statutory withheld notice card was generated
-        exhibits_dir = os.path.join(out_dir, "exhibits")
-        withheld_notice = os.path.join(exhibits_dir, "002_withheld_sensitive_stream_02_WITHHELD_NOTICE.txt")
-        self.assertTrue(os.path.isfile(withheld_notice))
-        with open(withheld_notice, "r", encoding="utf-8") as f:
-            notice_text = f.read()
-        self.assertIn("STATUTORY JUDICIAL-INSPECTION NOTICE CARD", notice_text)
-        self.assertIn("P. Gopalkrishnan v. State of Kerala", notice_text)
-
-    def test_11_report_1930_ncrp_bank_freeze_with_victim_safeguard(self):
-        """Validates 14-column 1930 NCRP bank freeze sheet and Complainant Safeguard Lock."""
-        out_dir = os.path.join(self.workspace, "ncrp_test_out")
-        req = NcrpFreezeRequest(candidates=ncrp_candidates("VICTIM_ACCOUNT_112233"), acknowledgement_no="NCRP-TEST-001", 
-            case_id="TEST_NCRP_CASE",
-            output_dir=out_dir,
-            complainant_account="VICTIM_ACCOUNT_112233"
-        )
-        res = server.generate_ncrp_freeze_report(req)
-        self.assertTrue(res["success"])
-        self.assertTrue(os.path.isfile(res["csv_path"]))
-        self.assertGreater(len(res["sha256"]), 0)
-        self.assertGreaterEqual(res["total_freeze_targets"], 2)
-
-        # Verify Complainant Safeguard Lock
-        victim_safeguard = next(s for s in res["safeguards"] if s["is_victim"])
-        self.assertTrue(victim_safeguard["is_freeze_locked"])
-        self.assertTrue(victim_safeguard["freeze_checkbox_disabled"])
-        self.assertIn("DO NOT FREEZE", victim_safeguard["role_badge"])
-
-        # Verify that CSV does not include victim account in beneficiary freeze column
-        with open(res["csv_path"], "r", encoding="utf-8") as f:
-            csv_lines = f.readlines()
-        self.assertGreaterEqual(len(csv_lines), 3)  # header + at least 2 mule targets
-        for line in csv_lines[1:]:
-            parts = line.strip().split(",")
-            # column 2 is Beneficiary_Account_to_Freeze
-            beneficiary_acc = parts[2]
-            self.assertNotEqual(beneficiary_acc, "VICTIM_ACCOUNT_112233")
-
-        # Test GET download route
-        csv_download = server.get_ncrp_freeze_csv(
-            case_id="TEST_NCRP_CASE", complainant_account="VICTIM_ACCOUNT_112233", acknowledgement_no="NCRP-TEST-001"
-        )
-        self.assertEqual(csv_download.media_type, "text/csv")
-        self.assertIn("Acknowledgement_No", csv_download.body.decode("utf-8"))
 
     def test_12_ocr_analyze_endpoint(self):
         """Validates POST /api/ocr/analyze extracts text, UTRs, and VPAs."""

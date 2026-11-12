@@ -41,7 +41,6 @@ TIER_MODULE_MAP = {
         "tests.e2e.test_tier1_chats",
         "tests.e2e.test_tier1_crypto",
         "tests.e2e.test_tier1_ui_bridge",
-        "tests.e2e.test_tier1_reporting",
     ],
     "2": [
         "tests.e2e.test_tier2_boundary_corner",

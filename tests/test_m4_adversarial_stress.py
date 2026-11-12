@@ -13,7 +13,6 @@ Probes and stress-tests:
 from __future__ import annotations
 
 import os
-from tests.legal_fixtures import ncrp_candidates, sec230_items
 import shutil
 import tempfile
 import unittest
@@ -23,13 +22,10 @@ from fastapi import HTTPException
 import parsers.api_server as server
 from parsers.api_server import (
     ChatRedlineRequest,
-    NcrpFreezeRequest,
-    Sec230BnssRequest,
     ArtifactCategoryEnum,
 )
 from parsers.ui_fts5_paginator import CaseUIPaginatorStore
 from src.chat_reconstructor_and_redline.myers_redline_engine import MyersRedlineEngine
-from src.unk_triage_and_bsa_studio.freeze_deconfliction import NodalFreezeDeconflictionCenter
 
 
 class TestM4AdversarialStress(unittest.TestCase):
@@ -241,156 +237,15 @@ class TestM4AdversarialStress(unittest.TestCase):
     # 3. NCRP 1930 Bank Lien & Complainant Safeguard Lock
     # =========================================================================
 
-    def test_ncrp_freeze_safeguard_lock_prevents_victim_freezing(self):
-        """Complainant account must be locked and NEVER appear in freeze rows."""
-        victim_acc = "VICTIM_ACCOUNT_778899"
-        req = NcrpFreezeRequest(candidates=ncrp_candidates(victim_acc), acknowledgement_no="NCRP-TEST-001", 
-            case_id="ADV_NCRP_CASE",
-            complainant_account=victim_acc,
-            output_dir=os.path.join(self.workspace, "ncrp_adv_out")
-        )
-        res = server.generate_ncrp_freeze_report(req)
-        self.assertTrue(res["success"])
 
-        # Check safeguards list
-        victim_entry = next((s for s in res["safeguards"] if s["account_no"] == victim_acc), None)
-        self.assertIsNotNone(victim_entry, "Victim account must be present in safeguards evaluation")
-        self.assertTrue(victim_entry["is_victim"])
-        self.assertTrue(victim_entry["is_freeze_locked"])
-        self.assertTrue(victim_entry["freeze_checkbox_disabled"])
-        self.assertIn("DO NOT FREEZE", victim_entry["role_badge"])
 
-        # Check exported CSV
-        csv_text = res["csv_content"]
-        lines = [line.strip() for line in csv_text.strip().split("\n") if line.strip()]
-        header = lines[0].split(",")
-        self.assertEqual(len(header), 14, "CSV must have exactly 14 statutory columns")
-        self.assertIn("Beneficiary_Account_to_Freeze", header)
-        beneficiary_col_idx = header.index("Beneficiary_Account_to_Freeze")
 
-        for line in lines[1:]:
-            cols = line.split(",")
-            self.assertNotEqual(cols[beneficiary_col_idx], victim_acc, "Victim account must never be frozen!")
-
-    def test_ncrp_freeze_complainant_safeguard_when_candidate_account_matches_beneficiary(self):
-        """
-        When candidate beneficiary account matches complainant_account and has is_complainant_victim=True,
-        verify that it is de-conflicted and excluded from the Beneficiary freeze column.
-        """
-        complainant_acc = "COMPLAINANT_ACC_4455"
-        candidates = [
-            {"account_no": complainant_acc, "ifsc": "HDFC0001", "vpa": "victim@okhdfc", "volume_inr": 100000.0, "is_complainant_victim": True},
-            {"account_no": "MULE_BENEFICIARY_99", "ifsc": "SBIN0001", "vpa": "mule@oksbi", "volume_inr": 95000.0, "is_complainant_victim": False},
-        ]
-        req = NcrpFreezeRequest(acknowledgement_no="NCRP-TEST-001", 
-            complainant_account=complainant_acc,
-            candidates=candidates,
-            output_dir=os.path.join(self.workspace, "ncrp_match_out")
-        )
-        res = server.generate_ncrp_freeze_report(req)
-        self.assertTrue(res["success"])
-
-        # Complainant must be locked
-        victim_safeguard = next(s for s in res["safeguards"] if s["account_no"] == complainant_acc)
-        self.assertTrue(victim_safeguard["is_freeze_locked"])
-        self.assertTrue(victim_safeguard["freeze_checkbox_disabled"])
-
-        # Mule must be targeted
-        mule_safeguard = next(s for s in res["safeguards"] if s["account_no"] == "MULE_BENEFICIARY_99")
-        self.assertFalse(mule_safeguard["is_freeze_locked"])
-
-        # CSV must contain only 1 freeze target (the mule)
-        self.assertEqual(res["total_freeze_targets"], 1)
-        csv_rows = [r.strip() for r in res["csv_content"].split("\n") if r.strip()]
-        header = csv_rows[0].split(",")
-        beneficiary_idx = header.index("Beneficiary_Account_to_Freeze")
-        for row in csv_rows[1:]:
-            parts = row.split(",")
-            self.assertNotEqual(parts[beneficiary_idx], complainant_acc)
-
-    def test_ncrp_freeze_safeguard_bypass_vulnerability(self):
-        """
-        Adversarial Finding:
-        When an API caller supplies candidates where account_no matches req.complainant_account
-        but omits the explicit is_complainant_victim: True flag, the server fails to auto-detect
-        the match, and classifies the complainant's own account as a Layer-1 Mule Target!
-        """
-        complainant_acc = "ACC_COMPLAINANT_EXACT"
-        candidates = [
-            {"account_no": complainant_acc, "ifsc": "HDFC0001", "vpa": "victim@okhdfc", "volume_inr": 100000.0},
-            {"account_no": "MULE_BENEFICIARY_99", "ifsc": "SBIN0001", "vpa": "mule@oksbi", "volume_inr": 95000.0},
-        ]
-        req = NcrpFreezeRequest(acknowledgement_no="NCRP-TEST-001", 
-            complainant_account=complainant_acc,
-            candidates=candidates,
-            output_dir=os.path.join(self.workspace, "ncrp_vuln_out")
-        )
-        res = server.generate_ncrp_freeze_report(req)
-
-        # The complainant's own account must be locked even though the caller omitted the flag.
-        victim_entry = next(s for s in res["safeguards"] if s["account_no"] == complainant_acc)
-        self.assertTrue(victim_entry["is_freeze_locked"])
-        self.assertTrue(victim_entry["freeze_checkbox_disabled"])
-        self.assertNotIn(complainant_acc, [r for r in res["csv_content"].splitlines()[1].split(",")][2:3])
-        self.assertEqual(res["total_freeze_targets"], 1)
-
-    def test_ncrp_freeze_utility_keyword_exclusion(self):
-        """Utility billers (irctc, bescom, billdesk) must be excluded from debit liens."""
-        candidates = [
-            {"account_no": "BESCOM_ELEC_1", "ifsc": "SBIN0001", "vpa": "bescom.billdesk@icici", "volume_inr": 2500.0, "is_complainant_victim": False},
-            {"account_no": "IRCTC_TICKETS_2", "ifsc": "SBIN0002", "vpa": "irctc@sbi", "volume_inr": 4200.0, "is_complainant_victim": False},
-            {"account_no": "MULE_VALID_3", "ifsc": "ICIC0001", "vpa": "mule@icici", "volume_inr": 80000.0, "is_complainant_victim": False},
-        ]
-        center = NodalFreezeDeconflictionCenter()
-        evaluated = center.evaluate_freeze_candidates(candidates)
-
-        bescom = next(c for c in evaluated if "BESCOM" in c.account_no)
-        self.assertTrue(bescom.is_utility_excluded)
-        self.assertIn("UTILITY", bescom.role_badge)
-
-        irctc = next(c for c in evaluated if "IRCTC" in c.account_no)
-        self.assertTrue(irctc.is_utility_excluded)
-
-        mule = next(c for c in evaluated if "MULE" in c.account_no)
-        self.assertFalse(mule.is_utility_excluded)
-
-        csv_text = center.generate_1930_ncrp_csv(evaluated, complainant_account="COMPL_1", acknowledgement_no="NCRP-T-1")
-        self.assertNotIn("BESCOM", csv_text)
-        self.assertNotIn("IRCTC", csv_text)
-        self.assertIn("MULE_VALID_3", csv_text)
 
     # =========================================================================
     # 4. Section 230 BNSS Statutory Defense Disclosure Stress Tests
     # =========================================================================
 
-    def test_sec230_bnss_non_existent_case_id(self):
-        """Non-existent case ID must generate standalone defense bundle cleanly without 500."""
-        req = Sec230BnssRequest(items=sec230_items(self.workspace), 
-            case_id="CASE_TOTALLY_NON_EXISTENT_99999",
-            victim_name="Smt. Ananya Sharma",
-            anonymize_victim_identity=True
-        )
-        res = server.generate_sec230_bnss_report(req)
-        self.assertTrue(res["success"])
-        self.assertEqual(res["case_id"], "CASE_TOTALLY_NON_EXISTENT_99999")
-        self.assertTrue(os.path.isdir(res["bundle_path"]))
-        self.assertTrue(os.path.isfile(res["html_viewer_path"]))
-        self.assertGreaterEqual(res["pocso_withheld_count"], 1)
 
-    def test_sec230_bnss_multi_victim_anonymization(self):
-        """Multiple victim names in string must be handled without crash."""
-        req = Sec230BnssRequest(items=sec230_items(self.workspace), 
-            case_id="CASE_MULTI_VICTIM_001",
-            victim_name="Rajesh Gupta & Priya Gupta",
-            anonymize_victim_identity=True
-        )
-        res = server.generate_sec230_bnss_report(req)
-        self.assertTrue(res["success"])
-        self.assertTrue(os.path.exists(res["html_viewer_path"]))
-
-        with open(res["html_viewer_path"], "r", encoding="utf-8") as f:
-            content = f.read()
-        self.assertIn("[VICTIM_PROTECTED_ID_01]", content)
 
     # =========================================================================
     # 5. Hex Window & Path Traversal Boundary Tests

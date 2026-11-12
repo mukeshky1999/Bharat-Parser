@@ -1,6 +1,6 @@
 """
 Data models and canonical enums for Phase 9, Module 9.5:
-Interactive UNK Triage Workbench, Key-Broker Console & Section 63(4)(c) BSA 2023 Report Studio.
+Interactive UNK Triage Workbench, Key-Broker Console.
 """
 
 from dataclasses import dataclass, field
@@ -83,48 +83,3 @@ class IncrementalHotPatchResult:
     merkle_audit_entry_created: bool
     merkle_event_type: str
     elapsed_seconds: float = 0.0
-
-
-@dataclass
-class FreezeCandidateAccount:
-    """Account or VPA evaluated in the Golden-Hour Freeze De-Confliction Center."""
-    account_no: str
-    ifsc: str
-    vpa: str
-    is_complainant_victim: bool
-    volume_inr: float
-    is_freeze_locked: bool = False
-    freeze_checkbox_disabled: bool = False
-    is_utility_excluded: bool = False
-    role_badge: str = ""
-
-
-@dataclass
-class PreFlightCheckResult:
-    """Output of the mandatory 6-point Section 63(4)(c) BSA pre-flight statutory gate."""
-    is_passed: bool
-    failure_reasons: list[str]
-    checks_passed_count: int = 0
-    checks_total_count: int = 6
-
-
-@dataclass
-class BsaDossierDualPreview:
-    """WYSIWYG side-by-side comparison between Master Court copy and Defense Disclosure copy."""
-    statutory_header_caption: str
-    master_court_html: str
-    defense_disclosure_html: str
-    withheld_exhibits_count: int = 0
-    redacted_victims_count: int = 0
-
-    @property
-    def master_court_preview_html(self) -> str:
-        return self.master_court_html
-
-    @property
-    def defense_redacted_preview_html(self) -> str:
-        return self.defense_disclosure_html
-
-    @property
-    def sec230_bnss_defense_preview_html(self) -> str:
-        return self.defense_disclosure_html

@@ -111,24 +111,5 @@ def test_unsupported_container_fails_loudly(tmp_path, monkeypatch):
     assert exc.value.status_code == 422
 
 
-def test_certificate_states_recorded_facts_only(wal_folder, tmp_path, monkeypatch):
-    monkeypatch.setattr(api_server, "DEFAULT_WORKSPACE_ROOT", str(tmp_path / "ws"))
-    api_server._execute_ingestion_pipeline(str(wal_folder), "CASE-CERT", "<b>Case</b>", "Ex", "Ag")
-    resp = api_server._build_sec63_response({"fir_number": "<script>alert(1)</script>"})
-    html = resp.body.decode("utf-8")
-    assert "<script>alert(1)</script>" not in html
-    assert "&lt;script&gt;" in html
-    assert "O_RDONLY" not in html
-    assert "MATCH - the evidence hashed identically" in html
-    assert "Post-Ingestion SHA-256" in html
-    # no invented device identity
-    assert "Redmi" not in html and "862910058291048" not in html
 
 
-def test_certificate_refused_without_case(monkeypatch):
-    from fastapi import HTTPException
-
-    monkeypatch.setattr(api_server, "_case_state", {**api_server._case_state, "loaded": False})
-    with pytest.raises(HTTPException) as e:
-        api_server._build_sec63_response()
-    assert e.value.status_code == 412

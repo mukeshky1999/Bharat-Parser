@@ -24,6 +24,7 @@ if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
 import tests.e2e.env_setup as env_setup
+from src.audit import AuditLedger, HashManifest
 from parsers.corroboration_engine import heal_counterparties_across_apps
 from parsers.graph_intelligence import (
     build_transaction_graph,
@@ -31,19 +32,6 @@ from parsers.graph_intelligence import (
     detect_mule_behavior,
 )
 from src.web3.tronlink import base58check_to_hex41, hex41_to_base58check
-from src.legal_and_bsa.models import (
-    DeponentDetails,
-    DeviceMetadata,
-    ForensicExpertDetails,
-    WorkstationEnvironment,
-    IntegrityAuditDisclosure,
-    HashTier,
-    StatutoryRegimeMode,
-)
-from src.legal_and_bsa.bsa_certificate_generator import Section63BsaCertificateGenerator
-from src.legal_and_bsa.chain_of_custody import MerkleChainOfCustodyLedger
-from src.legal_and_bsa.hash_manifest import HierarchicalHashManifestManager
-from src.legal_and_bsa.engine import LegalComplianceAndBsaEngine
 
 
 class TestTier4RealWorld(unittest.TestCase):
@@ -62,7 +50,7 @@ class TestTier4RealWorld(unittest.TestCase):
         Traces a 5-hop laundering syndicate:
         Victim (GPay) -> Mule 1 (PhonePe) -> Mule 2 & Mule 3 (CBS IMPS) ->
         Mule 4 (Binance P2P Escrow) -> Cashout Wallet (TRC-20 USDT).
-        Exports final court-admissible Section 63 BSA evidence package.
+        Records the analysis in the audit ledger.
         """
         # Step 1: Synthesize multi-app syndicate transactions
         victim_tx = {
@@ -152,81 +140,13 @@ class TestTier4RealWorld(unittest.TestCase):
         reconstructed_base58 = hex41_to_base58check(hex41_address)
         self.assertEqual(reconstructed_base58, usdt_trc20_base58)
 
-        # Step 4: Build Merkle Custody Ledger for the Syndicate Case
-        custody_ledger = MerkleChainOfCustodyLedger()
-        master_img_sha256 = "d" * 64
-        custody_ledger.initialize_chain("CASE-MULE-SYNDICATE-01", master_img_sha256)
-        custody_ledger.append_entry("ANALYZER", "GRAPH_BUILT", {"node_count": len(graph.nodes)})
-        custody_ledger.append_entry("MULE_DETECTOR", "LAYERING_DETECTED", {"total_hops": 5})
-        custody_ledger.append_entry("CRYPTO_SOLVER", "TRC20_RESOLVED", {"address": usdt_trc20_base58})
-        self.assertTrue(custody_ledger.verify_chain_integrity())
-
-        # Step 5: Generate Statutory Section 63 BSA 2023 Certificate
-        manifest_mgr = HierarchicalHashManifestManager()
-        t1_item = manifest_mgr.register_synthetic_manifest_item(
-            hash_tier=HashTier.TIER_1_MASTER_ACQUISITION_SOURCE,
-            canonical_path_or_exhibit_name="suspect_syndicate_phone.dd",
-            artifact_description="Bitstream Physical Forensic Extraction",
-            byte_size=128 * 1024 * 1024,
-            sha256_hex=master_img_sha256,
-            md5_hex="e" * 32,
-        )
-        case_merkle_root = manifest_mgr.compute_case_merkle_root()
-
-        bsa_gen = Section63BsaCertificateGenerator()
-        deponent = DeponentDetails(
-            name="Rajesh Verma",
-            designation="Deputy Superintendent of Police, STF Cyber Unit",
-            fir_number="FIR-STF-2026-088",
-            police_station="Special Task Force Cyber Cell",
-        )
-        device = DeviceMetadata(
-            make_and_brand="OnePlus",
-            model_name="12R (CPH2585)",
-            imei_1="862019482910482",
-        )
-        expert = ForensicExpertDetails(
-            name="Dr. Aditi Sharma",
-            designation="Forensic Director",
-            laboratory_unit="CFSL Cyber Division",
-            qualifications="PhD Digital Forensics",
-        )
-        workstation = WorkstationEnvironment(
-            workstation_hostname="CFSL-STF-WS-04",
-            os_version="Windows 11 Forensic",
-            engine_version="2026.1",
-            git_commit_hash="c3a4f8b91e07",
-        )
-        audit = IntegrityAuditDisclosure()
-
-        cert_record, cert_text = bsa_gen.generate_section_63_certificate(
-            certificate_reference_no="CERT-BSA-STF-2026-088",
-            statutory_mode=StatutoryRegimeMode.BSA_2023_SECTION_63_4_C_SCHEDULE,
-            deponent=deponent,
-            device=device,
-            expert=expert,
-            workstation=workstation,
-            integrity_audit=audit,
-            master_image_sha256=master_img_sha256,
-            master_image_md5=t1_item.md5_hex,
-            case_merkle_root_sha256=case_merkle_root,
-        )
-
-        self.assertIn("PART A", cert_text)
-        self.assertIn("Rajesh Verma", cert_text)
-        self.assertIn("OnePlus", cert_text)
-        self.assertIn("Section 63(4)(c)", cert_text)
-
-        # Step 6: Export master legal SQLite database
-        master_sqlite_path = self.sandbox / "syndicate_master_report.sqlite"
-        engine = LegalComplianceAndBsaEngine()
-        engine.export_master_database(
-            output_db_path=str(master_sqlite_path),
-            manifest_items=manifest_mgr.items,
-            certificates=[cert_record],
-            audit_entries=custody_ledger.entries,
-        )
-        self.assertTrue(master_sqlite_path.exists())
+        # Step 4: Record the analysis in the audit ledger
+        ledger = AuditLedger("CASE-MULE-SYNDICATE-01")
+        ledger.append("ANALYZER", "GRAPH_BUILT", {"node_count": len(graph.nodes)})
+        ledger.append("MULE_DETECTOR", "LAYERING_DETECTED", {"total_hops": 5})
+        ledger.append("CRYPTO_SOLVER", "TRC20_RESOLVED", {"address": usdt_trc20_base58})
+        self.assertTrue(ledger.verify().ok)
+        self.assertEqual(len(ledger.entries), 3)
 
     def test_scenario_dirty_acquisition_cross_app_healing(self):
         """
@@ -299,77 +219,6 @@ class TestTier4RealWorld(unittest.TestCase):
         self.assertIn("victim_mule@ybl", str(row1.get("Possible_Link", "")))
         self.assertIn("unconfirmed", str(row1.get("Possible_Link", "")))
 
-    def test_scenario_anti_forensics_clock_tampering_audit(self):
-        """
-        Scenario 3: Anti-Forensics Clock Tampering Audit.
-        Simulates an adversary who manipulated the device clock backwards by 48.5 hours
-        and left Magisk zygisk root binaries on the filesystem.
-        Validates automatic detection, mathematical bounding, and Section 63(2)(c)
-        anomaly compensation drafting in the statutory BSA 2023 certificate.
-        """
-        audit_tampered = IntegrityAuditDisclosure(
-            root_or_jailbreak_detected=True,
-            root_details="Magisk zygisk daemon active in /data/adb/modules",
-            clock_tampering_detected=True,
-            clock_tampering_details="Manual system clock rollback of -48.5 hours detected via monotonic GPS delta",
-            monotonic_counter_bounds="hardware monotonic clock, database ROWID sequence, and sqlite WAL checkpoint tags",
-            malware_or_overlay_detected=True,
-            malware_details="Sideloaded accessibility keylogger trojan package com.sys.service",
-        )
-
-        generator = Section63BsaCertificateGenerator()
-        sec63_clause = generator.synthesize_sec63_2_c_clause(audit_tampered)
-
-        # Statutory Clause Validation
-        self.assertIn("Section 63(2)(c) of the Bharatiya Sakshya Adhiniyam, 2023", sec63_clause)
-        self.assertIn("Magisk zygisk daemon active", sec63_clause)
-        self.assertIn("Manual system clock rollback of -48.5 hours", sec63_clause)
-        self.assertIn("Sideloaded accessibility keylogger trojan", sec63_clause)
-        self.assertIn("mathematically isolated", sec63_clause)
-        self.assertIn("not such as to affect the integrity of the remaining electronic records", sec63_clause)
-
-        # Complete statutory certificate creation with anomaly disclosure
-        deponent = DeponentDetails(
-            name="Vikram Rathore",
-            designation="Inspector of Police",
-            fir_number="FIR-2026/0441",
-            police_station="Cyber Police Station",
-        )
-        device = DeviceMetadata(
-            make_and_brand="Xiaomi",
-            model_name="Redmi Note 12",
-            imei_1="861928471928374",
-        )
-        expert = ForensicExpertDetails(
-            name="Dr. Aditi Sharma",
-            designation="Forensic Director",
-            laboratory_unit="CFSL",
-            qualifications="PhD Forensics",
-        )
-        workstation = WorkstationEnvironment(
-            workstation_hostname="CFSL-WS-02",
-            os_version="Windows 11",
-            engine_version="2026.1",
-            git_commit_hash="c3a4f8b91e07",
-        )
-
-        cert_record, cert_text = generator.generate_section_63_certificate(
-            certificate_reference_no="CERT-BSA-ANOMALY-01",
-            statutory_mode=StatutoryRegimeMode.BSA_2023_SECTION_63_4_C_SCHEDULE,
-            deponent=deponent,
-            device=device,
-            expert=expert,
-            workstation=workstation,
-            integrity_audit=audit_tampered,
-            master_image_sha256="f" * 64,
-            master_image_md5="0" * 32,
-            case_merkle_root_sha256="1" * 64,
-        )
-
-        # Verify that the generated statutory text incorporates the full anomaly compensation clause
-        self.assertIn("Section 63(2)(c)", cert_text)
-        self.assertIn("Magisk zygisk daemon", cert_text)
-        self.assertIn("Manual system clock rollback", cert_text)
 
 
 if __name__ == "__main__":

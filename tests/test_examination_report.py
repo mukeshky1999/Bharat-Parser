@@ -149,3 +149,11 @@ def test_facts_json_has_the_same_hashes_as_the_report(ingested):
     facts = json.loads(api_server.report_facts("json").body)
     assert facts["evidence"]["sha256_before"] == api_server._case_state["hashes"]["sha256"]
     assert facts["evidence"]["comparison"] == "MATCH"
+
+
+def test_no_statutory_form_routes_exist():
+    """The tool supplies facts; it exposes no endpoint that generates a legal form."""
+    paths = [getattr(r, "path", "") for r in api_server.app.routes]
+    banned = re.compile(r"sec63|sec230|ncrp|1930|bnss|bsa|nodal|requisition", re.IGNORECASE)
+    assert not [p for p in paths if banned.search(p)], [p for p in paths if banned.search(p)]
+    assert "/api/report/examination" in paths and "/api/report/facts" in paths and "/api/report/package" in paths

@@ -1,7 +1,7 @@
 """
 Tier 3 Cross-Feature Combinations & End-to-End Forensic Pipelines.
 Verifies full data flow through:
-Archive Ingestion -> VFS Catalog -> SQLite Recovery -> App Parsers -> Corroboration -> UI Store -> BSA Section 63 Certification.
+Archive Ingestion -> VFS Catalog -> SQLite Recovery -> App Parsers -> Corroboration -> UI Store -> Audit Trail.
 """
 
 from __future__ import annotations
@@ -31,22 +31,7 @@ from src.vfs.reader import VFSReader
 from src.upi.phonepe import PhonePeDecoder
 from src.whatsapp.decoder import WhatsAppDatabaseDecoder
 from src.banking.narration_parser import CoreBankingNarrationParser
-from src.legal_and_bsa.models import (
-    DeponentDetails,
-    DeviceMetadata,
-    ForensicExpertDetails,
-    WorkstationEnvironment,
-    IntegrityAuditDisclosure,
-    HashTier,
-    StatutoryRegimeMode,
-)
-from src.legal_and_bsa.bsa_certificate_generator import Section63BsaCertificateGenerator
-from src.legal_and_bsa.chain_of_custody import (
-    MerkleChainOfCustodyLedger,
-    ChainOfCustodyTamperException,
-)
-from src.legal_and_bsa.hash_manifest import HierarchicalHashManifestManager
-from src.legal_and_bsa.engine import LegalComplianceAndBsaEngine
+from src.audit import AuditLedger, HashManifest
 from parsers.ui_fts5_paginator import CaseUIPaginatorStore
 from parsers.graph_intelligence import (
     build_transaction_graph,
@@ -65,7 +50,7 @@ class TestTier3CrossFeature(unittest.TestCase):
         if self.sandbox.exists():
             shutil.rmtree(self.sandbox, ignore_errors=True)
 
-    def test_pipeline_archive_to_vfs_to_phonepe_to_bsa_report(self):
+    def test_pipeline_archive_to_vfs_to_phonepe_to_audit_trail(self):
         """
         Full End-to-End Pipeline 1:
         TAR Archive Ingestion -> VFS Catalog Indexing -> VFS Byte Stream Read ->
@@ -112,15 +97,11 @@ class TestTier3CrossFeature(unittest.TestCase):
                 arcname="data/data/com.phonepe.app/databases/workflow_main.db"
             )
 
-        # 3. Register acquisition source in Hierarchical Hash Manifest
-        manifest_mgr = HierarchicalHashManifestManager()
-        t1_item = manifest_mgr.register_manifest_item(
-            hash_tier=HashTier.TIER_1_MASTER_ACQUISITION_SOURCE,
-            canonical_path_or_exhibit_name=str(tar_path.name),
-            artifact_description="Primary Seized Extraction Archive (TAR)",
-            file_path=str(tar_path),
-        )
-        self.assertEqual(len(t1_item.sha256_hex), 64)
+        # 3. Register acquisition source in the hash manifest
+        manifest = HashManifest()
+        t1_item = manifest.add_file(str(tar_path.name), str(tar_path))
+        self.assertEqual(len(t1_item.sha256), 64)
+        self.assertEqual(t1_item.reverified, "NOT_REVERIFIED")
 
         # 4. Initialize VFS Catalog and Index the TAR archive
         vfs_catalog_path = self.sandbox / "vfs_catalog.sqlite"
@@ -138,14 +119,8 @@ class TestTier3CrossFeature(unittest.TestCase):
         staged_phonepe_db = self.sandbox / "staged_phonepe.db"
         staged_phonepe_db.write_bytes(extracted_stream.read())
 
-        # Register extracted SQLite container in Hash Manifest
-        t2a_item = manifest_mgr.register_manifest_item(
-            hash_tier=HashTier.TIER_2A_VFS_ORIGINAL_CONTAINER,
-            canonical_path_or_exhibit_name=target_vfs_entry["canonical_path"],
-            artifact_description="Extracted PhonePe Room SQLite Database",
-            file_path=str(staged_phonepe_db),
-            parent_manifest_item_uid=t1_item.manifest_item_uid,
-        )
+        # Register extracted SQLite container in the hash manifest
+        manifest.add_file(target_vfs_entry["canonical_path"], str(staged_phonepe_db))
 
         # 6. Decode transactions using PhonePeDecoder
         decoder = PhonePeDecoder()
@@ -189,72 +164,15 @@ class TestTier3CrossFeature(unittest.TestCase):
         self.assertEqual(total_found, 1)
         self.assertEqual(search_res.iloc[0]["VPA"], "mule_entry@ybl")
 
-        # 8. Record audit trail in Merkle Chain of Custody
-        custody = MerkleChainOfCustodyLedger()
-        custody.initialize_chain("CASE-DEL-2026-00441", t1_item.sha256_hex)
-        custody.append_entry("VFS_ENGINE", "CONTAINER_INDEXED", {"file_count": indexed_count})
-        custody.append_entry("PARSER_PHONEPE", "DECODE_SUCCESS", {"utr": utr, "amount": 75000.0})
-        custody.append_entry("FTS5_STORE", "INDEX_INGEST", {"table": "transactions", "rows": 1})
-        self.assertTrue(custody.verify_chain_integrity())
+        # 8. Record the audit trail
+        ledger = AuditLedger("CASE-DEL-2026-00441")
+        ledger.append("VFS_ENGINE", "CONTAINER_INDEXED", {"file_count": indexed_count})
+        ledger.append("PARSER_PHONEPE", "DECODE_SUCCESS", {"utr": utr, "amount": 75000.0})
+        ledger.append("FTS5_STORE", "INDEX_INGEST", {"table": "transactions", "rows": 1})
+        self.assertTrue(ledger.verify().ok)
 
-        # 9. Compute Case Master Merkle Root
-        case_merkle_root = manifest_mgr.compute_case_merkle_root()
-        self.assertEqual(len(case_merkle_root), 64)
-
-        # 10. Generate Section 63 BSA 2023 Statutory Certificate
-        bsa_generator = Section63BsaCertificateGenerator()
-        deponent = DeponentDetails(
-            name="Vikram Rathore",
-            designation="Inspector of Police",
-            fir_number="FIR-2026/0441",
-            police_station="Cyber Crime Police Station",
-        )
-        device = DeviceMetadata(
-            make_and_brand="Samsung",
-            model_name="Galaxy S23",
-            imei_1="358234112233445",
-        )
-        expert = ForensicExpertDetails(
-            name="Dr. Aditi Sharma",
-            designation="Senior Director",
-            laboratory_unit="CFSL",
-            qualifications="PhD Forensics",
-        )
-        workstation = WorkstationEnvironment(
-            workstation_hostname="CFSL-WS-01",
-            os_version="Windows 11",
-            engine_version="2026.1",
-            git_commit_hash="c3a4f8b91e07",
-        )
-        integrity_audit = IntegrityAuditDisclosure()
-
-        cert_record, cert_text = bsa_generator.generate_section_63_certificate(
-            certificate_reference_no="CERT-BSA-2026-0441",
-            statutory_mode=StatutoryRegimeMode.BSA_2023_SECTION_63_4_C_SCHEDULE,
-            deponent=deponent,
-            device=device,
-            expert=expert,
-            workstation=workstation,
-            integrity_audit=integrity_audit,
-            master_image_sha256=t1_item.sha256_hex,
-            master_image_md5=t1_item.md5_hex,
-            case_merkle_root_sha256=case_merkle_root,
-        )
-
-        self.assertIn("Section 63(4)(c)", cert_text)
-        self.assertEqual(cert_record.tier1_master_image_sha256, t1_item.sha256_hex)
-        self.assertEqual(cert_record.case_merkle_root_sha256, case_merkle_root)
-
-        # 11. Export master legal database
-        engine = LegalComplianceAndBsaEngine()
-        master_db_out = self.sandbox / "legal_compliance_and_section63_bsa.sqlite"
-        engine.export_master_database(
-            output_db_path=str(master_db_out),
-            manifest_items=manifest_mgr.items,
-            certificates=[cert_record],
-            audit_entries=custody.entries,
-        )
-        self.assertTrue(master_db_out.exists())
+        # 9. Case Merkle root over the registered items
+        self.assertEqual(len(manifest.merkle_root()), 64)
 
     def test_pipeline_zip_to_vfs_to_whatsapp_fts5_ui(self):
         """

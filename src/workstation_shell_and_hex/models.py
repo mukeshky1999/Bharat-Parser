@@ -121,7 +121,7 @@ class ExaminerBookmarkRecord:
     tag_category_badge: TagCategoryBadge
     bookmark_uid: Optional[int] = None
     physical_byte_offset: Optional[int] = None
-    is_relied_upon_for_sec230_bnss: int = 1
+    is_relied_upon: int = 1
     examiner_narrative_note: Optional[str] = None
     created_by_examiner: str = "Examiner"
     created_at_ist_iso: str = ""

@@ -1,7 +1,7 @@
 """
 Bharat-PA Forensics — High-Performance Local REST API Server
 Bridges Python 1 TB+ FTS5 Paginated Case Store, Native Windows File/Folder Pickers,
-Streaming Forensic Ingestion Pipeline, Graph Intelligence, and Section 63 BSA 2023 Generator
+Streaming Forensic Ingestion Pipeline, Graph Intelligence, and the examination report and review package
 to the React / Electron Frontend Workbench.
 """
 
@@ -77,10 +77,6 @@ from src.chat_reconstructor_and_redline.myers_redline_engine import MyersRedline
 from src.chat_reconstructor_and_redline.models import DiffTokenType
 from src.financial_graph_and_storyboard.sankey_canvas import SankeyCanvasRenderer, SankeyLaunderingCanvas, render_layout_svg
 from src.financial_graph_and_storyboard.models import SankeyNode, SankeyFlowRibbon, SankeyStageColumn
-from src.dossier_and_exhibits.exhibit_packager import ExhibitAndDefensePackager
-from src.dossier_and_exhibits.models import SensitiveMediaItem, RedactionTag, MuleTransactionEntry
-from src.unk_triage_and_bsa_studio.freeze_deconfliction import NodalFreezeDeconflictionCenter
-from src.dossier_and_exhibits.nodal_freeze_and_requisitions import NodalFreezeExporter
 from src.geospatial_media_and_tamper.bilingual_ocr_engine import BilingualOcrEngine
 
 # ------------------------------------------------------------------------------
@@ -107,7 +103,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Bharat-PA Forensics REST Engine",
-    description="High-performance backend API for Indian UPI, Chat Forensics, 1 TB+ Case Store, and Section 63 BSA Compliance",
+    description="High-performance backend API for Indian UPI, Chat Forensics, 1 TB+ Case Store, and examination reporting",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -300,47 +296,8 @@ class ChatRedlineResponse(BaseModel):
     has_financial_or_crypto_token: bool
 
 
-class Sec230MediaInput(BaseModel):
-    path: str
-    redaction_tag: Optional[str] = None  # required: a RedactionTag value (DISCLOSABLE to release)
-
-
-class Sec230BnssRequest(BaseModel):
-    case_id: Optional[str] = None
-    output_dir: Optional[str] = None
-    anonymize_victim_identity: bool = True
-    victim_name: Optional[str] = None
-    items: Optional[List[Sec230MediaInput]] = None
-
-
-class NcrpFreezeRequest(BaseModel):
-    case_id: Optional[str] = None
-    output_dir: Optional[str] = None
-    complainant_account: Optional[str] = None
-    acknowledgement_no: Optional[str] = None
-    complainant_vpa: Optional[str] = None
-    state_ut: Optional[str] = None
-    police_station: Optional[str] = None
-    investigating_officer: Optional[str] = None
-    crime_category: Optional[str] = None
-    candidates: Optional[List[Dict[str, Any]]] = None
-    transactions: Optional[List[Dict[str, Any]]] = None
-
-
 class OcrAnalyzeRequest(BaseModel):
     image_path: str
-
-
-class Sec63BsaRequest(BaseModel):
-    case_id: Optional[str] = None
-    case_name: Optional[str] = None
-    examiner_name: Optional[str] = None
-    designation: Optional[str] = None
-    fsl_lab: Optional[str] = None
-    fir_number: Optional[str] = None
-    io_name: Optional[str] = None
-    police_station: Optional[str] = None
-    court_name: Optional[str] = None
 
 
 # ------------------------------------------------------------------------------
@@ -1758,237 +1715,6 @@ def get_inspector_hex(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _build_sec63_response(officer: Optional[Dict[str, Any]] = None):
-    officer = officer or {}
-    """
-    Generates statutory Certificate under Section 63(4)(c)
-    Bharatiya Sakshya Adhiniyam, 2023 (BSA).
-    Returns clean printable court-admissible HTML.
-    """
-    if not _case_state.get("loaded"):
-        raise HTTPException(
-            status_code=412,
-            detail="Precondition Failed: load a case before generating a certificate.",
-        )
-    e = html_lib.escape  # all evidence-derived strings are escaped before entering HTML
-    case_id = e(str(officer.get("case_id") or _case_state.get("case_id") or "Not recorded"))
-    case_name = e(str(officer.get("case_name") or _case_state.get("case_name") or "Not recorded"))
-    hashes = _case_state.get("hashes", {})
-    sha256_hash = e(str(hashes.get("sha256", "Not recorded")))
-    md5_hash = e(str(hashes.get("md5", "Not recorded")))
-    post_sha256 = hashes.get("postIngestionSha256")
-    post_md5 = hashes.get("postIngestionMd5")
-    size_bytes = int(hashes.get("fileSizeBytes", 0) or 0)
-    dev_meta = _case_state.get("device_metadata") or {}
-    counts = _active_store.get_project_tree_counts()
-    processing_log = _case_state.get("processing_log") or []
-    failed_files = [x for x in processing_log if x.get("status") == "FAILED"]
-
-    if post_sha256 is None:
-        integrity_line = "NOT RECORDED - no post-ingestion hash exists for this case."
-        integrity_class = "warn"
-    elif hashes.get("integrityMatch"):
-        integrity_line = "MATCH - the evidence hashed identically before and after processing."
-        integrity_class = "ok"
-    else:
-        integrity_line = "MISMATCH - the evidence hash CHANGED during processing. Do not rely on this output."
-        integrity_class = "bad"
-
-    def _off(key: str) -> str:
-        val = str(officer.get(key) or "").strip()
-        return e(val) if val else "<em>Not provided</em>"
-
-    def _dev(key: str) -> str:
-        return e(str(dev_meta.get(key, "Not recorded")))
-
-    total_chats = counts.get("chats_all", {}).get("total", 0)
-    total_upi = counts.get("upi_all", {}).get("total", 0)
-    total_calls = counts.get("calls_all", {}).get("total", 0)
-    total_contacts = counts.get("contacts_all", {}).get("total", 0)
-
-    now_iso = datetime.now(timezone.utc).strftime("%d-%B-%Y %H:%M:%S UTC")
-
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Section 63(4)(c) BSA Certificate - Case {case_id}</title>
-<style>
-    body {{
-        font-family: 'Times New Roman', serif;
-        line-height: 1.6;
-        color: #111827;
-        padding: 40px;
-        background: #ffffff;
-        max-width: 860px;
-        margin: auto;
-    }}
-    .header {{
-        text-align: center;
-        border-bottom: 2px solid #000;
-        padding-bottom: 12px;
-        margin-bottom: 24px;
-    }}
-    .title {{
-        font-size: 18pt;
-        font-weight: bold;
-        text-transform: uppercase;
-        margin: 4px 0;
-    }}
-    .subtitle {{
-        font-size: 12pt;
-        font-weight: bold;
-    }}
-    .act {{
-        font-size: 11pt;
-        font-style: italic;
-    }}
-    table {{
-        width: 100%;
-        border-collapse: collapse;
-        margin: 16px 0;
-        font-size: 10.5pt;
-    }}
-    th, td {{
-        border: 1px solid #374151;
-        padding: 6px 10px;
-        text-align: left;
-    }}
-    th {{
-        background-color: #f3f4f6;
-        font-weight: bold;
-    }}
-    .mono {{
-        font-family: 'Courier New', monospace;
-        word-break: break-all;
-    }}
-    .declaration {{
-        margin: 20px 0;
-        text-align: justify;
-        font-size: 11pt;
-    }}
-    .ok {{ color: #065f46; }}
-    .warn {{ color: #92400e; }}
-    .bad {{ color: #991b1b; }}
-    .signatures {{
-        margin-top: 50px;
-        display: flex;
-        justify-content: space-between;
-    }}
-    .sig-box {{
-        width: 45%;
-        border-top: 1px solid #000;
-        padding-top: 8px;
-        text-align: center;
-        font-size: 11pt;
-    }}
-</style>
-</head>
-<body>
-<div class="header">
-    <div class="subtitle">GOVERNMENT OF INDIA / STATE POLICE DEPARTMENT</div>
-    <div class="title">CERTIFICATE OF ELECTRONIC EVIDENCE</div>
-    <div class="act">Under Section 63(4)(c) of the Bharatiya Sakshya Adhiniyam, 2023 (BSA)<br>
-    (In substitution of Section 65B of the Indian Evidence Act, 1872)</div>
-</div>
-
-<p>I, the undersigned Digital Forensic Examiner, do hereby solemnly certify and declare as follows:</p>
-
-<table>
-    <tr><th colspan="2">1. PARTICULARS OF ELECTRONIC EVIDENCE RECORD</th></tr>
-    <tr><td width="35%">Case Reference ID:</td><td><strong>{case_id}</strong></td></tr>
-    <tr><td>Case Name / Title:</td><td>{case_name}</td></tr>
-    <tr><td>Source Evidence File / Path:</td><td class="mono">{_dev("evidenceSourcePath")}</td></tr>
-    <tr><td>Evidence File Size:</td><td>{size_bytes:,} Bytes ({size_bytes / (1024*1024):.2f} MB)</td></tr>
-    <tr><td>Pre-Ingestion SHA-256 Hash:</td><td class="mono"><strong>{sha256_hash}</strong></td></tr>
-    <tr><td>Pre-Ingestion MD5 Hash:</td><td class="mono">{md5_hash}</td></tr>
-    <tr><td>Post-Ingestion SHA-256 Hash:</td><td class="mono">{e(str(post_sha256)) if post_sha256 else "Not recorded"}</td></tr>
-    <tr><td>Post-Ingestion MD5 Hash:</td><td class="mono">{e(str(post_md5)) if post_md5 else "Not recorded"}</td></tr>
-    <tr><td>Hash Comparison:</td><td class="{integrity_class}"><strong>{integrity_line}</strong></td></tr>
-    <tr><td>Target Hardware Model:</td><td>{_dev("model")} ({_dev("manufacturer")})</td></tr>
-    <tr><td>OS / Build:</td><td>{_dev("androidVersion")} / {_dev("buildNumber")}</td></tr>
-    <tr><td>Device Serial / IMEI:</td><td>{_dev("serialNumber")} / {_dev("imei1")}</td></tr>
-</table>
-
-<table>
-    <tr><th colspan="2">1A. OFFICER AND CASE PARTICULARS (as entered by the examiner)</th></tr>
-    <tr><td width="35%">FIR Number:</td><td>{_off("fir_number")}</td></tr>
-    <tr><td>Police Station:</td><td>{_off("police_station")}</td></tr>
-    <tr><td>Court:</td><td>{_off("court_name")}</td></tr>
-    <tr><td>Examiner:</td><td>{_off("examiner_name")}, {_off("designation")}</td></tr>
-    <tr><td>Laboratory:</td><td>{_off("fsl_lab")}</td></tr>
-    <tr><td>Investigating Officer / Custodian:</td><td>{_off("io_name")}</td></tr>
-</table>
-
-<table>
-    <tr><th colspan="4">2. PARSED DIGITAL ARTIFACT SUMMARY</th></tr>
-    <tr>
-        <th>Category</th><th>Active</th><th>Recovered (WAL / Carved)</th><th>Total Records</th>
-    </tr>
-    <tr>
-        <td>UPI & Banking Transactions</td>
-        <td>{counts.get("upi_all", {}).get("active", 0)}</td>
-        <td>{counts.get("upi_all", {}).get("wal_and_carved", 0)}</td>
-        <td>{total_upi}</td>
-    </tr>
-    <tr>
-        <td>Instant Messaging & Social Chats</td>
-        <td>{counts.get("chats_all", {}).get("active", 0)}</td>
-        <td>{counts.get("chats_all", {}).get("wal_and_carved", 0)}</td>
-        <td>{total_chats}</td>
-    </tr>
-    <tr>
-        <td>Call Logs (Cellular CDR & VoIP)</td>
-        <td>{counts.get("calls_all", {}).get("active", 0)}</td>
-        <td>{counts.get("calls_all", {}).get("wal_and_carved", 0)}</td>
-        <td>{total_calls}</td>
-    </tr>
-    <tr>
-        <td>Contacts & Counterparty Dossiers</td>
-        <td>{counts.get("contacts_all", {}).get("active", 0)}</td>
-        <td>{counts.get("contacts_all", {}).get("wal_and_carved", 0)}</td>
-        <td>{total_contacts}</td>
-    </tr>
-</table>
-
-<div class="declaration">
-    <p><strong>3. PROCESSING FACTS RECORDED BY THE SOFTWARE:</strong></p>
-    <p>(a) Evidence was not opened in place. Folders and single files were copied to a case working copy, and archives were extracted into the case workspace, before any database was opened.</p>
-    <p>(b) SHA-256 and MD5 were computed over the original evidence before processing and again after processing. Result: <strong>{integrity_line}</strong></p>
-    <p>(c) Files processed: {len([x for x in processing_log if x.get("stage") == "parse_database" and x.get("status") == "OK"])} database(s) parsed without error; <strong>{len(failed_files)}</strong> processing step(s) failed{"" if not failed_files else " (see list below)"}.</p>
-    <p>(d) The examiner must personally confirm, by signature, that the forensic workstation operated properly and that the details above are correct. The software does not make that declaration.</p>
-    {"".join(f'<p class="mono">FAILED: {e(str(x.get("stage")))} / {e(str(x.get("file")))} - {e(str(x.get("error")))}</p>' for x in failed_files[:50])}
-</div>
-
-<div class="signatures">
-    <div class="sig-box">
-        <strong>Forensic Examiner Signature</strong><br>
-        Cyber Crime Forensic Laboratory<br>
-        Timestamp: {now_iso}
-    </div>
-    <div class="sig-box">
-        <strong>Investigating Officer / In-Charge</strong><br>
-        Special Cyber Crime Police Station<br>
-        Seal & Official Stamp
-    </div>
-</div>
-</body>
-</html>"""
-    headers = {
-        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline';",
-        "X-Content-Type-Options": "nosniff",
-        "X-Frame-Options": "DENY",
-        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-        "Pragma": "no-cache",
-        "Content-Disposition": 'inline; filename="sec63_certificate.html"',
-    }
-    return Response(
-        content=html,
-        media_type="text/html; charset=utf-8",
-        headers=headers,
-    )
-
-
 class ReportParticulars(BaseModel):
     case_number: Optional[str] = ""
     agency: Optional[str] = ""
@@ -2088,18 +1814,6 @@ def build_review_package(req: PackageRequest):
             "included": res.included, "withheld": res.withheld, "merkle_root": res.merkle_root}
 
 
-@app.get("/api/report/sec63-bsa")
-def generate_sec63_bsa_certificate():
-    """Section 63(4)(c) BSA certificate generated only from facts recorded for the loaded case."""
-    return _build_sec63_response()
-
-
-@app.post("/api/report/sec63-bsa")
-def generate_sec63_bsa_certificate_post(req: Sec63BsaRequest):
-    """Same certificate, with the officer/court particulars supplied by the examiner (all escaped)."""
-    return _build_sec63_response(req.model_dump(exclude_none=True))
-
-
 _MEDIA_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".bmp", ".mp4", ".mov", ".3gp", ".avi", ".mkv")
 
 
@@ -2129,79 +1843,6 @@ def get_media_candidates(limit: int = Query(500, ge=1, le=5000)):
     return {"success": True, "items": items}
 
 
-@app.post("/api/report/sec230-bnss")
-def generate_sec230_bnss_report(req: Sec230BnssRequest):
-    """
-    Generates Section 230 BNSS statutory defense disclosure bundle.
-    Automatically withholds intimate / CSAM media and replaces them with
-    Statutory Judicial-Inspection Notice Cards (P. Gopalkrishnan v. State of Kerala, 2019),
-    and anonymizes victim identity under Section 72 BNS, 2023.
-    """
-    case_id = req.case_id or _case_state.get("case_id") or "CASE_SEC230_DEFAULT"
-    out_dir = req.output_dir or os.path.join(DEFAULT_WORKSPACE_ROOT, case_id, "sec230_bnss_bundle")
-    os.makedirs(out_dir, exist_ok=True)
-
-    if not req.items:
-        raise HTTPException(
-            status_code=422,
-            detail="No media items supplied. Select the case media files to package; "
-                   "nothing is generated from built-in samples.",
-        )
-
-    if req.anonymize_victim_identity and not (req.victim_name or "").strip():
-        raise HTTPException(status_code=422, detail="Victim anonymisation is on: enter the victim name to redact.")
-
-    packager = ExhibitAndDefensePackager()
-
-    valid_tags = {t.value: t for t in RedactionTag}
-    sample_items = []
-    for item in req.items:
-        if not item.redaction_tag:
-            raise HTTPException(
-                status_code=422,
-                detail=f"No redaction decision for {os.path.basename(item.path)}: choose a tag for every item "
-                       "(DISCLOSABLE to release it).",
-            )
-        if item.redaction_tag not in valid_tags:
-            raise HTTPException(status_code=422, detail=f"Unknown redaction tag: {item.redaction_tag}")
-        real_path = _resolve_case_file(item.path)
-        with open(real_path, "rb") as fh:
-            raw = fh.read()
-        sample_items.append(
-            SensitiveMediaItem(
-                canonical_path=real_path,
-                file_name=os.path.basename(real_path),
-                sha256_hex=hashlib.sha256(raw).hexdigest(),
-                md5_hex=hashlib.md5(raw).hexdigest(),
-                raw_bytes=raw,
-                redaction_tag=valid_tags[item.redaction_tag],
-                timestamps_utc=datetime.fromtimestamp(os.path.getmtime(real_path), timezone.utc).strftime(
-                    "%Y-%m-%d %H:%M:%S UTC"
-                ) + " (file modification time)",
-            )
-        )
-
-    try:
-        result = packager.package_section_230_defense_bundle(
-            case_id=case_id,
-            items=sample_items,
-            output_dir=out_dir,
-            anonymize_victim_identity=req.anonymize_victim_identity,
-            victim_name=req.victim_name,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    return {
-        "success": True,
-        "case_id": case_id,
-        "bundle_path": result.bundle_path,
-        "pocso_withheld_count": result.pocso_withheld_count,
-        "html_viewer_path": result.html_viewer_path,
-        "statutory_mandate": "Section 230 BNSS 2023 / P. Gopalkrishnan v. State of Kerala (2019)",
-    }
-
-
 def _detect_os_type(files: List[str]) -> str:
     """'ios', 'android' or 'unknown', from the layout of the extraction (not assumed)."""
     norm = [f.replace(chr(92), "/").lower() for f in files]
@@ -2220,141 +1861,6 @@ def _detect_os_type(files: List[str]) -> str:
         return "android"
     return "unknown"
 
-
-def _derive_ncrp_candidates(complainant_account: str = "") -> List[Dict[str, Any]]:
-    """Beneficiary accounts/VPAs of successful outgoing transactions in the loaded case."""
-    if not _case_state.get("loaded") or _active_store is None:
-        return []
-    conn = _active_store._get_connection()
-    try:
-        rows = conn.execute(
-            "SELECT COALESCE(NULLIF(Account,''), NULLIF(VPA,''), Counterparty) AS acct, "
-            "VPA, Counterparty, SUM(Amount) AS vol FROM transactions "
-            "WHERE UPPER(COALESCE(Type,'')) = 'DEBIT' "
-            "AND UPPER(COALESCE(Status,'')) NOT GLOB '*FAIL*' AND UPPER(COALESCE(Status,'')) NOT GLOB '*PEND*' "
-            "AND UPPER(COALESCE(Status,'')) NOT GLOB '*UNKNOWN*' AND UPPER(COALESCE(Status,'')) NOT GLOB '*DELETED*' "
-            "GROUP BY acct HAVING acct IS NOT NULL AND acct <> '' ORDER BY vol DESC"
-        ).fetchall()
-    finally:
-        conn.close()
-    return [
-        {
-            "account_no": str(r["acct"]),
-            "ifsc": "",
-            "vpa": str(r["VPA"] or ""),
-            "is_complainant_victim": bool(complainant_account) and str(r["acct"]).strip() == complainant_account,
-            "volume_inr": float(r["vol"] or 0.0),
-            "counterparty_name": str(r["Counterparty"] or ""),
-        }
-        for r in rows
-    ]
-
-
-@app.get("/api/report/ncrp-candidates")
-def get_ncrp_candidates(complainant_account: str = Query("")):
-    """Candidate beneficiary accounts derived from the loaded case (empty list if none)."""
-    cands = _derive_ncrp_candidates(complainant_account.strip())
-    return {"success": True, "candidates": cands, "count": len(cands)}
-
-
-@app.post("/api/report/ncrp-freeze")
-@app.post("/api/report/1930-ncrp")
-def generate_ncrp_freeze_report(req: NcrpFreezeRequest):
-    """
-    Evaluates candidate freeze accounts and exports de-conflicted 14-column 1930 NCRP bank lien sheets.
-    Enforces Complainant / Victim Safeguard Lock (freeze_checkbox_disabled = True) to prevent victim freezes.
-    """
-    case_id = req.case_id or _case_state.get("case_id") or "CASE_NCRP_1930"
-    out_dir = req.output_dir or os.path.join(DEFAULT_WORKSPACE_ROOT, case_id, "ncrp_1930_exports")
-    os.makedirs(out_dir, exist_ok=True)
-
-    complainant_account = str(req.complainant_account or "").strip()
-    acknowledgement_no = str(req.acknowledgement_no or "").strip()
-    if not complainant_account or not acknowledgement_no:
-        raise HTTPException(
-            status_code=422,
-            detail="Complainant account and NCRP acknowledgement number are required.",
-        )
-
-    candidates = req.candidates or _derive_ncrp_candidates(complainant_account)
-    if not candidates:
-        raise HTTPException(
-            status_code=422,
-            detail="No candidate accounts: the case has no successful outgoing transactions to freeze against.",
-        )
-
-    comp_acc = complainant_account.lower()
-    comp_vpa = str(req.complainant_vpa or "").strip().lower()
-    for c in candidates:
-        acc = str(c.get("account_no", "")).strip().lower()
-        vpa = str(c.get("vpa", "")).strip().lower()
-        if (comp_acc and acc == comp_acc) or (comp_vpa and (vpa == comp_vpa or acc == comp_vpa)):
-            c["is_complainant_victim"] = True
-
-    center = NodalFreezeDeconflictionCenter()
-    evaluated = center.evaluate_freeze_candidates(candidates)
-
-    csv_text = center.generate_1930_ncrp_csv(
-        evaluated_candidates=evaluated,
-        complainant_account=complainant_account,
-        acknowledgement_no=acknowledgement_no,
-        state_ut=req.state_ut or "",
-        police_station=req.police_station or "",
-        investigating_officer=req.investigating_officer or "",
-        crime_category=req.crime_category or "",
-    )
-
-    csv_filename = "ncrp_1930_bank_freeze_packet.csv"
-    csv_path = os.path.join(out_dir, csv_filename)
-    with open(csv_path, "w", encoding="utf-8") as f:
-        f.write(csv_text)
-
-    sha256_hash = hashlib.sha256(csv_text.encode("utf-8")).hexdigest()
-
-    victim_safeguards = [
-        {
-            "account_no": c.account_no,
-            "is_victim": c.is_complainant_victim,
-            "is_freeze_locked": c.is_freeze_locked,
-            "freeze_checkbox_disabled": c.freeze_checkbox_disabled,
-            "role_badge": c.role_badge,
-        }
-        for c in evaluated
-    ]
-
-    target_freezes = [c for c in evaluated if not c.is_freeze_locked and not c.is_utility_excluded]
-    total_lien_amount = sum(c.volume_inr for c in target_freezes)
-
-    return {
-        "success": True,
-        "csv_path": csv_path,
-        "csv_content": csv_text,
-        "sha256": sha256_hash,
-        "total_accounts_evaluated": len(evaluated),
-        "total_freeze_targets": len(target_freezes),
-        "total_lien_amount_inr": total_lien_amount,
-        "safeguards": victim_safeguards,
-        "portal": "I4C NCRP 1930 CFCFRMS Bank Lien Cart",
-    }
-
-
-@app.get("/api/report/ncrp-freeze")
-def get_ncrp_freeze_csv(
-    case_id: Optional[str] = Query(None),
-    complainant_account: str = Query(...),
-    acknowledgement_no: str = Query(...),
-):
-    """Returns the 14-column 1930 NCRP Bank Lien CSV derived from the loaded case's transactions."""
-    req = NcrpFreezeRequest(
-        case_id=case_id, complainant_account=complainant_account, acknowledgement_no=acknowledgement_no
-    )
-    res = generate_ncrp_freeze_report(req)
-    csv_content = res.get("csv_content", "")
-    return Response(
-        content=csv_content,
-        media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="ncrp_1930_bank_freeze.csv"'},
-    )
 
 # ------------------------------------------------------------------------------
 # Preserved Endpoints for Backward Compatibility

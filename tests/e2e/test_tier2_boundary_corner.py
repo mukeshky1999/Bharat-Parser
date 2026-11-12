@@ -28,8 +28,6 @@ from src.vfs.indexer import VFSIndexer
 from src.sqlite.wal import WALFrameState, WALReader, compute_wal_checksum, parse_wal_header
 from src.sqlite.varint import decode_varint, encode_varint
 from src.banking.narration_parser import CoreBankingNarrationParser
-from src.legal_and_bsa.models import IntegrityAuditDisclosure
-from src.legal_and_bsa.bsa_certificate_generator import Section63BsaCertificateGenerator
 from parsers.corrupt_db_carver import carve_corrupted_sqlite_file
 
 
@@ -237,23 +235,6 @@ class TestTier2BoundaryCorner(unittest.TestCase):
         res_malformed = parser.parse_narration(malformed)
         self.assertEqual(res_malformed.payment_rail, "UPI")
 
-    def test_anti_forensics_clock_rollback_boundary(self):
-        """Verifies Section 63(2)(c) clause generation handles extreme clock rollback."""
-        generator = Section63BsaCertificateGenerator()
-
-        # Extreme clock rollback of 720 hours (30 days in the past)
-        audit_extreme_rollback = IntegrityAuditDisclosure(
-            clock_tampering_detected=True,
-            clock_tampering_details="Manual system clock rollback of -720.0 hours detected via GPS monotonic delta",
-            monotonic_counter_bounds="hardware monotonic timer and SQLite ROWID checkpoint ordering",
-            root_or_jailbreak_detected=False,
-            malware_or_overlay_detected=False,
-        )
-
-        clause = generator.synthesize_sec63_2_c_clause(audit_extreme_rollback)
-        self.assertIn("Section 63(2)(c)", clause)
-        self.assertIn("-720.0 hours", clause)
-        self.assertIn("mathematically isolated", clause)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ Computes H(b_k) across contiguous 4 KB pages, 4-class byte compositions, and 256
 from collections import Counter
 import math
 
-from src.unk_triage_and_bsa_studio.models import (
+from src.unk_triage.models import (
     BlockByteComposition,
     BlockEntropyResult,
     ChiSquareHistogramResult,

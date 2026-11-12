@@ -7,7 +7,7 @@ import re
 import time
 from typing import Any
 
-from src.unk_triage_and_bsa_studio.models import (
+from src.unk_triage.models import (
     CandidateSecretRecord,
     IncrementalHotPatchResult,
 )
