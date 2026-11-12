@@ -18,7 +18,7 @@ Nothing in this repository loads code from the archive.
 | `tools/` | Benchmark recorder. |
 | `electron/` | Electron shell (`main.cjs`, `preload.cjs`). Spawns `python -m parsers.api_server`. |
 | `ui/renderer/` | React 19 + TypeScript desktop UI (built by Vite into `dist/`). |
-| `ui/main/`, `ui/shared/` | TypeScript engines. Partly used by the UI (`case_manager/case_db`, `reporting/sec63_bsa_generator`); the rest is only exercised by `ui/tests/`. |
+| `ui/shared/` | Shared TypeScript types used by the renderer. (The duplicate TypeScript parsers/carvers/VFS/report generators that used to live in `ui/main/` were deleted: the Python backend is the only engine.) |
 | `tests/` | Python tests (pytest) plus `tests/e2e/runner.py` and `tests/test_forensic_client.ts`. |
 | `ui/tests/` | TypeScript tests (run with `jiti`). |
 | `test_evidence/` | Test fixtures (synthetic extraction ZIP, WhatsApp DB with WAL, Paisa DB, 50 MB disk image). |
