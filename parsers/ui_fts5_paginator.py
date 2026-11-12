@@ -82,7 +82,7 @@ def adapt_legacy_chat_frame(df: pd.DataFrame) -> pd.DataFrame:
 ALLOWED_TABLES = frozenset({
     'chats', 'transactions', 'contacts', 'calls', 'locations', 'os_spillover',
     'notifications', 'custodial_wallets', 'p2p_orders', 'fiat_crypto_bridge',
-    'crypto_addresses', 'vfs_files',
+    'crypto_addresses', 'vfs_files', 'bank_alerts',
 })
 
 
@@ -439,6 +439,9 @@ class CaseUIPaginatorStore:
                 if col not in have:
                     cur.execute(f"ALTER TABLE transactions ADD COLUMN {col} TEXT")
 
+            from parsers.bank_alerts import SCHEMA as _ALERTS_SCHEMA      # bank alerts (in testing)
+            cur.executescript(_ALERTS_SCHEMA)
+
             # Phase 5B.2: every record says which evidence item (device) it came from.
             for tbl in sorted(ALLOWED_TABLES):
                 tbl_cols = {r[1] for r in cur.execute(f"PRAGMA table_info({tbl})")}
@@ -651,7 +654,7 @@ class CaseUIPaginatorStore:
         allowed_tables = {
             'chats', 'transactions', 'contacts', 'calls', 'locations', 'os_spillover',
             'notifications', 'custodial_wallets', 'p2p_orders', 'fiat_crypto_bridge',
-            'crypto_addresses', 'vfs_files'
+            'crypto_addresses', 'vfs_files', 'bank_alerts'
         }
         if target_table not in allowed_tables:
             raise ValueError(f"Target table '{table_name}' is not in allowed set: {allowed_tables}")
@@ -914,12 +917,13 @@ class CaseUIPaginatorStore:
             'fiat_crypto_bridge': 'fiat_crypto_bridge',
             'crypto_addresses': 'crypto_addresses',
             'vfs_files': 'vfs_files',
+            'bank_alerts': 'bank_alerts',
         }
         target_table = category_map.get(target_table, target_table)
         allowed = {
             'chats', 'transactions', 'contacts', 'calls', 'locations', 'os_spillover',
             'notifications', 'custodial_wallets', 'p2p_orders', 'fiat_crypto_bridge',
-            'crypto_addresses', 'vfs_files'
+            'crypto_addresses', 'vfs_files', 'bank_alerts'
         }
         if target_table not in allowed:
             raise ValueError(f"Table '{table_name}' is not supported for pagination.")

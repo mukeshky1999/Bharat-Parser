@@ -208,6 +208,13 @@ def _get_audit():
     return led, ""
 
 
+def _records_json_safe(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    """Rows of a result as dicts. A missing value is None: pandas reads a NULL in a text column as NaN, which JSON cannot carry."""
+    if df is None or df.empty:
+        return []
+    return [{k: (None if isinstance(v, float) and v != v else v) for k, v in r.items()} for r in df.to_dict("records")]
+
+
 def _audit_event(action: str, payload: Optional[Dict[str, Any]] = None) -> None:
     led, err = _get_audit()
     if led is None:
@@ -731,7 +738,7 @@ def _item_summaries(state: Dict[str, Any]) -> List[Dict[str, Any]]:
 # Core Ingestion Pipeline Implementation
 # ------------------------------------------------------------------------------
 
-_STORED_FRAMES = ("chats", "transactions", "contacts", "calls", "locations", "os_spillover", "p2p_orders")
+_STORED_FRAMES = ("chats", "transactions", "contacts", "calls", "locations", "os_spillover", "p2p_orders", "bank_alerts")
 
 
 def decoder_name(function: str, app_profile: str = "") -> str:
@@ -929,6 +936,7 @@ def _execute_ingestion_pipeline(
     all_calls_list: List[pd.DataFrame] = []
     all_locations_list: List[pd.DataFrame] = []
     all_spillover_list: List[pd.DataFrame] = []
+    all_alerts_list: List[pd.DataFrame] = []
 
     device_meta = {
         "model": "Not recorded",
@@ -1139,6 +1147,22 @@ def _execute_ingestion_pipeline(
             except Exception as exc:
                 _log_failure("crypto_p2p", file_path, exc)
 
+            # Bank alerts (in testing): bank and SMS notices in an SMS database
+            alert_note = ""
+            try:
+                from parsers import bank_alerts
+                if bank_alerts.sms_database_kind(file_path):
+                    alerts_df, a_stats = bank_alerts.read_alerts(file_path, vfs_path)
+                    if not alerts_df.empty:
+                        alerts_df["Decoded_By"] = bank_alerts.DECODER
+                        file_counts["bank_alerts"] = len(alerts_df)
+                        all_alerts_list.append(alerts_df)
+                    alert_note = (f"{a_stats['kept']} of {a_stats['read']} messages kept as bank alerts; {a_stats['promotional_left_out']} promotional and "
+                                  f"{a_stats['unclassified_left_out']} of no recognised kind left out (bank alerts are in testing)")
+                    processing_log.append({"stage": "bank_alerts", "file": os.path.basename(file_path), "status": "OK", "error": alert_note})
+            except Exception as exc:
+                _log_failure("bank_alerts", file_path, exc)
+
             _outcome, _reason, _stored = db_coverage(file_counts, file_error)
             _cov(vfs_path, _outcome, _reason, kind="SQLite database", path=original_file_path,
                  decoded_by=(decoder_name("parse_database_artifacts", matched_plugin.app_name if matched_plugin else "") + decrypted_note) if _stored else "",
@@ -1272,6 +1296,10 @@ def _execute_ingestion_pipeline(
         combined_spillover = pd.concat(all_spillover_list, ignore_index=True)
         prog.note("writing os_spillover")
         ingested["os_spillover"] = store.ingest_dataframe_chunked("os_spillover", combined_spillover, evidence_item=item_id)
+
+    if all_alerts_list:
+        prog.note("writing bank_alerts")
+        ingested["bank_alerts"] = store.ingest_dataframe_chunked("bank_alerts", pd.concat(all_alerts_list, ignore_index=True), evidence_item=item_id)
 
     if not combined_crypto_df.empty:
         prog.note("writing p2p_orders")
@@ -1924,6 +1952,7 @@ def query_artifacts(
         "fiat_crypto_bridge": "fiat_crypto_bridge",
         "crypto_addresses": "crypto_addresses",
         "vfs_files": "vfs_files",
+        "bank_alerts": "bank_alerts",
     }
     table_name = category_map.get(category.lower().strip(), category.lower().strip())
 
@@ -1955,7 +1984,7 @@ def query_artifacts(
             offset=clean_offset,
         )
 
-        rows = page_df.to_dict("records") if not page_df.empty else []
+        rows = _records_json_safe(page_df)
 
         # Discover available apps for filtering
         apps_available: List[str] = []
@@ -2103,7 +2132,7 @@ def get_chat_threads(
             return {
                 "success": True,
                 "thread_id": clean_thread_id,
-                "messages": page_df.to_dict("records") if not page_df.empty else [],
+                "messages": _records_json_safe(page_df),
                 "total": total,
             }
 
@@ -2999,6 +3028,7 @@ class ArtifactCategoryEnum(str, Enum):
     FIAT_CRYPTO_BRIDGE = "fiat_crypto_bridge"
     CRYPTO_ADDRESSES = "crypto_addresses"
     VFS_FILES = "vfs_files"
+    BANK_ALERTS = "bank_alerts"
 
 
 class PaginatedRecordsResponse(BaseModel):

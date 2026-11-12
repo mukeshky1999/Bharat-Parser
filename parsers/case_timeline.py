@@ -46,6 +46,8 @@ SPECS: Dict[str, Dict[str, str]] = {
                      "summary": _cat("Vector_Type", "Content_Snippet")},
     "notifications": {"kind": "Notification", "app": "Package_Name", "utc": "NULL", "ist": "Timestamp_IST", "clock": "NULL", "basis": "NULL",
                       "summary": _cat("Title", "Text")},
+    "bank_alerts": {"kind": "Bank alert", "app": "Institution", "utc": "Received_UTC", "ist": "Received_IST", "clock": "NULL", "basis": "NULL",
+                    "summary": _cat("Category", "Amount", "Counterparty", "Account_Masked")},
     "p2p_orders": {"kind": "P2P order", "app": "Platform", "utc": "NULL", "ist": "Timestamp_IST", "clock": "NULL", "basis": "NULL",
                    "summary": _cat("Trade_Type", "Fiat_Amount", "Fiat_Currency", "Counterparty_Nick", "Order_Status")},
 }
