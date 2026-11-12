@@ -55,7 +55,7 @@ the Electron app was launched and ran end to end (see X-09).
 
 | Finding | What changed | Tests |
 |---|---|---|
-| X-01 | NCRP sheet: State, Police Station, Officer and Crime Category come from the request; blank is written `NOT_PROVIDED`. "YES_DECONFLICTED" replaced by `AUTOMATED_RULES_PASSED`. Acknowledgement number required. NCRP dialog has the four fields | `test_legal_output_integrity.py` |
+| X-01 | NCRP sheet: State, Police Station, Officer and Crime Category come from the request; blank is written `NOT_PROVIDED`. "YES_DECONFLICTED" replaced by `AUTOMATED_RULES_PASSED`. Acknowledgement number required. NCRP dialog has the four fields | `test_review_regressions.py` |
 | X-02 | Section 230 bundle fails closed: every item needs an explicit tag (`DISCLOSABLE` to release); an untagged item aborts before anything is written; `PROTECTED_VICTIM_IDENTITY` and `UNRELIED_PRIVATE_DATA` are withheld; UI and API require a decision per file | same |
 | X-03 | Exhibit file names reduced to a single sanitised component with an index prefix; writes verified to stay inside the bundle | same |
 | X-04 | Victim name masked (case-insensitive) in file names, cards, paths, timestamps, EXIF and HTML; HTML escaped; anonymisation without a name is refused | same |
@@ -73,7 +73,7 @@ the Electron app was launched and ran end to end (see X-09).
 |---|---|---|
 | Legacy dashboard (H-10) | `main.py` and `src/workstation_app` deleted with the tests that exercised their sample data; README and architecture updated | suite |
 | Duplicate TS engines | `ui/main/` (including an old Electron main with `nodeIntegration: true`), `ui/shared/universal_hasher.ts`, `loadGoldenDataset` and the 8 TS suites that asserted the demo data deleted; the store test now uses its own fixture and asserts nothing is preloaded. TS Section 63 generator (annexure truncation) gone with them | `workbench_store_test.ts` |
-| M-01 | WAL frames follow SQLite's validity chain (header checksum, salt, rolling checksum, last commit). All-zero checksums are no longer valid. Recovered rows say `OLDER VERSION OF PAGE (committed WAL frame #n)` or `RESIDUAL WAL FRAME #n (reason)`; the old "MODIFIED / WIPED" wording asserted an inference | `test_legal_output_integrity.py`, `test_hardened_freelist_wal_carver.py` |
+| M-01 | WAL frames follow SQLite's validity chain (header checksum, salt, rolling checksum, last commit). All-zero checksums are no longer valid. Recovered rows say `OLDER VERSION OF PAGE (committed WAL frame #n)` or `RESIDUAL WAL FRAME #n (reason)`; the old "MODIFIED / WIPED" wording asserted an inference | `test_review_regressions.py`, `test_hardened_freelist_wal_carver.py` |
 | M-02 | Slack scan tries every byte offset (it stepped by 4, missing cells at other alignments); freeblocks are decoded as bare records because SQLite overwrites the first 4 bytes of a freed cell; a truncated column no longer shifts later columns. The real-WAL test now also finds a record in the database file's gap that the old stride missed, so it asserts coverage of all 10 VPAs rather than exactly 10 rows | same |
 | M-03 | Recovered counts and filters match the `State=` field. SQLite `LIKE` is case-insensitive, so `%WAL%` had been counting every path containing "wallet" | same |
 | M-04 | Amount + date matches no longer overwrite counterparty or direction. A unique candidate is stored in a new `Possible_Link` column as an unconfirmed lead; an ambiguous name is not upgraded to a VPA. Exact reference-ID healing is unchanged | same, e2e test updated |
@@ -120,3 +120,15 @@ Open: older views not redesigned (chat table, ledger, graph, wizard); generators
 Done: vendor-derived names removed from product code (`PA_CATEGORIZED_CHAT_COLUMNS` to `CHAT_COLUMNS`, `get_pa_project_tree_counts` to `get_project_tree_counts`, `commercial_parity_engine` to `generic_table_engine`, `PARITY_GAP_REPORT.md` to `COVERAGE_COMPARISON_REPORT.md`, the "Chainalysis / TRM" export label to "Export address list (CSV)"); comments citing another product as the design target reworded; guard tests added (Python and TypeScript); `docs/THIRD_PARTY_LICENSES.md` and `docs/INVENTION_RECORD.md` created.
 Python 518 passed; `npm run test:ts` passes. Open for the attorney: the 28-column chat schema's origin, libewf LGPL handling, inventorship.
 Next: Phase 5A (replace court outputs with the examination report, facts annexure, audit log and portable package).
+
+### Phase 5A: court outputs replaced by facts (2026-11-12, branch `feature/parity-and-independence`)
+Decision (user): the tool does not generate legal forms. It gives the examiner the facts, and the examiner prepares and signs any certificate in the lab's own format.
+Done, one commit per step:
+1. `src/audit`: hash-chained, persistent audit log and hash manifest, written new (the old `legal_and_bsa` ledger left the actor out of the hash, labelled UTC as IST, was memory-only, and the old manifest marked every item "verified" at registration; its Merkle tree duplicated an odd node).
+2. `parsers/examination_report.py` plus `/api/report/examination`, `/api/report/facts`, `/api/audit`; audit events on ingest, case open, pin, unpin, report and package.
+3. `parsers/review_package.py` plus `/api/report/package`: fail-closed per-file decisions, masking, safe names, manifest with Merkle root and audit head.
+4. Removed: Section 63 certificate, Section 230 bundle, NCRP freeze sheet, Section 94 drafter, dossier builder (`src/legal_and_bsa`, `src/dossier_and_exhibits`, parts of `src/unk_triage_and_bsa_studio`, their API routes, 61 tests). `src/unk_triage` keeps the key broker, schema mapper and entropy profiler. The `is_relied_upon_for_sec230_bnss` column became `is_relied_upon`.
+5. UI: stage 8 is Report & export; the three statutory dialogs and the court-output page are gone; the fabricated chat "Dossier view", invented participant bios and a fake provenance record were removed (REVIEW_FINDINGS_2 section 9).
+Guards: `test_no_statutory_form_routes_exist`, `test_report_contains_no_legal_form_wording`, and the renderer check in `ui/tests/ui_shell_test.ts`.
+Python 491 passed; `npm run test:ts` passes; `tsc` clean; `vite build` OK; the new screen was opened in Electron and the endpoints exercised against a running server on the test evidence.
+Open: `/api/report/package` lists media files only; tag-based selection and the reviewer round trip (5C.10); `abilities.md` is not re-verified line by line (a status banner says so); `financial_graph_and_storyboard/freeze_cart_manager.py` still has a "freeze cart" for graph views.

@@ -2,7 +2,7 @@
 
 Post-extraction mobile forensic analysis (Android / iOS) for Indian investigative workflows:
 UPI and banking apps, NPCI artefacts, DLT SMS, messengers, crypto wallets, telemetry,
-geolocation, and Section 63 BSA reporting.
+geolocation, and examination reporting (facts, not legal forms).
 
 This repository is the **single source of truth**. It was formed by merging two earlier
 projects, *Bharart Analyzer* and *bharat-pa-forensics*. Both originals, with their full git

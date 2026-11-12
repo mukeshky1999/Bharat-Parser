@@ -1,6 +1,17 @@
 # BharatAnalyzer Sovereign Forensics Suite — Complete Capabilities & Supported Apps Matrix (`abilities.md`)
 
-> **Version:** 2.0.0 (Unified Post-Merger Build) | **Operating Mode:** 100% Air-Gapped Offline | **Target Jurisdictions:** Indian Cyber-Financial Ecosystem (NPCI/RBI/TRAI/UIDAI/BSA 2023/BNSS 2023) + Global High-OpSec & Web3
+> **Version:** 2.0.0 | **Runs locally** on the examiner's machine (evidence is not uploaded anywhere by the product) | **Focus:** Indian cyber-financial ecosystem (UPI, banking, SMS, crypto) plus common messengers
+
+> **Status of this list (updated 2026-11-12).** This file lists what the code contains. It is not a statement that each item
+> has been checked against real vendor samples or is wired into the running product.
+>
+> * Many decoders under `src/` pass their own tests but are **not called by the product** yet (see `REVIEW_FINDINGS.md` S-01 and
+>   `REMEDIATION.md`). The product path is `parsers/api_server.py` and the parsers it imports.
+> * Decryption (SQLCipher, WhatsApp crypt, WCDB) is **not available in the product**: the SQLCipher driver is not installed and the
+>   `src/crypto` engines are not wired. Encrypted databases are reported as such in the processing log.
+> * Formats marked unverified in their module docstrings (for example Cake Wallet boxes) have not been checked against a real sample.
+> * Counts of apps, modules and endpoints were written by hand in earlier versions and are not maintained here.
+> * The tool supplies **facts, not legal forms**: see section 7.
 
 This document catalogs every application, operating system artifact, extraction container, binary wire protocol, database format, cryptographic scheme, analytical correlation engine, interactive UI workbench feature, and statutory courtroom deliverable supported by the merged suite inside `E:\v8\combined`.
 
@@ -54,7 +65,7 @@ This document catalogs every application, operating system artifact, extraction 
 - **Zero-Knowledge & Zero-Code Schema Discovery:**
   - `parsers/zero_knowledge_miner.py`: Unsupervised extraction of financial, chat, URL, VPA, and mobile artifacts from unrecognized SQLite tables.
   - `parsers/generic_table_engine.py` (`app_genie_classify_table`): Universal 6-model classifier categorizing arbitrary tables into Chats, Transactions, Contacts, Calls, Locations, or Credentials.
-  - `src/unk_triage_and_bsa_studio/schema_mapper.py` (`ZeroCodeSchemaMapper`): Lets examiners interactively promote unknown SQLite columns to `SemanticColumnRole` (`TIMESTAMP_EPOCH`, `ACTOR_SOURCE_IDENTIFIER`, `ACTOR_TARGET_IDENTIFIER`, `MESSAGE_OR_EVENT_BODY_TEXT`, `FINANCIAL_OR_CRYPTO_AMOUNT`) into the Unified Super-Timeline.
+  - `src/unk_triage/schema_mapper.py` (`ZeroCodeSchemaMapper`): Lets examiners interactively promote unknown SQLite columns to `SemanticColumnRole` (`TIMESTAMP_EPOCH`, `ACTOR_SOURCE_IDENTIFIER`, `ACTOR_TARGET_IDENTIFIER`, `MESSAGE_OR_EVENT_BODY_TEXT`, `FINANCIAL_OR_CRYPTO_AMOUNT`) into the Unified Super-Timeline.
 
 ### 3.2 Non-SQLite, Wire-Format & Browser Storage Engines
 | Format / Subsystem | Capabilities & Internal Structures Parsed | Modules |
@@ -75,7 +86,7 @@ This document catalogs every application, operating system artifact, extraction 
 - **Keychain & Keystore Harvester (`src/crypto/keyring.py`, `src/main/parsers/keystore/shared_prefs_keys.ts`):** Harvests keys/tokens/PIN salts from iOS `keychain-2.db` and Android `shared_prefs/*.xml`.
 - **Bank Statement PDF Unlocker (`src/banking/pdf_unlocker.py`):** Deterministic password cracking using Indian bank conventions (`First4LettersOfName + DDMM`, `DDMMYYYY`, PAN uppercase, mobile last digits) with RC4/AES PDF decryption.
 - **Disguised Vault Unmasker (`src/visual_residuals/vault_unmasker.py`):** Executes Known-Plaintext Attack (KPA) on obfuscated image/video magic headers (`FF D8 FF`, `89 50 4E 47`, `ftyp`), reversing 1-byte XOR, multi-byte repeating XOR, byte-swapping, and prepended decoy headers used by Calculator Vault, Audio Manager Vault, and NQ Vault.
-- **Interactive Key-Broker Hot-Patcher (`src/unk_triage_and_bsa_studio/key_broker_hotpatcher.py`):** Applies newly supplied examiner passphrases/PINs/keys through a 5-step incremental DAG re-index in **under 3.0 seconds** without re-ingesting the full 1 TB container.
+- **Interactive Key-Broker Hot-Patcher (`src/unk_triage/key_broker_hotpatcher.py`):** Applies newly supplied examiner passphrases/PINs/keys through a 5-step incremental DAG re-index in **under 3.0 seconds** without re-ingesting the full 1 TB container.
 
 ---
 
@@ -241,7 +252,7 @@ Covers **Tier 1 (High Prevalence)** and **Tier 2 (Emerging / Regional)**:
 - **Visual Residuals:** iOS SplashBoard & Android `TaskSnapshot` Protobuf/KTX app-switcher screenshot reconstruction; iOS `.ithmb` slot decoding; Android **Glide / Fresco / Coil / DiskLruCache** orphaned thumbnail reconstruction.
 - **UIDAI Aadhaar Secure QR & BharatQR:** Full mathematical unpacker decoding BigInt byte streams -> Gzip decompression -> **extracted demographic attributes + embedded JPEG-2000 owner photograph**, alongside Verhoeff $D_5$ tamper status checks.
 - **5-Point Forged Payment Receipt Detector:** Detects known fake receipt generator APKs (`com.fake.gpayreceipt`, `com.fake.phonepe`, `com.fakepay`, `com.fakepaytm.receipt`, `com.phonepe.faketransaction`, `com.prankpayment`, `com.spoof.paytm`, `com.spoofpay.india`, `com.mparivahan.update.overlay`), verifies PhonePe `T`-ID Julian date parity, EXIF/software editing markers, and cross-checks UTRs against device databases.
-- **Air-Gapped Bilingual OCR & Indian KYC Validators:** Offline Hindi (Devanagari `०–९` -> ASCII `0–9` numeral normalization) + English (`hin+eng`) OCR with Tesseract & pure-Python PNG chunk (`iTXt`/`tEXt`/`zTXt`) fallback; positional OCR homoglyph normalizer (`0`/`O`, `1`/`I`/`l`, `5`/`S`); deterministic validators for **PAN (10-char structural + entity letter)**, **Indian Passport TD3 MRZ**, **Aadhaar Verhoeff $D_5$**, **GSTIN Mod-36**, and **grid-aware BIP-39 Seed Screenshot Reconstructor**.
+- **Offline Bilingual OCR & Indian KYC Validators:** Offline Hindi (Devanagari `०–९` -> ASCII `0–9` numeral normalization) + English (`hin+eng`) OCR with Tesseract & pure-Python PNG chunk (`iTXt`/`tEXt`/`zTXt`) fallback; positional OCR homoglyph normalizer (`0`/`O`, `1`/`I`/`l`, `5`/`S`); deterministic validators for **PAN (10-char structural + entity letter)**, **Indian Passport TD3 MRZ**, **Aadhaar Verhoeff $D_5$**, **GSTIN Mod-36**, and **grid-aware BIP-39 Seed Screenshot Reconstructor**.
 
 ### 5.4 Anti-Forensics, Clock Tampering & Cybercrime Malware Auditor (`src/antiforensics/`, `src/main/binary_decoders/dex_scanner.ts`)
 - **Root, Hook & Jailbreak Audit:** Detects unlocked bootloaders, Magisk root policy & Zygisk DenyList hiding (`magisk.db`), repackaged/hidden Magisk Manager, KernelSU, APatch, LSPosed/Xposed hooks, iOS Jailbreaks, TrollStore, and ADB USB debugging exposure.
@@ -271,14 +282,28 @@ Covers **Tier 1 (High Prevalence)** and **Tier 2 (Emerging / Regional)**:
 
 ---
 
-## 7. STATUTORY COURTROOM COMPLIANCE & LAW ENFORCEMENT OUTPUTS
+## 7. REPORTING AND EXPORT (what the product produces)
 
-1. **Section 63(4)(c) BSA 2023 Certificate (`src/legal_and_bsa/`, `src/unk_triage_and_bsa_studio/bsa_report_studio.py`, `src/main/reporting/sec63-bsa-generator.ts`):**
-   - Replaces Section 65B(4) IEA 1872 while optionally rendering dual BSA/IEA headings for legacy/transitional FIRs.
-   - Enforces a **Mandatory 6-Point Pre-Flight Statutory Gate**: (1) Part A Deponent & Part B Expert credentials present, (2) Pre-ingest vs Post-ingest Master Image SHA-256 bit-exact match, (3) All exhibits carry Dual SHA-256 + MD5 (`Product A` & `Product B`), (4) Immutable SHA-256 **Merkle Audit Trail** verified with 0 broken links, (5) POCSO / CSAM / Intimate media locked before defense disclosure, (6) PDF/A-3b & embedded font check.
-2. **Section 230 BNSS 2023 Dual Disclosure Package (`src/dossier_and_exhibits/exhibit_packager.py`):**
-   - Generates synchronized **Master Court Copy** (unredacted for Judge/FSL) alongside **Section 230 BNSS Defense Disclosure Copy** complying with *P. Gopalkrishnan v. State of Kerala (2019)* and **Section 72 BNS 2023** (anonymizing victim PII and replacing protected intimate/CSAM media with **Statutory Judicial-Inspection Notice Cards**).
-3. **Golden-Hour 1930 NCRP Bank Lien Export (`src/unk_triage_and_bsa_studio/freeze_deconfliction.py`, `Ncrp1930FreezeModal.tsx`):**
-   - **3-Color Safeguard De-Confliction:** Hard-locks Complainant/Victim accounts (`is_freeze_locked=True`, `freeze_checkbox_disabled=True`) so investigating officers can never accidentally freeze a victim's own bank account; automatically excludes whitelisted utility/govt billers (`irctc`, `bescom`, `billdesk`, `uppcl`, etc.); exports **14-column 1930 NCRP CFCFRMS CSV** freeze packets with SHA-256 digest.
-4. **Section 94 BNSS / Section 91 CrPC Nodal Requisitions (`src/dossier_and_exhibits/nodal_freeze_and_requisitions.py`):**
-   - Auto-drafts formal bank KYC, IPDR/CDR tower dump, and VDA/CEX exchange freeze requisitions grouped by crime typology (Digital Arrest, Pig Butchering, Investment Mule, Loan App Harassment).
+The product does not generate statutory certificates, disclosure bundles, freeze sheets or requisition notices. Those are legal
+forms: the examiner prepares and signs them in their own format. What the product gives the examiner is the factual material:
+
+1. **Examination report** (`/api/report/examination`, stage 8): examiner-entered particulars (blank is printed "Not provided"), evidence source and
+   SHA-256/MD5 before and after processing with an honest MATCH / MISMATCH / NOT RECORDED comparison, device identifiers as recorded
+   ("Not recorded" otherwise), tool version, build commit and environment, record counts (active and recovered), the processing log,
+   a **Limitations** list generated from the log, the examiner's pinned findings with their provenance, and the audit log.
+   It names no statute and makes no declaration. Module: `parsers/examination_report.py`.
+2. **Facts annexure** (`/api/report/facts`, JSON or CSV): the same facts as plain data, to copy into a lab's own form.
+3. **Audit log** (`/api/audit`, `src/audit/ledger.py`): append-only JSON-lines file per case. Each entry's hash covers the previous hash,
+   sequence, time, actor, action and payload. It detects an entry that was altered or removed from the middle. It does not stop someone who
+   can rewrite the whole file; each report prints the head hash so a later removal from the end can be noticed. Events: evidence ingested,
+   case opened, finding pinned/removed, report/annexure generated, package built.
+4. **Review package** (`/api/report/package`, `parsers/review_package.py`): selected case files, a manifest of hashes of the originals with a
+   Merkle root, and an offline viewer. Fail-closed: every file needs an explicit decision (include, or a withhold reason) or nothing is written.
+   Withheld files are not copied, only a card with name and hashes. Names, notes and cards can be masked for terms the examiner lists;
+   file contents are never altered.
+5. **Hash manifest** (`src/audit/manifest.py`): items start NOT_REVERIFIED; the state changes only when the file is actually re-hashed.
+6. **CSV exports** of tables and pinned findings (formula-safe, written as a file rather than a data URI).
+
+Removed on 2026-11-12 (Phase 5A): the Section 63 certificate generator, the Section 230 defence-disclosure bundle, the NCRP 1930 freeze sheet,
+the Section 94 notice drafter and the crime-typology dossier builder. They carried fabricated or defaulted legal content (REVIEW_FINDINGS_2
+X-01, X-02, X-04, X-07, X-12). Their specifications remain in `docs/specs/` as history only.

@@ -153,7 +153,6 @@ E:\v8\combined\
 │   │   ├── models.py
 │   │   ├── notifications.py                        # Android/iOS OS financial notification ledger parser
 │   │   └── sms_grammar.py                          # 10-category financial SMS extraction grammar
-│   ├── dossier_and_exhibits/                       # Crime Dossiers, Sec 94 & Sec 230 BNSS Packaging (5 files)
 │   │   ├── __init__.py
 │   │   ├── dossier_builder.py                      # Crime-typology dossier builder
 │   │   ├── engine.py                               # DossierAndExhibitPackagerEngine
@@ -239,7 +238,7 @@ E:\v8\combined\
 │   │   ├── kyc_validator.py                        # PAN, Aadhaar Verhoeff D5, Passport TD3 MRZ, GSTIN Mod-36 validators
 │   │   ├── models.py
 │   │   └── seed_grid_reconstructor.py              # Grid-aware 12/24-word BIP-39 screenshot reconstructor
-│   ├── legal_and_bsa/                              # Section 63(4)(c) BSA 2023 & Merkle Chain (5 files)
+│   ├── audit/                                      # Hash-chained audit log and hash manifest (2 files)
 │   │   ├── __init__.py
 │   │   ├── bsa_certificate_generator.py            # Statutory Part A & Part B BSA Sec 63 certificate generator
 │   │   ├── chain_of_custody.py                     # Tamper-evident SHA-256 Merkle Chain-of-Custody ledger
@@ -318,7 +317,7 @@ E:\v8\combined\
 │   │   ├── engine.py                               # RegionalCovertUnifiedChatEngine
 │   │   ├── models.py
 │   │   └── truecaller_decoder.py                   # Truecaller tc.db spam/caller-ID + msg.db IM/SMS/Flash decoder
-│   ├── unk_triage_and_bsa_studio/                  # Entropy Profiler, Schema Promoter, Hot-Patcher & BSA Studio (7 files)
+│   ├── unk_triage/                                 # Entropy Profiler, Schema Promoter & Hot-Patcher (7 files)
 │   │   ├── __init__.py
 │   │   ├── bsa_report_studio.py                    # WYSIWYG Court Master vs Sec 230 BNSS dual HTML + 6-point gate
 │   │   ├── engine.py                               # UnkTriageAndBsaStudioMasterEngine
@@ -471,12 +470,11 @@ E:\v8\combined\
 │   ├── test_phase8_module8_1_entity_graph_and_timeline.py
 │   ├── test_phase8_module8_2_zero_omission_and_fts5.py
 │   ├── test_phase8_module8_3_legal_compliance_and_bsa.py
-│   ├── test_phase8_module8_4_dossier_and_exhibits.py
 │   ├── test_phase9_module9_1_workstation_shell_and_hex.py
 │   ├── test_phase9_module9_2_unified_chat_and_redline.py
 │   ├── test_phase9_module9_3_financial_graph_and_storyboard.py
 │   ├── test_phase9_module9_4_geospatial_media_and_tamper.py
-│   ├── test_phase9_module9_5_unk_triage_and_bsa_studio.py
+│   ├── test_unk_triage.py
 │   ├── test_phase10_remediation_ocr_map_app.py
 │   ├── test_phase11_ingestion_and_workstation_ui.py
 │   ├── test_ui_api_server.py
@@ -580,8 +578,6 @@ E:\v8\combined\
     │   │   │       ├── telegram.parser.ts
     │   │   │       └── whatsapp.parser.ts
     │   │   ├── reporting/
-    │   │   │   ├── sec63-bsa-generator.ts          # Statutory Sec 63 BSA 2023 HTML certificate generator
-    │   │   │   └── sec63_bsa_generator.ts          # Backward-compat re-export stub
     │   │   ├── sqlite_carver/
     │   │   │   ├── freeblock_carver.ts
     │   │   │   ├── sqlcipher_crypto.ts             # WhatsApp Crypt14/15 + SQLCipher TS crypto
@@ -624,11 +620,9 @@ E:\v8\combined\
     │   │       ├── LocationsMediaView.tsx          # GPS/Tower map & media provenance view
     │   │       ├── MaliciousApkView.tsx            # Trojanned APKs, C2 tokens & USSD hijacks
     │   │       ├── MuleLinkGraphTab.tsx            # NetworkX/PyVis syndicate graph + SVG Sankey money trail
-    │   │       ├── Ncrp1930FreezeModal.tsx         # 1930 NCRP bank lien modal with Complainant Victim Lock
     │   │       ├── OsSpilloverView.tsx             # Notification, clipboard & App Switcher residuals
     │   │       ├── RemoteAccessView.tsx            # AnyDesk / TeamViewer / RustDesk traces
-    │   │       ├── Sec230BnssModal.tsx             # Section 230 BNSS defense disclosure modal
-    │   │       ├── Sec63BsaModal.tsx               # Section 63(4)(c) BSA 2023 statutory certificate studio
+    │   │       ├── ReportExportView.tsx                # Stage 8: report, facts annexure, review package, audit log
     │   │       ├── SQLiteWizardTab.tsx             # Live table & query explorer over raw evidence SQLite
     │   │       └── UPIMasterLedgerView.tsx         # 4-way corroborated UPI & Banking ledger
     │   └── tests/                                  # TypeScript Engine & Workbench Tests (10 files)

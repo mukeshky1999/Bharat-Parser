@@ -226,7 +226,7 @@ Not reviewed:
 
 Method: product-path parsers first (what `parsers/api_server.py` actually runs), then the `src/` modules by a
 risk scan (invented defaults, direction guesses, local time labelled IST, substring matching) followed by reading
-the hits. Every item marked FIXED has a regression test in `tests/test_legal_output_integrity.py`.
+the hits. Every item marked FIXED has a regression test in `tests/test_review_regressions.py`.
 
 | ID | Where | Finding | Status |
 |---|---|---|---|
@@ -264,7 +264,7 @@ None of the scanned `src/` modules is called by the product today, so a defect t
 
 Method: each remaining module was read for the same classes of defect as before (a value invented where the evidence is
 silent, a guess shown as fact, a label that claims more than was checked, a failure that looks like "nothing found").
-Items marked FIXED have a regression test in `tests/test_legal_output_integrity.py` or `ui/tests/`.
+Items marked FIXED have a regression test in `tests/test_review_regressions.py` or `ui/tests/`.
 
 | ID | Where | Finding | Status |
 |---|---|---|---|
@@ -334,3 +334,15 @@ Coverage: every file under `src/` that the plan listed as unread has now been re
 | U-11 | store | Selecting any row fetched a hex window, so every click on a row whose file is unavailable raised an error toast | FIXED (bytes load when the Source bytes tab is opened) |
 
 Still open from the interface work: the older views keep their internal layouts (listed in `UI_DESIGN.md` section 7); the generators do not read pinned findings.
+
+## 9. Found while replacing the statutory generators (2026-11-12, Phase 5A)
+
+| ID | Where | Finding | Status |
+|---|---|---|---|
+| A-01 | `src/legal_and_bsa/chain_of_custody.py` | The entry hash left out `actor_or_subsystem`, so the actor could be edited without breaking the chain; the "IST" label was UTC (`strftime` of a UTC time with a literal IST suffix); the ledger lived only in memory; a timestamp of 0 was treated as absent | REPLACED by `src/audit/ledger.py` (actor in the hash, real IST, persisted, tests) |
+| A-02 | `src/legal_and_bsa/hash_manifest.py` | Every item was stamped `IMMUTABILITY_VERIFIED_IDENTICAL` when registered, with no re-hash (same class as U-01); the Merkle tree duplicated an odd last node, so `[a,b,c]` and `[a,b,c,c]` shared a root | REPLACED by `src/audit/manifest.py` |
+| A-03 | `src/unk_triage_and_bsa_studio/schema_mapper.py`, `engine.py` | `examiner_name` defaulted to "Examiner" and was written to the promotion ledger | FIXED (empty) |
+| U-12 | `ChatsMasterWorkspace` "Dossier view" | For any thread it showed "HIGH RISK SYNDICATE", a default profile "Elena, 26 :: Crypto Investor", sample VPAs (`victim@okhdfcbank / mule@paytm`), a sample phone number and a hard-coded modus operandi that cited "Section 63 BSA audit standards" | REMOVED |
+| U-13 | `ChatsMasterWorkspace` thread list, header and table | A per-app invented participant profile ("@mule_handler :: Escrow specialist", "Military Grade ID: 1084920194", "Elena, 26 :: 4.2 km") shown for every Tinder, Telegram, Zangi or Session thread | REMOVED |
+| U-14 | `ExtractionSummaryTab` | A handler built a provenance record with an invented payload (decoding to "ACCOUNTS_IDENTITY_SEAL..."), length 64 and state ACTIVE; never called | REMOVED |
+| X-18 | `/api/report/sec230-bnss` (old) | The client chose the output directory, so a bundle could be written anywhere | REMOVED with the route; the review package writes only under the case workspace |

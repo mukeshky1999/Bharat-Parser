@@ -304,7 +304,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 ```powershell
 cd "E:\v8\combined"
 .\bharat-pa-forensics\.venv\Scripts\python.exe -c "
-from src.unk_triage_and_bsa_studio.entropy_profiler import SlidingWindowEntropyProfiler
+from src.unk_triage.entropy_profiler import SlidingWindowEntropyProfiler
 
 profiler = SlidingWindowEntropyProfiler(block_size_bytes=4096)
 with open(r'test_evidence\msgstore.db', 'rb') as f:
@@ -324,8 +324,8 @@ cd "E:\v8\combined"
 .\bharat-pa-forensics\.venv\Scripts\python.exe -c "
 import pathlib, sqlite3, tempfile
 from src.zero_omission_and_fts5.fallback_introspector import UniversalFallbackIntrospector
-from src.unk_triage_and_bsa_studio.schema_mapper import ZeroCodeSchemaMapper
-from src.unk_triage_and_bsa_studio.models import SemanticColumnRole
+from src.unk_triage.schema_mapper import ZeroCodeSchemaMapper
+from src.unk_triage.models import SemanticColumnRole
 
 # Copy fixture to isolated temp dir to avoid mutating or locking source evidence
 with tempfile.TemporaryDirectory() as tmpdir:
@@ -353,47 +353,14 @@ with tempfile.TemporaryDirectory() as tmpdir:
 "
 ```
 
-### 6.5 Golden-Hour 1930 NCRP Bank Lien Export (Victim Safeguard Locked)
+### 6.5 Reports from the command line (backend running on port 8000)
 ```powershell
-cd "E:\v8\combined"
-.\bharat-pa-forensics\.venv\Scripts\python.exe -c "
-from src.unk_triage_and_bsa_studio.freeze_deconfliction import NodalFreezeDeconflictionCenter
-
-center = NodalFreezeDeconflictionCenter()
-evaluated = center.evaluate_freeze_candidates([
-    {'account_no': 'SBIN0001234:9876543210', 'ifsc': 'SBIN0001234', 'vpa': 'victim@oksbi', 'is_complainant_victim': True, 'volume_inr': 250000.0},
-    {'account_no': '112233445566', 'ifsc': 'HDFC0005678', 'vpa': 'mule1@okhdfcbank', 'is_complainant_victim': False, 'volume_inr': 240000.0},
-    {'account_no': 'BESCOM_ESCROW', 'ifsc': 'SBIN0000002', 'vpa': 'bescom.billdesk@icici', 'is_complainant_victim': False, 'volume_inr': 1200.0},
-])
-csv_text = center.generate_1930_ncrp_csv(evaluated, complainant_account='SBIN0001234:9876543210', acknowledgement_no='NCRP-2026-FIR-884')
-print(csv_text)
-"
+# After POST /api/case/ingest has loaded a case:
+curl.exe -s -X POST http://127.0.0.1:8000/api/report/examination -H "Content-Type: application/json" -d "{\"case_number\":\"REF-1\"}" -o examination_report.html
+curl.exe -s "http://127.0.0.1:8000/api/report/facts?format=csv" -o case_facts.csv
+curl.exe -s http://127.0.0.1:8000/api/audit
 ```
-
-### 6.6 Section 63(4)(c) BSA 2023 & Section 230 BNSS Dual Preview
-```powershell
-cd "E:\v8\combined"
-.\bharat-pa-forensics\.venv\Scripts\python.exe -c "
-from src.unk_triage_and_bsa_studio.bsa_report_studio import BsaReportStudioEngine
-
-engine = BsaReportStudioEngine()
-gate = engine.run_preflight_statutory_gate({
-    'part_a_deponent_name': 'Inspector Rajesh Kumar',
-    'part_a_deponent_designation': 'Cyber Crime PS, Bengaluru',
-    'part_b_expert_name': 'Dr. A. Sharma',
-    'part_b_expert_qualification': 'M.Tech Forensic Computing, CFSL',
-    'master_pre_ingest_sha256': 'a' * 64,
-    'master_post_ingest_sha256': 'a' * 64,
-    'exhibits_missing_hash_count': 0,
-    'merkle_chain_broken_links_count': 0,
-    'pocso_unredacted_items_count': 0,
-    'font_embedding_failures_count': 0,
-})
-print('6-Point Statutory Gate Passed:', gate.is_passed, f'({gate.checks_passed_count}/{gate.checks_total_count})')
-"
-```
-
----
+When the desktop app is used, the backend requires the per-launch token header `X-Bharat-Token`; run the backend yourself without `BHARAT_API_TOKEN` for these examples.
 
 ## 7. TROUBLESHOOTING & MAINTENANCE
 

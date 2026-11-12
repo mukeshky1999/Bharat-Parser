@@ -25,7 +25,7 @@ The merged **BharatAnalyzer Sovereign Forensics Suite** combines two complementa
 |   - Workspace views: Summary, Chats, UPI Ledger, Bank+CDR Fusion, Crypto, Link Graph, SQLite Wizard,  |
 |     VFS Explorer, Contacts, Calls, Findings, Court output                                           |
 |   - Right: EvidenceCard (details / source bytes / links) with SyncedHexViewer                         |
-|   - Statutory Modals: Sec63BsaModal | Sec230BnssModal | Ncrp1930FreezeModal | AddExtractionModal    |
+|   - Dialogs: AddExtractionModal | SettingsDialog | CommandPalette; stage 8: ReportExportView        |
 +=====================================================================================================+
                                     | HTTP/JSON (127.0.0.1:8000) & Electron IPC
                                     v
@@ -67,8 +67,8 @@ The merged **BharatAnalyzer Sovereign Forensics Suite** combines two complementa
 |                          antiforensics (Root/ClockRollback/MockGPS/APK C2/USSD/AnyDesk)             |
 |  [Phase 7 Media/OCR]     media_library (C2PA/MotionPhoto) | visual_residuals (SplashBoard/KPA Vault)|
 |                          qr_and_receipts (Aadhaar QR/5-pt Forgery) | kyc_and_ocr (PAN/MRZ/Verhoeff) |
-|  [Phase 8-10 Workbench]  entity_and_timeline (DSU/50M) | zero_omission_and_fts5 | legal_and_bsa     |
-|                          dossier_and_exhibits | chat_reconstructor_and_redline | workstation_shell  |
+|  [Phase 8-10 Workbench]  entity_and_timeline (DSU/50M) | zero_omission_and_fts5 | audit             |
+|                                               | chat_reconstructor_and_redline | workstation_shell  |
 |                          financial_graph_and_storyboard | geospatial_media_and_tamper | unk_triage  |
 +=====================================================================================================+
 ```
@@ -124,11 +124,11 @@ Built on **React 19**, **Tailwind CSS v4**, **Vite 8**, **Lucide Icons**, and **
      - `CONTACTS`, `CALLS` -> `RecordTable` (sortable-by-position table with real call-activity chart, CSV export)
      - `UPI_LEDGER` -> `UPIMasterLedgerView`; `CALL_LOGS` -> `BankCdrFusionView`; `CRYPTO` -> `CryptoWalletView`; `MULE_GRAPH` -> `MuleLinkGraphTab`
      - `CHATS` -> `ChatsMasterWorkspace`; `OS_SPILLOVER` -> `OsSpilloverView`; `LOCATIONS_MEDIA` -> `LocationsMediaView`
-     - `FINDINGS` -> `FindingsView` (backed by `GET/POST/DELETE /api/case/findings`); `COURT_OUTPUT` -> `CourtOutputView`
+     - `FINDINGS` -> `FindingsView` (backed by `GET/POST/DELETE /api/case/findings`); `REPORT_EXPORT` -> `ReportExportView` (report, facts annexure, review package, audit log)
      - The malicious-APK and remote-access views were removed: nothing in the backend produced data for them.
    - **Evidence card (`inspectors/EvidenceCard.tsx`):** details, source location ("not recorded" where a parser did not record it), raw bytes (`SyncedHexViewer`, loaded when the tab is opened), exact-match links, and Pin.
    - **Command palette (`CommandPalette.tsx`)**, **display settings (`SettingsDialog.tsx`, `state/preferencesStore.ts`)**, **status line (`StatusLine.tsx`)**.
-   - **Floating Statutory Modals:** `AddExtractionModal`, `Sec63BsaModal`, `Sec230BnssModal`, `Ncrp1930FreezeModal`.
+   - **Dialogs:** `AddExtractionModal`, `SettingsDialog`, `CommandPalette`. The statutory modals were removed (Phase 5A).
 2. **State & Transport (`workbenchStore.ts` + `forensicClient.ts`):**
    - Centralized Zustand store holding active tabs, subcategories, selected artifacts, toast queue, modal state, and backend synchronization (`syncWithBackendCase`).
    - `forensicClient.ts` (1,235 lines) wraps all REST API endpoints cleanly with graceful native Electron vs Tkinter dialog abstraction.
@@ -171,12 +171,10 @@ Runs on `127.0.0.1:8000` (configurable via `HOST` and `PORT` env vars) via Uvico
 | **Raw DB & Hex Inspector** | `POST /api/sqlite/inspect` | L1308 | Safe identifier-quoted raw SQLite table listing and row sampling |
 | | `GET /api/inspector/hex` | L1353 | `mmap` byte-slice inspector returning hex lines, ASCII, and SHA-256 |
 | | `GET /api/case/hex-window` | L1958 | Sandboxed legacy hex window viewer (256 B – 64 KB) with EOF flag |
-| **Statutory Reports** | `GET /api/report/sec63-bsa` | L1392 | Generates printable Section 63(4)(c) BSA 2023 statutory certificate HTML |
-| | `POST /api/report/sec63-bsa` | L1579 | Custom officer/FIR/FSL parameter injection + Section 63 BSA generation |
-| | `POST /api/report/sec230-bnss` | L1591 | Builds Section 230 BNSS defense disclosure bundle with POCSO & Sec 72 BNS redaction |
-| | `POST /api/report/ncrp-freeze` | L1644 | Evaluates freeze candidates with victim lock & writes 14-column 1930 NCRP CSV |
-| | `POST /api/report/1930-ncrp` | L1645 | Route alias for `POST /api/report/ncrp-freeze` |
-| | `GET /api/report/ncrp-freeze` | L1736 | Streams `ncrp_1930_bank_freeze.csv` download |
+| **Reports** | `POST /api/report/examination` | | Examination report (HTML) from recorded facts, limitations, pinned findings and the audit log |
+| | `GET /api/report/facts?format=json\|csv` | | Facts annexure for copying into the lab's own forms |
+| | `POST /api/report/package` | | Review package; fails closed unless every file has a decision |
+| | `GET /api/audit` | | Hash-chained audit log with verification result |
 | **Benchmarking** | `POST /api/benchmark/run` | L2025 | Executes 5-stage `ForensicBenchmarkRecorder` differential parity suite |
 
 ---
@@ -230,7 +228,7 @@ To process 1 TB+ extractions within tight RAM limits, `CaseUIPaginatorStore` rep
 ### 6.3 Incremental Key-Broker DAG & <3-Second Hot-Patching
 When a mobile extraction runs, execution traverses an immutable DAG:
 `[VFS Indexing] -> [Dual SHA-256 Seal] -> [Identity/UID/UUID Resolution] -> [Key Broker & Storage Recovery] -> [Domain Parsers] -> [DSU Entity Graph & 4-Way Correlator] -> [Super-Timeline & FTS5] -> [Merkle Ledger & BSA 2023]`
-- **Hot-Patcher (`src/unk_triage_and_bsa_studio/key_broker_hotpatcher.py`):** When an examiner supplies a recovered password/PIN for an `ENCRYPTED_GATED` database:
+- **Hot-Patcher (`src/unk_triage/key_broker_hotpatcher.py`):** When an examiner supplies a recovered password/PIN for an `ENCRYPTED_GATED` database:
   1. **Target Decrypt** only the locked DB.
   2. **Carve** live + WAL + freelist rows.
   3. **Tokenize** identifiers into FTS5 + RoaringBitmaps.
@@ -258,7 +256,7 @@ When `POST /api/case/ingest` runs (`_execute_ingestion_pipeline`), data flows th
 ## 8. EVIDENTIARY INTEGRITY, SECURITY & INDIAN STATUTORY ARCHITECTURE
 
 ### 8.1 Dual-Hash Chain of Custody, 5D State Matrix & 18 Groups
-- **Product A vs Product B SHA-256 (`src/provenance/hasher.py`, `src/legal_and_bsa/chain_of_custody.py`):** Every raw seized container (`Product A`) and derived SQLite/staged copy (`Product B`) is hashed and anchored into a tamper-evident **SHA-256 Merkle Audit Chain** (`ChainOfCustodyTamperException` triggers on any broken link).
+- **Product A vs Product B SHA-256 (`src/provenance/hasher.py`, `src/audit/ledger.py`):** Every raw seized container (`Product A`) and derived SQLite/staged copy (`Product B`) is hashed and anchored into a tamper-evident **SHA-256 Merkle Audit Chain** (`ChainOfCustodyTamperException` triggers on any broken link).
 - **5-Dimensional Evidentiary State Matrix (`src/core/enums.py`, `src/evidentiary/enums.py`):**
   - *Dim A (Presence):* `PRESENT`, `PRESENT_EMPTY_STUB`, `SOURCE_PRESENT_NOT_ACQUIRED_{TIER,BFU,LUN}`, `NOT_OBSERVED_GHOST_APP`, `NOT_OBSERVED`, `NOT_ASSESSED` (simplified: `OBSERVED` / `ABSENT` / `NOT_OBSERVED`).
   - *Dim B (Accessibility):* `READABLE`/`PLAINTEXT`, `READABLE_DECRYPTED`/`DECRYPTED`, `PARTIALLY_READABLE_METADATA_ONLY`, `ENCRYPTED_GATED_BY_HARDWARE`, `ENCRYPTED_GATED_MISSING_KEY`, `CORRUPT_OR_ZEROED`.
@@ -270,10 +268,11 @@ When `POST /api/case/ingest` runs (`_execute_ingestion_pipeline`), data flows th
 - **Timestamp Court Verification Triplet (`src/core/timestamps.py`):** Stores `(raw_timestamp, utc_iso8601, ist_iso8601)` (`Asia/Kolkata +05:30`) across Unix s/ms/µs, Apple Cocoa (`+978307200`), and WebKit/NTFS epochs.
 - **Hostile Evidence Sanitizer (`src/workstation_shell_and_hex/security_sanitizer.py`):** Neutralizes XSS HTML tags, Unicode BiDi RTL override spoofing in filenames/chats, and Excel CSV formula injection (`=`, `+`, `-`, `@`).
 
-### 8.2 Statutory Safeguards (BSA 2023, BNSS 2023, 1930 NCRP)
-1. **Golden-Hour 1930 NCRP Safeguard Lock (`src/unk_triage_and_bsa_studio/freeze_deconfliction.py`):**
-   - Evaluates candidate freeze targets and enforces a non-overridable lock (`is_freeze_locked = True`, `freeze_checkbox_disabled = True`) on the complainant/victim's own bank account (`[VICTIM / COMPLAINANT — DO NOT FREEZE]`), automatically excludes whitelisted utility/govt billers (`irctc`, `bescom`, `uppcl`, `mahadiscom`, `cesc`, `billdesk`, `tata_power`, `airtel_prepaid`, `jio_postpaid`), and emits a signed 14-column CSV compatible with I4C NCRP CFCFRMS.
-2. **Section 63(4)(c) BSA 2023 Mandatory 6-Point Gate (`bsa_report_studio.py`):**
-   - Refuses final certificate issuance unless all 6 checks pass: Part A & B identities populated; pre/post master SHA-256 match; 0 exhibits missing dual hashes; 0 broken Merkle chain links; 0 unredacted POCSO/intimate items in defense copy; 0 PDF/A-3b font embedding failures.
-3. **Section 230 BNSS Dual Disclosure Redaction Gate (`exhibit_packager.py`, `bsa_report_studio.py`):**
-   - Emits paired **Court Master Copy** (unredacted sealed record) and **Section 230 BNSS Defense Disclosure Copy** obeying *P. Gopalkrishnan v. State of Kerala (2019)* and **Section 72 BNS 2023**: victim names are pseudonymized (`[VICTIM_PROTECTED_SEC72_BNS_01]`), and CSAM/intimate streams are withheld from binary duplication and substituted with **Statutory Judicial-Inspection Notice Cards**.
+### 8.2 Reporting safeguards (replaces the statutory generators, Phase 5A)
+The product supplies facts, not legal forms (see `abilities.md` section 7).
+1. **Audit log (`src/audit/ledger.py`):** per-case append-only JSON lines; each hash covers the previous hash, sequence, time, actor, action and payload.
+   Detects edits and removals in the middle of the log; reports print the head hash so removals from the end can be noticed later.
+2. **Hash manifest (`src/audit/manifest.py`):** items are NOT_REVERIFIED until re-hashed; Merkle root carries an odd node up rather than duplicating it.
+3. **Review package gate (`parsers/review_package.py`):** every file needs an explicit decision or nothing is written; withheld files are never copied;
+   names, notes and cards are masked for the terms the examiner lists (file contents are not altered); names are index-based and writes stay inside the package.
+4. **Report (`parsers/examination_report.py`):** every value is either recorded, typed by the examiner, or printed as "Not recorded" / "Not provided".
