@@ -221,3 +221,41 @@ Not reviewed:
   `FileSystemExplorerTab`, `MaliciousApkView`, `RemoteAccessView`, `OsSpilloverView`, `ContactsView`, `CallLogsView`,
   `PAFieldInspector`; only the claims above were checked.
 - `tests/e2e/` and `ui/tests/` assertions.
+
+## 5. Continued review (2026-11-12, after the fixes above)
+
+Method: product-path parsers first (what `parsers/api_server.py` actually runs), then the `src/` modules by a
+risk scan (invented defaults, direction guesses, local time labelled IST, substring matching) followed by reading
+the hits. Every item marked FIXED has a regression test in `tests/test_legal_output_integrity.py`.
+
+| ID | Where | Finding | Status |
+|---|---|---|---|
+| R-01 | `parsers/commercial_parity_engine.py` generic classifier | With no direction column every chat and call was "Incoming"; missing coordinates became a (0, 0) map pin; a zero-duration call was "Missed" regardless of direction; payments got status `COMPLETED`, counterparty `AppGenie Counterparty` and a made-up `GEN_n` transaction ID; a carved record with no amount became a 0.00 transaction | FIXED |
+| R-02 | `parsers/chat_social_privacy_parsers.py` (iOS Signal, Zangi calls, Element, Session, Snapchat, Instagram, dating apps; 10 sites) | Direction hard-coded `INCOMING`, status `RECEIVED`/`DELIVERED`, recipient "This Device (Owner)" for every row, with no sent/received column read. WhatsApp call direction was derived from the call result (a connected call became OUTGOING) | FIXED (now UNKNOWN). Reading the real from-me column per app is future work |
+| R-03 | `parsers/custodial_wallet_parser.py` `_safe_sample` | Tables were read with `LIMIT 500..10000` and truncated silently | FIXED (a TRUNCATED warning is logged). Not yet shown in the UI processing log |
+| R-04 | `parsers/wallet_provenance.py` | `Chain_Of_Custody_ID` was a random UUID per run: not a custody chain and different on every export | FIXED (stable id from case, source hash and row) |
+| R-05 | `src/banking/narration_parser.py` | Direction by `"CR" in text` (matches CRED, SCRIPT, MICRO) with DEBIT as the default | FIXED (whole-token cues, UNKNOWN) |
+| R-06 | `src/correlator/fraud_detector.py` | Balance gaps computed across all transactions with no account tail pooled as "UNKNOWN_ACCT"; unknown direction treated as credit; a gap over 50 INR asserted as CRITICAL "missing/deleted bank alert" | FIXED (skipped, skipped, hedged) |
+| R-07 | `src/correlator/utr_validator.py` | "VALID_NPCI_YDDD_MATCH" returned when no date was compared; a Verhoeff pass (about 1 in 10 random numbers) reported as an Aadhaar number | FIXED (renamed to `STRUCTURALLY_VALID_DATE_NOT_CHECKED` and `POSSIBLE_AADHAAR_NUMBER`) |
+| R-08 | `src/upi/{phonepe,gpay,paytm,whatsapp_pay}.py` | Every record `DEBIT_SENT`; missing status `SUCCESS` | FIXED (`infer_direction` from an explicit column or owner VPA, else UNKNOWN; status UNKNOWN). These decoders are still not called by the product |
+| R-09 | `src/legal_and_bsa/bsa_certificate_generator.py` | Section 63 certificate time was machine local time labelled IST (same as X-11) | FIXED |
+| R-10 | `parsers/api_server.py` OCR endpoint | `confidence_score` is a constant chosen by which rule matched (0.98, 0.95...), presented as a confidence | FIXED (labelled `confidence_basis`) |
+| R-11 | `parsers/fiat_crypto_bridge.py` | A UPI debit and a crypto order whose amounts differ by more than 20% were kept as a "Temporal Match" if within 20 minutes; the text said the debit was "aligned with" the order | FIXED (dropped; wording is "Possible link (a lead, not proof)") |
+| R-12 | `tests/test_m4_adversarial_stress.py` | The victim-account lock test asserted `value in [True, False]`, which cannot fail | FIXED (asserts the lock) |
+| X-14 | `src/high_opsec`, `src/social_voip`, `src/telegram_signal` decoders (about 12 sites) | Same default `INCOMING_RECEIVED` as R-02 | OPEN. Not called by the product; fix when a module is wired (Phase 4) |
+| U-06 | `RemoteAccessView`, `MaliciousApkView` | Shown in the UI but nothing feeds them: `sessions={[]}` is literal, the store never receives APK findings, and the backend has no APK analysis | OPEN. Hide or label "not available" in the redesign |
+| L-08 | `parsers/enterprise_1tb_chat_and_container_engine.py` | `int(row.get('from_me') or 0)` treats a NULL flag as "Incoming" (8 sites). The columns are real, so this only matters for NULLs | OPEN (Low) |
+| L-09 | `src/seedhunter/vault_unwrapper.py` | Unwraps keystores/vaults with a password it is given; it does not guess passwords. Not wired. Any wiring must take an examiner-supplied password and write an audit entry | NOTE |
+
+### Coverage after this pass
+Read for logic: the product-path code listed in section 4, plus `commercial_parity_engine` (generic classifier and carved-record
+classifier), the direction/status/provenance fields of `chat_social_privacy_parsers`, `custodial_wallet_parser` (sampling),
+`wallet_provenance`, `fiat_crypto_bridge`, `corroboration_engine` (healing), `wal_rollback_analyzer`, `freelist_carver`,
+`src/banking/narration_parser`, `src/correlator/{fraud_detector,utr_validator}`, `src/upi` decoders (direction and status),
+`src/legal_and_bsa/bsa_certificate_generator` (time), `src/seedhunter/vault_unwrapper` (purpose only), and OCR classification.
+
+Scanned but not read line by line: `src/whatsapp`, `src/nonsqlite`, `src/web3`, `src/cex`, the rest of `src/seedhunter`,
+`src/telegram_signal`, `social_interaction_comms_parsers.py`, `deep_sqlite.py`, `account_profiler.py`, `vpa_harvester.py`,
+`os_privacy_spillover.py`, the body of the benchmark recorder, the OCR image path, and the React views' internal logic
+(only their claims and data sources were checked). `tests/e2e` was run (all pass) but its assertions were only sampled.
+None of the scanned `src/` modules is called by the product today, so a defect there cannot reach an output until Phase 4 wires it.

@@ -87,3 +87,12 @@ the Electron app was launched and ran end to end (see X-09).
 
 Not yet done from the second review: X-12 and the rest of U-01..U-05 (UI claims; part of the UI redesign), L-04..L-06,
 dossier_builder unconditional claims (unwired), and the Phase 1 review of the remaining modules.
+
+### Phase 1b: continued review (2026-11-12). See `REVIEW_FINDINGS_2.md` section 5
+
+Fixed with regression tests: R-01 (generic classifier invents direction, status, counterparty, coordinates), R-02 (messenger
+parsers hard-code INCOMING/RECEIVED; call direction from call result), R-03 (silent wallet-table truncation), R-04 (random
+"chain of custody" IDs), R-05 (banking narration direction), R-06 (balance-gap detector), R-07 (UTR/Aadhaar validator),
+R-08 (UPI decoders always DEBIT_SENT, missing status = SUCCESS), R-09 (Section 63 certificate time), R-10 (OCR confidence
+label), R-11 (fiat/crypto alignment), R-12 (tautological victim-lock test). Python: 498 passed.
+Open: X-14 (same default in unwired decoders), U-06 (two views with no data source), L-08, X-13.

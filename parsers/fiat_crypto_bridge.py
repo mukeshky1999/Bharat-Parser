@@ -132,16 +132,17 @@ def align_fiat_to_crypto(
                 )
             if pct <= 20.0:
                 return 'MEDIUM (Split Escrow / Partial Order)'
-            return None
+            return 'NO_MATCH'  # both amounts are known and differ by more than 20%
         return 'LOW-MEDIUM (Temporal Proximity Only)'
 
     merged['Alignment_Confidence'] = merged.apply(_confidence, axis=1)
 
     # Retain row if: amount matched (confidence set) OR within tight 20-minute window.
+    # A pair whose amounts are both known and clearly different is not a lead, however close in time.
     retain_mask = (
         merged['Alignment_Confidence'].notna()
         | (merged['Time_Delta_Minutes'] <= 20)
-    )
+    ) & (merged['Alignment_Confidence'] != 'NO_MATCH')
     merged = merged[retain_mask].copy()
 
     # Temporal-only rows that failed the confidence check become MEDIUM (Temporal Match)
@@ -154,10 +155,10 @@ def align_fiat_to_crypto(
         upi_val = r['UPI_Amount_INR']
         amt_str = f"₹{upi_val:,.2f}" if pd.notna(upi_val) else "₹0.00"
         return (
-            f"UPI Debit of {amt_str} aligned with "
+            f"Possible link (a lead, not proof): UPI debit of {amt_str} and "
             f"{r['Crypto_Platform']} P2P order "
-            f"({r['Crypto_Amount']} {r['Crypto_Asset_Acquired']}) within "
-            f"{round(r['Time_Delta_Minutes'], 1)} minutes."
+            f"({r['Crypto_Amount']} {r['Crypto_Asset_Acquired']}) are "
+            f"{round(r['Time_Delta_Minutes'], 1)} minutes apart; the match rests on time and amount only."
         )
 
     merged['Evidentiary_Insight'] = merged.apply(_build_insight, axis=1)
@@ -273,9 +274,13 @@ def align_bank_to_custodial_onramp(
                 return 'HIGH (Direct Fiat On-Ramp Conversion)' if delta <= 15 else 'HIGH (Value & Time Match)'
             if pct <= 20.0:
                 return 'MEDIUM (Fee-Adjusted / Partial On-Ramp)'
+            return 'NO_MATCH'  # both amounts are known and differ by more than 20%
         return 'LOW-MEDIUM (Temporal Proximity Match)'
 
     m['Alignment_Confidence'] = m.apply(_conf, axis=1)
+    m = m[m['Alignment_Confidence'] != 'NO_MATCH'].copy()
+    if m.empty:
+        return pd.DataFrame(columns=output_cols)
 
     def _narrative(row):
         b_val = row['Debit_Amt']
@@ -284,8 +289,9 @@ def align_bank_to_custodial_onramp(
         c_amt = row.get('Amount_Crypto')
         c_str = f" ({c_amt} {c_asset})" if pd.notna(c_amt) and c_amt else ""
         return (
-            f"Fiat Debit of {amt_str} aligned with {row.get('Wallet_App', 'Exchange')} "
-            f"on-ramp order{c_str} within {round(row['Time_Delta_Minutes'], 1)} minutes."
+            f"Possible link (a lead, not proof): fiat debit of {amt_str} and {row.get('Wallet_App', 'Exchange')} "
+            f"on-ramp order{c_str} are {round(row['Time_Delta_Minutes'], 1)} minutes apart; "
+            f"the match rests on time and amount only."
         )
 
     m['Evidentiary_Insight'] = m.apply(_narrative, axis=1)

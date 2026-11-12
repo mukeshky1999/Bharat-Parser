@@ -449,3 +449,20 @@ def test_upi_direction_comes_from_evidence_not_a_default():
     assert infer_direction({}, "me@ybl", "x@ybl", owner_vpas=["me@ybl"]) == "DEBIT_SENT"
     assert infer_direction({}, "x@ybl", "me@ybl", owner_vpas=["me@ybl"]) == "CREDIT_RECEIVED"
     assert infer_direction({}, "me@ybl", "me@ybl", owner_vpas=["me@ybl"]) == "SELF_TRANSFER"
+
+
+def test_fiat_crypto_alignment_drops_clearly_different_amounts_and_hedges_wording():
+    import pandas as pd
+
+    from parsers.fiat_crypto_bridge import align_fiat_to_crypto
+
+    upi = pd.DataFrame([
+        {"Date": "2026-01-01 10:00:00", "Amount": 100000.0, "Transaction_ID": "T1", "Counterparty": "a@ybl", "Type": "DEBIT"},
+    ])
+    close = pd.DataFrame([{"Date": "2026-01-01 10:05:00", "Fiat_Amount_INR": 99000.0, "Platform": "Binance",
+                           "Order_ID": "O1", "Asset": "USDT", "Amount_Crypto": 1190.0}])
+    far = pd.DataFrame([{"Date": "2026-01-01 10:05:00", "Fiat_Amount_INR": 900.0, "Platform": "Binance",
+                         "Order_ID": "O2", "Asset": "USDT", "Amount_Crypto": 10.0}])
+    ok = align_fiat_to_crypto(upi, close)
+    assert len(ok) == 1 and "Possible link" in ok.iloc[0]["Evidentiary_Insight"]
+    assert align_fiat_to_crypto(upi, far).empty  # 100000 vs 900 close in time is not a lead
