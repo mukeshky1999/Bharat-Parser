@@ -1,7 +1,6 @@
 """Runs one parser tree over a folder of databases and writes a JSON summary of what each file yields.
 Run it once per tree (for example an older snapshot and the current one) over the same evidence, then diff the two JSON files.
 usage: python tools/compare_parser_trees.py <parser_root> <evidence_root> <out.json>"""
-usage: python run_parsers.py <parser_root> <evidence_root> <out.json>"""
 import json
 import os
 import sys
