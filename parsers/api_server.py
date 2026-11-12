@@ -33,7 +33,7 @@ from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import pandas as pd
 import uvicorn
 
@@ -116,6 +116,10 @@ app = FastAPI(
     description="High-performance backend API for Indian UPI, Chat Forensics, 1 TB+ Case Store, and examination reporting",
     version="1.0.0",
     lifespan=lifespan,
+    # The interactive docs list every route and are served without the token: off unless asked for.
+    docs_url="/docs" if os.environ.get("BHARAT_ENABLE_DOCS") == "1" else None,
+    redoc_url="/redoc" if os.environ.get("BHARAT_ENABLE_DOCS") == "1" else None,
+    openapi_url="/openapi.json" if os.environ.get("BHARAT_ENABLE_DOCS") == "1" else None,
 )
 
 # Per-launch API token. The Electron shell generates a random token, gives it to this process in
@@ -161,7 +165,7 @@ async def _require_audit_log(request, call_next):
 @app.middleware("http")
 async def _require_api_token(request, call_next):
     expected = os.environ.get("BHARAT_API_TOKEN", "")
-    if expected and request.method != "OPTIONS" and request.url.path.startswith("/api/"):
+    if expected and request.method != "OPTIONS" and (request.url.path.startswith("/api/") or request.url.path == "/"):
         supplied = request.headers.get("x-bharat-token", "")
         if not hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8")):
             return JSONResponse(status_code=401, content={"detail": "Missing or invalid API token."})
@@ -175,8 +179,11 @@ _ALLOWED_ORIGINS = [
     "http://localhost:3000", "http://127.0.0.1:3000",
     "http://localhost:5173", "http://127.0.0.1:5173",
     "http://localhost:4173", "http://127.0.0.1:4173",
-    "null",
 ]
+# "null" is the origin of the desktop shell's file:// pages. It is allowed only when the shell has given the server its
+# token; a development server without a token must not be reachable from a sandboxed frame on any web page.
+if os.environ.get("BHARAT_API_TOKEN"):
+    _ALLOWED_ORIGINS.append("null")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
@@ -356,7 +363,7 @@ class FusionCdrRequest(BaseModel):
 class SqliteInspectRequest(BaseModel):
     db_path: Optional[str] = None
     table_name: Optional[str] = None
-    limit: int = 100
+    limit: int = Field(100, ge=1, le=5000)
 
 
 class ChatRedlineRequest(BaseModel):
@@ -640,6 +647,16 @@ def _run_native_folder_dialog() -> str:
 # File access sandbox
 # ------------------------------------------------------------------------------
 
+def _is_link(path: str) -> bool:
+    """A symbolic link or a Windows junction / reparse point."""
+    try:
+        if os.path.islink(path):
+            return True
+        return bool(getattr(os.lstat(path), "st_file_attributes", 0) & 0x400)   # FILE_ATTRIBUTE_REPARSE_POINT
+    except OSError:
+        return False
+
+
 def _is_within(path: str, root: str) -> bool:
     try:
         a, r = os.path.realpath(path), os.path.realpath(root)
@@ -676,6 +693,8 @@ def _resolve_case_file(requested: str, *, for_sqlite: bool = False, evidence_ite
     """
     if not requested or not isinstance(requested, str):
         raise HTTPException(status_code=400, detail="A file path is required.")
+    if re.match(r"^[\/]{2}", requested):
+        raise HTTPException(status_code=403, detail="Network (UNC) paths are not read.")
     ws = os.path.abspath(_active_store.case_workspace)
     roots = _case_roots()
     if evidence_item:
@@ -1004,7 +1023,17 @@ def _execute_ingestion_pipeline_inner(
         working_copy_dir = os.path.join(item_dir, "working_copy")
         if os.path.isdir(working_copy_dir):
             shutil.rmtree(working_copy_dir)
-        shutil.copytree(abs_evidence, working_copy_dir)
+        skipped_links: List[str] = []
+
+        def _skip_links(directory: str, names: List[str]) -> List[str]:
+            out = [n for n in names if _is_link(os.path.join(directory, n))]
+            skipped_links.extend(os.path.join(directory, n) for n in out)
+            return out
+
+        shutil.copytree(abs_evidence, working_copy_dir, symlinks=True, ignore=_skip_links)
+        for link in skipped_links:               # a link could lead outside the evidence; it is not followed
+            processing_log.append({"stage": "extract", "file": os.path.basename(link), "status": "WARNING",
+                                   "error": "A symbolic link or junction in the evidence folder was not followed or copied."})
         discovered_files = []
         for root, _, files in os.walk(working_copy_dir):
             for f in files:
@@ -1305,11 +1334,15 @@ def _execute_ingestion_pipeline_inner(
         )
     except Exception as e:
         print(f"[!] Warning during artifact reconciliation: {e}", file=sys.stderr)
+        processing_log.append({"stage": "reconcile", "file": "(whole case)", "status": "FAILED",
+                               "error": f"Artifact reconciliation did not complete ({type(e).__name__}: {e}); its results are missing from this case."})
 
     try:
         app_artifacts = heal_counterparties_across_apps(app_artifacts)
     except Exception as e:
         print(f"[!] Warning during counterparty healing: {e}", file=sys.stderr)
+        processing_log.append({"stage": "counterparty_healing", "file": "(whole case)", "status": "FAILED",
+                               "error": f"Counterparty healing did not complete ({type(e).__name__}: {e}); its results are missing from this case."})
 
     # 5. Master Owner Dossier
     prog.stage("owner")
@@ -1322,7 +1355,9 @@ def _execute_ingestion_pipeline_inner(
             account_hints=account_hints,
         )
     except Exception as e:
-        print(f"[!] Warning building master owner dossier: {e}", file=sys.stderr)
+        print(f"[!] Warning during the owner profile: {e}", file=sys.stderr)
+        processing_log.append({"stage": "owner_profile", "file": "(whole case)", "status": "FAILED",
+                               "error": f"The owner profile did not complete ({type(e).__name__}: {e}); its results are missing from this case."})
         master_owner_dossier = {
             "Primary_Mobile": "N/A",
             "Secondary_Mobiles": [],
@@ -1354,8 +1389,9 @@ def _execute_ingestion_pipeline_inner(
                 window_minutes=45,
                 amount_tolerance_pct=8.0,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            processing_log.append({"stage": "align_fiat_crypto", "file": "(whole case)", "status": "FAILED",
+                                   "error": f"Fiat/crypto alignment did not complete ({type(e).__name__}: {e}); its links are missing."})
 
         try:
             aligned_bank_custodial_df = align_bank_to_custodial_onramp(
@@ -1364,8 +1400,9 @@ def _execute_ingestion_pipeline_inner(
                 window_minutes=60,
                 amount_tolerance_pct=8.0,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            processing_log.append({"stage": "align_bank_custodial", "file": "(whole case)", "status": "FAILED",
+                                   "error": f"Bank/custodial-wallet alignment did not complete ({type(e).__name__}: {e}); its links are missing."})
 
     # 7. Graph Intelligence: Syndicate Roles & Mule Behavior
     prog.stage("link")
@@ -2147,6 +2184,8 @@ def query_artifacts(
             "offset": clean_offset,
             "apps_available": apps_available,
         }
+    except ValueError as e:                      # not a category of the case store
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2208,6 +2247,8 @@ def analyze_image_ocr(req: OcrAnalyzeRequest):
     Performs bilingual Hindi + English OCR and extracts financial entities (VPA, UTR, PAN, IFSC, INR Amount).
     """
     abs_path = _resolve_case_file(req.image_path)
+    if os.path.getsize(abs_path) > 64 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="The file is larger than 64 MB; OCR reads a file whole, so it was not attempted.")
 
     with open(abs_path, "rb") as f:
         file_bytes = f.read()
@@ -2303,8 +2344,10 @@ def get_chat_threads(
 def fuse_bank_statement(req: FusionBankRequest):
     """Parses external bank statement CSV/XLSX and reconciles against active case UPI/banking ledger."""
     try:
-        if req.statement_path and os.path.exists(req.statement_path):
-            bank_df = parse_bank_statement(req.statement_path, filename=os.path.basename(req.statement_path))
+        if req.statement_path:
+            # a file on the case's own paths only; never an arbitrary path or a network (UNC) share
+            statement_file = _resolve_case_file(req.statement_path)
+            bank_df = parse_bank_statement(statement_file, filename=os.path.basename(statement_file))
         elif req.csv_content:
             bank_df = parse_bank_statement(req.csv_content.encode("utf-8"), filename=req.filename or "statement.csv")
         else:
@@ -2331,6 +2374,8 @@ def fuse_bank_statement(req: FusionBankRequest):
             "probable_count": int((reconciliation_df["Reconciliation_Status"] == "PROBABLE_AMOUNT_DATE").sum()) if "Reconciliation_Status" in reconciliation_df.columns else 0,
             "reconciliation_rows": reconciliation_df.to_dict("records")[:200],
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2339,8 +2384,9 @@ def fuse_bank_statement(req: FusionBankRequest):
 def fuse_cdr_record(req: FusionCdrRequest):
     """Parses telecom CDR (Call Detail Record) CSV and correlates with financial/VoIP timestamps."""
     try:
-        if req.cdr_path and os.path.exists(req.cdr_path):
-            cdr_df = parse_cdr_record(req.cdr_path, filename=os.path.basename(req.cdr_path))
+        if req.cdr_path:
+            cdr_file = _resolve_case_file(req.cdr_path)
+            cdr_df = parse_cdr_record(cdr_file, filename=os.path.basename(cdr_file))
         elif req.csv_content:
             cdr_df = parse_cdr_record(req.csv_content.encode("utf-8"), filename=req.filename or "cdr.csv")
         else:
@@ -2361,6 +2407,8 @@ def fuse_cdr_record(req: FusionCdrRequest):
             "correlated_transactions_count": len(correlated_df),
             "correlation_rows": correlated_df.to_dict("records")[:200],
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2407,10 +2455,12 @@ def get_graph_mule_network():
     if _case_state["loaded"] and _active_store is not None:
         try:
             conn = _active_store._get_connection()
-            transactions_df = pd.read_sql_query("SELECT * FROM transactions", conn)
-            conn.close()
-        except Exception:
-            transactions_df = pd.DataFrame()
+            try:
+                transactions_df = pd.read_sql_query("SELECT * FROM transactions", conn)
+            finally:
+                conn.close()
+        except Exception as exc:                 # an unreadable store is an error, not "no transactions"
+            raise HTTPException(status_code=500, detail=f"The payment records could not be read: {exc}")
 
     if not transactions_df.empty:
         g = build_transaction_graph(transactions_df)
@@ -2559,6 +2609,8 @@ def inspect_sqlite_db(req: SqliteInspectRequest):
             "rows": selected_rows,
             "kv_pairs": kv_pairs,
         }
+    except HTTPException:
+        raise                                   # a refusal (403, 404, 409) is not "success: false"
     except Exception as e:
         return {"success": False, "error": str(e), "tables": [], "rows": []}
 
@@ -3122,38 +3174,43 @@ async def open_case_workspace(req: CaseOpenRequest):
         loop = asyncio.get_running_loop()
         new_store, meta, total_recs = await loop.run_in_executor(_thread_pool, _rebind_store)
 
-        _active_store = new_store
+        def _build_state() -> Dict[str, Any]:
+            # A case written by 5B.2 or later has a case file: everything is restored from it, nothing is processed again.
+            if os.path.isfile(os.path.join(ws, CASE_FILE_NAME)):
+                cf_open = CaseFile(ws)
+                cf_open.touch_opened()
+                state = _case_state_from_file(ws, cf_open)
+                state["counts"] = new_store.get_project_tree_counts()
+            else:
+                # Older workspace: only what its store and its metadata table hold.
+                recovered_case_id = meta.get("case_id") or os.path.basename(ws)
+                recovered_case_name = meta.get("case_name") or f"Case Workspace: {recovered_case_id}"
+                evidence_path = meta.get("evidence_path") or ws
 
-        # A case written by 5B.2 or later has a case file: everything is restored from it, nothing is processed again.
-        if os.path.isfile(os.path.join(ws, CASE_FILE_NAME)):
-            cf_open = CaseFile(ws)
-            cf_open.touch_opened()
-            _case_state = _case_state_from_file(ws, cf_open)
-            _case_state["counts"] = _active_store.get_project_tree_counts()
-        else:
-            # Older workspace: only what its store and its metadata table hold.
-            recovered_case_id = meta.get("case_id") or os.path.basename(ws)
-            recovered_case_name = meta.get("case_name") or f"Case Workspace: {recovered_case_id}"
-            evidence_path = meta.get("evidence_path") or ws
+                state = {
+                    "loaded": True,
+                    "case_id": recovered_case_id,
+                    "case_name": recovered_case_name,
+                    "evidence_path": evidence_path,
+                    "examiner_name": meta.get("examiner_name", ""),
+                    "agency_name": meta.get("agency_name", ""),
+                    "extractions": [{"evidenceId": recovered_case_id, "sourcePath": evidence_path}],
+                    "counts": new_store.get_project_tree_counts(),
+                    "owner_dossier": json.loads(meta.get("owner_dossier", "{}")),
+                    "device_metadata": json.loads(meta.get("device_metadata", "{}")),
+                    "hashes": json.loads(meta.get("hashes", "{}")),
+                    "mule_alerts": json.loads(meta.get("mule_alerts", "[]")),
+                    "syndicate_roles": json.loads(meta.get("syndicate_roles", "[]")),
+                    "charge_sheet_chain": json.loads(meta.get("charge_sheet_chain", "{}")),
+                    "pyvis_html": meta.get("pyvis_html"),
+                    "workspace_dir": ws,
+                }
+            return state
 
-            _case_state = {
-                "loaded": True,
-                "case_id": recovered_case_id,
-                "case_name": recovered_case_name,
-                "evidence_path": evidence_path,
-                "examiner_name": meta.get("examiner_name", ""),
-                "agency_name": meta.get("agency_name", ""),
-                "extractions": [{"evidenceId": recovered_case_id, "sourcePath": evidence_path}],
-                "counts": _active_store.get_project_tree_counts(),
-                "owner_dossier": json.loads(meta.get("owner_dossier", "{}")),
-                "device_metadata": json.loads(meta.get("device_metadata", "{}")),
-                "hashes": json.loads(meta.get("hashes", "{}")),
-                "mule_alerts": json.loads(meta.get("mule_alerts", "[]")),
-                "syndicate_roles": json.loads(meta.get("syndicate_roles", "[]")),
-                "charge_sheet_chain": json.loads(meta.get("charge_sheet_chain", "{}")),
-                "pyvis_html": meta.get("pyvis_html"),
-                "workspace_dir": ws,
-            }
+        state = await loop.run_in_executor(_thread_pool, _build_state)
+        with _state_lock:
+            _active_store = new_store
+            _case_state = state
 
     _audit_event("case_opened", {"workspace": os.path.basename(str(ws))})
     return CaseOpenResponse(
