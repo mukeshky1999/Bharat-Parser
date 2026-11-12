@@ -255,3 +255,18 @@ The decryption itself was wired earlier (X-10: `keys` in the ingest request, `pa
 Limits: the cancel / progress behaviour of a long decrypt is the general ingest one (5B.3). A key stored by the app inside the evidence is found only where `parsers/keychain_decryptor` looks. Not screenshot-tested in Electron.
 
 Verification of the whole 2026-11-12 batch (tags in outputs, 5B.8, 5B.9): see the test counts in the commit messages; `vite build` runs (first time in this branch).
+
+### Phase 5B.10: validation record (2026-11-12)
+- `parsers/validation.py`, run with `python -m parsers.validation [--out DIR] [--corpus DIR]` (exit status 1 unless every check passed). It writes a dated JSON and HTML report: build (tool version, commit, Python, OS), a tally, and for every check the expected value, the actual value, and how the expected value was fixed.
+- **Built-in cases** (7): MD5/SHA-256 of 'abc' against published vectors; CRC-32C check value; LevelDB with one intact and one damaged-checksum record; WhatsApp direction NULL/0/1; entity harvest counts; media (video hashed only, unreadable image has its own status); and the real ingest end to end (three payments in, three out with the right amounts and "zone unknown" time basis, one undecodable file in the coverage report, hash comparison and audit chain intact). Each is made on the spot; no third-party data ships. Expected values are written in the source before the tool runs.
+- **Reference corpus supplied by the examiner** (`--corpus DIR` with `manifest.json`: `items[].path` + `sha256`, optional `expected_counts` per category, `source_note`). Paths leaving the folder, a missing manifest and any exception are ERROR, never a pass.
+- The report states on its face that it shows the tool gave the expected result on those inputs on that date and build, and lists what it does not cover (real device extractions, deleted-record recovery, unseen app versions, amount units).
+- Report for this build: `docs/validation/validation_20261112T083645Z_v2.0.0.{html,json}`. Not built: a screen to run it (5C), NIST CFReDS images (not downloaded: licence and size to be checked by the lab), a recovery case for freelist / WAL.
+- Building the checks caught three mistakes in my own first draft of them (hash order, enum comparison, wrong store class) because a check that cannot be expressed against the real API fails loudly.
+
+### Phase 5B.11: the small open items (2026-11-12)
+- **L-08 FIXED**: a NULL `from_me` / `is_outgoing` / `is_outbox` is Direction "Unknown" (sender and recipient "Unknown", delivery "Unknown") in the WhatsApp (Android and iOS), WhatsApp call log, Zangi and Threema parsers; only 0 and 1 are read as flags.
+- **Q-2b FIXED**: phone numbers are matched on the chunk with the previous tail in front, so a number split across the 16 MB boundary is found and counted once. (Remaining edge: a 10-digit match ending exactly at a chunk end is counted before the next chunk shows more digits follow.)
+- **R-16 FIXED**: LevelDB log records and table blocks are checked against their masked CRC-32C. A mismatch is still read, classified `UNVERIFIED_FRAGMENT` and counted in `LevelDBDecoder.crc_failures`. The test fixtures now carry real checksums.
+- **Q-1 still OPEN, now visible**: PhonePe amounts carry `Amount_Basis`: "paise, as the column name says" when the name says so, otherwise "ASSUMED paise (column ... states no unit); not checked against a real sample". Settling the unit needs a real sample.
+- Tests: `tests/test_5b11_open_items.py` (5), `tests/test_validation_record.py` (6).

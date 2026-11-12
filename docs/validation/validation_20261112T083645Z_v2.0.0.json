@@ -1,0 +1,188 @@
+{
+  "schema": 1,
+  "generated_utc": "2026-11-12T08:36:45Z",
+  "environment": {
+    "Tool": "BharatAnalyzer",
+    "Tool version": "2.0.0",
+    "Build commit": "33e6269",
+    "Python": "3.15.2",
+    "Operating system": "Windows 11"
+  },
+  "corpus": null,
+  "result": "ALL CHECKS PASSED",
+  "tally": {
+    "PASS": 7,
+    "FAIL": 0,
+    "ERROR": 0
+  },
+  "checks": [
+    {
+      "id": "VAL-HASH-01",
+      "what": "MD5 and SHA-256 of the three bytes 'abc'",
+      "how_expected_was_fixed": "Published test vectors for MD5 and SHA-256 of 'abc'",
+      "expected": {
+        "md5": "900150983cd24fb0d6963f7d28e17f72",
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+      },
+      "actual": {
+        "md5": "900150983cd24fb0d6963f7d28e17f72",
+        "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "VAL-CRC-01",
+      "what": "CRC-32C of '123456789'",
+      "how_expected_was_fixed": "The standard CRC-32C check value",
+      "expected": "0xe3069283",
+      "actual": "0xe3069283",
+      "status": "PASS"
+    },
+    {
+      "id": "VAL-LDB-01",
+      "what": "LevelDB: one intact log record and one with a damaged checksum",
+      "how_expected_was_fixed": "Two records written, the checksum of the second deliberately altered",
+      "expected": {
+        "records": 2,
+        "unverified": [
+          "damaged"
+        ],
+        "checksum_failures": 1
+      },
+      "actual": {
+        "records": 2,
+        "unverified": [
+          "damaged"
+        ],
+        "checksum_failures": 1
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "VAL-WA-01",
+      "what": "WhatsApp direction flag: NULL, 0 and 1 give Unknown, Incoming and Outgoing",
+      "how_expected_was_fixed": "Three messages inserted with from_me NULL, 0 and 1",
+      "expected": {
+        "Incoming": 1,
+        "Outgoing": 1,
+        "Unknown": 1
+      },
+      "actual": {
+        "Incoming": 1,
+        "Outgoing": 1,
+        "Unknown": 1
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "VAL-ENT-01",
+      "what": "Entity harvest: VPAs and mobile numbers in a byte blob, each counted by occurrence",
+      "how_expected_was_fixed": "The blob holds alice@okaxis twice, bob@ybl once, and two valid mobile numbers once each",
+      "expected": {
+        "vpas": {
+          "alice@okaxis": 2,
+          "bob@ybl": 1
+        },
+        "phones": {
+          "9876543217": 1,
+          "8123456781": 1
+        }
+      },
+      "actual": {
+        "vpas": {
+          "alice@okaxis": 2,
+          "bob@ybl": 1
+        },
+        "phones": {
+          "9876543217": 1,
+          "8123456781": 1
+        }
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "VAL-MED-01",
+      "what": "Media: a video is hashed only, an unreadable image gets its own status",
+      "how_expected_was_fixed": "One 3-byte .mp4 and one .jpg that is plain text",
+      "expected": {
+        "statuses": [
+          [
+            "broken.jpg",
+            "NOT_DECODED"
+          ],
+          [
+            "clip.mp4",
+            "HASHED_ONLY"
+          ]
+        ],
+        "video": 1,
+        "not_decoded": 1
+      },
+      "actual": {
+        "statuses": [
+          [
+            "broken.jpg",
+            "NOT_DECODED"
+          ],
+          [
+            "clip.mp4",
+            "HASHED_ONLY"
+          ]
+        ],
+        "video": 1,
+        "not_decoded": 1
+      },
+      "status": "PASS"
+    },
+    {
+      "id": "VAL-PIPE-01",
+      "what": "Ingest end to end: three payments in, three payments out, one undecoded file reported, audit chain intact",
+      "how_expected_was_fixed": "Three payments inserted with amounts 100.0, 250.5 and 900.0; one 150-byte file the tool cannot decode",
+      "expected": {
+        "ingest_succeeded": true,
+        "integrity_match": true,
+        "payments": 3,
+        "payment_amounts": [
+          100.0,
+          250.5,
+          900.0
+        ],
+        "payment_time_zone_basis": [
+          "LOCAL_ZONE_UNKNOWN"
+        ],
+        "coverage_by_outcome": {
+          "DECODED": 1,
+          "NOT_DECODED": 1
+        },
+        "audit_chain_verified": true
+      },
+      "actual": {
+        "ingest_succeeded": true,
+        "integrity_match": true,
+        "payments": 3,
+        "payment_amounts": [
+          100.0,
+          250.5,
+          900.0
+        ],
+        "payment_time_zone_basis": [
+          "LOCAL_ZONE_UNKNOWN"
+        ],
+        "coverage_by_outcome": {
+          "NOT_DECODED": 1,
+          "DECODED": 1
+        },
+        "audit_chain_verified": true
+      },
+      "status": "PASS"
+    }
+  ],
+  "not_covered": [
+    "Real device extractions: the built-in cases are small synthetic files.",
+    "Deleted-record recovery (freelist, WAL, carving): its result depends on how a real database was written, so it is checked by the reference corpus an examiner supplies, not by a built-in case.",
+    "Any application version, phone model or extraction format not present in the cases below or in the supplied corpus.",
+    "Amounts: the unit of an amount column is assumed in some parsers and is labelled as assumed (see the review findings); a built-in case cannot settle it."
+  ],
+  "statement": "These are known-answer checks. They show the tool gave the expected result on these inputs on the date and build above. They do not show it is right on any other input.",
+  "content_sha256": "97a79c1fbabf33d3b85b7cf6d338a0bd0790faa06c60f49948b4aae58456b206"
+}
