@@ -136,3 +136,25 @@ def test_endpoints_report_and_accounts(tmp_path, monkeypatch):
     j = client.get("/api/report/accounts-of-interest").json()
     assert set(j) == {"accounts", "left_out", "note"}
     assert client.get("/api/report/accounts-of-interest", params={"format": "csv"}).text.startswith("section,vpa")
+
+
+def test_package_refuses_included_file_with_keep_out_records_unless_acknowledged(tmp_path):
+    from parsers import review_package as rp
+    f = tmp_path / "chat.db"
+    f.write_bytes(b"abc")
+    out1 = tmp_path / "p1"
+    item = rp.PackageItem(source_path=str(f), disposition=rp.INCLUDE, tag_flags={"privileged": 2})
+    with pytest.raises(rp.PackageRefused) as e:
+        rp.build_package("C1", [item], str(out1))
+    assert "privileged: 2" in str(e.value) and not out1.exists()           # nothing written
+    # withholding is always allowed
+    w = rp.PackageItem(source_path=str(f), disposition=rp.WITHHOLD_PRIVILEGED, tag_flags={"privileged": 2})
+    assert rp.build_package("C1", [w], str(tmp_path / "p2")).withheld == 1
+    # acknowledged: built, and the flag is in the manifest and the viewer
+    res = rp.build_package("C1", [item], str(tmp_path / "p3"), acknowledge_tagged=True)
+    meta = json.loads(open(res.manifest_path, encoding="utf-8").read())
+    assert meta["tag_warning_acknowledged"] is True and meta["items"][0]["tagged_records"] == "privileged: 2"
+    assert "records tagged: privileged: 2" in open(res.viewer_path, encoding="utf-8").read()
+    # an untagged file is unaffected
+    plain = rp.build_package("C1", [rp.PackageItem(source_path=str(f), disposition=rp.INCLUDE)], str(tmp_path / "p4"))
+    assert json.loads(open(plain.manifest_path, encoding="utf-8").read())["tag_warning_acknowledged"] is False

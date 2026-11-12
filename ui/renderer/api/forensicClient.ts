@@ -1453,6 +1453,11 @@ class ForensicClient {
     }
   }
 
+  /** Accounts from payment records the examiner tagged; those shared with complainant / excluded / privileged records come back in `left_out`. */
+  public async getAccountsOfInterest(): Promise<{ data: { accounts: Array<Record<string, string | number>>; left_out: Array<Record<string, string | number>>; note: string } | null; error: string | null }> {
+    return this.fetchApi('/api/report/accounts-of-interest');
+  }
+
   public async getAuditLog(signal?: AbortSignal): Promise<AuditSummary> {
     const res = await this.fetchApi<AuditSummary>('/api/audit', { signal });
     if (res.data) return res.data;
@@ -1463,12 +1468,13 @@ class ForensicClient {
   public async buildReviewPackage(
     items: Array<{ path: string; disposition?: string; note?: string }>,
     maskTerms: string[],
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    acknowledgeTagged = false
   ): Promise<PackageResult> {
     const res = await this.fetchApi<PackageResult>('/api/report/package', {
       method: 'POST',
       signal,
-      body: JSON.stringify({ items, mask_terms: maskTerms }),
+      body: JSON.stringify({ items, mask_terms: maskTerms, acknowledge_tagged: acknowledgeTagged }),
     });
     if (res.data && res.data.success) return res.data;
     return { success: false, directory: '', viewer_path: '', included: 0, withheld: 0, merkle_root: '', error: res.error || 'The package was not built.' };

@@ -2530,6 +2530,7 @@ class PackageItemIn(BaseModel):
 class PackageRequest(BaseModel):
     items: List[PackageItemIn] = []
     mask_terms: List[str] = []          # e.g. a person's name, removed from names, notes and cards
+    acknowledge_tagged: bool = False    # go ahead although an INCLUDE file holds records tagged privileged / complainant / excluded
 
 
 @app.post("/api/report/package")
@@ -2540,6 +2541,14 @@ def build_review_package(req: PackageRequest):
     for it in req.items:
         items.append(review_package.PackageItem(
             source_path=_resolve_case_file(it.path), disposition=it.disposition, note=it.note or ""))
+    from parsers import case_tag_report
+    conn = _active_store._get_connection()
+    try:
+        flags = case_tag_report.files_with_keep_out_records(conn, [i.source_path for i in items])
+    finally:
+        conn.close()
+    for i in items:
+        i.tag_flags = flags.get(i.source_path)
     case_id = str(_case_state.get("case_id"))
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     out_dir = os.path.join(_active_store.case_workspace, "review_packages",
@@ -2547,10 +2556,11 @@ def build_review_package(req: PackageRequest):
     led, _err = _get_audit()
     try:
         res = review_package.build_package(case_id, items, out_dir, req.mask_terms,
-                                           audit_head=led.head_hash if led else "")
+                                           audit_head=led.head_hash if led else "", acknowledge_tagged=req.acknowledge_tagged)
     except review_package.PackageRefused as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    _audit_event("package_built", {"included": res.included, "withheld": res.withheld, "merkle_root": res.merkle_root})
+    _audit_event("package_built", {"included": res.included, "withheld": res.withheld, "merkle_root": res.merkle_root,
+                                   "tag_warning_acknowledged": bool(req.acknowledge_tagged and any(i.tag_flags and i.disposition == "INCLUDE" for i in items))})
     return {"success": True, "directory": res.directory, "viewer_path": res.viewer_path,
             "included": res.included, "withheld": res.withheld, "merkle_root": res.merkle_root}
 

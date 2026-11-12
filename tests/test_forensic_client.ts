@@ -298,6 +298,21 @@ async function runForensicClientTests() {
     const badTl = await forensicClient.getTimeline({ tables: ['contacts'] });
     assert(badTl.data === null && (badTl.error ?? '').includes('Not a table'), 'A refused timeline gives the reason');
 
+    // Suite 7: tagged outputs
+    console.log('\n--- Test Suite 7: Tagged outputs ---');
+    let sentPkg = '';
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      askedUrl = String(input);
+      sentPkg = String(init?.body ?? '');
+      return new Response(JSON.stringify({ success: true, directory: 'd', viewer_path: 'v', included: 0, withheld: 1, merkle_root: 'r', accounts: [], left_out: [], note: '' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    await forensicClient.buildReviewPackage([{ path: 'a', disposition: 'INCLUDE' }], [], undefined, true);
+    assert(JSON.parse(sentPkg).acknowledge_tagged === true, 'The package call carries the tag acknowledgement');
+    await forensicClient.buildReviewPackage([{ path: 'a', disposition: 'INCLUDE' }], []);
+    assert(JSON.parse(sentPkg).acknowledge_tagged === false, 'The acknowledgement is off unless asked for');
+    await forensicClient.getAccountsOfInterest();
+    assert(askedUrl.endsWith('/api/report/accounts-of-interest'), 'Accounts of interest has its own call');
+
     console.log(`=== RESULTS: ALL ${passedTests}/${totalTests} FORENSIC CLIENT TESTS PASSED (100% SUCCESS) ===\n`);
   } finally {
     // Restore original fetch

@@ -3,6 +3,7 @@ import { FileText, Download, PackageOpen, ListChecks } from 'lucide-react';
 import { forensicClient, AuditSummary, PackageResult, ReportParticulars } from '../api/forensicClient';
 import { useWorkbenchStore } from '../state/workbenchStore';
 import { useFindings } from '../state/findingsStore';
+import { csvCell } from '../utils/csv';
 
 const FIELDS: Array<[keyof ReportParticulars, string]> = [
   ['case_number', 'Case / reference number'],
@@ -62,6 +63,7 @@ export const ReportExportView: React.FC = () => {
   const [maskText, setMaskText] = useState('');
   const [pkg, setPkg] = useState<PackageResult | null>(null);
   const [pkgError, setPkgError] = useState('');
+  const [ackTagged, setAckTagged] = useState(false);
 
   const [audit, setAudit] = useState<AuditSummary | null>(null);
 
@@ -91,6 +93,21 @@ export const ReportExportView: React.FC = () => {
     void refreshAudit();
   };
 
+  const accounts = async () => {
+    setBusy('acct'); setReportError('');
+    const res = await forensicClient.getAccountsOfInterest();
+    setBusy('');
+    if (res.error || !res.data) { setReportError(res.error || 'Could not build the sheet'); return; }
+    const cols = ['section', 'vpa', 'account', 'names_as_recorded', 'tagged_records', 'record_ids', 'evidence_items', 'applications', 'tags', 'left_out_because'];
+    const rows: Array<Record<string, unknown>> = [
+      ...res.data.accounts.map((a) => ({ section: 'account of interest', ...a })),
+      ...res.data.left_out.map((a) => ({ section: 'left out', ...a })),
+    ];
+    const csv = [cols, ...rows.map((r) => cols.map((c) => csvCell(r[c])))].map((r) => r.join(',')).join('\r\n');
+    saveText('accounts_of_interest.csv', csv, 'text/csv;charset=utf-8');
+    void refreshAudit();
+  };
+
   const loadMedia = async () => {
     setPkgError(''); setPkg(null);
     const r = await forensicClient.getMediaCandidates();
@@ -107,6 +124,8 @@ export const ReportExportView: React.FC = () => {
     const r = await forensicClient.buildReviewPackage(
       media.map((m) => ({ path: m.path, disposition: decisions[m.path], note: itemNotes[m.path] ?? '' })),
       maskText.split('\n').map((t) => t.trim()).filter(Boolean),
+      undefined,
+      ackTagged,
     );
     setBusy('');
     if (r.success) setPkg(r); else setPkgError(r.error || 'The package was not built.');
@@ -171,6 +190,8 @@ export const ReportExportView: React.FC = () => {
             <button className={btn} onClick={() => facts('json')} disabled={!hasCase || busy === 'json'}><Download className="inline w-4 h-4 mr-1" aria-hidden="true" />JSON</button>
             <button className={btn} onClick={() => facts('csv')} disabled={!hasCase || busy === 'csv'}><Download className="inline w-4 h-4 mr-1" aria-hidden="true" />CSV</button>
           </div>
+          <p className="text-slate-300 mt-3 mb-2">Accounts from payment records you tagged of interest or relied upon. An account that also appears on a record you tagged complainant, excluded or privileged is listed apart, with the reason.</p>
+          <button className={btn} onClick={accounts} disabled={!hasCase || busy === 'acct'}><Download className="inline w-4 h-4 mr-1" aria-hidden="true" />Accounts of interest (CSV)</button>
         </Card>
 
         <Card icon={PackageOpen} title="Review package">
@@ -224,6 +245,12 @@ export const ReportExportView: React.FC = () => {
             </>
           )}
           {pkgError && <p className="mt-3 text-rose-300">{pkgError}</p>}
+          {pkgError.includes('tagged privileged') && (
+            <label className="mt-2 flex items-center gap-2 text-slate-200">
+              <input type="checkbox" checked={ackTagged} onChange={(e) => setAckTagged(e.target.checked)} />
+              I have looked at the files named above and still want them included.
+            </label>
+          )}
           {pkg && (
             <p className="mt-3 text-slate-200 break-all">
               Built: {pkg.included} included, {pkg.withheld} withheld.<br />

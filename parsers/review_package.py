@@ -8,7 +8,10 @@ Rules, in the order they are applied:
 3. Masking terms (for example a person's name) are removed from names, notes, notice cards and the viewer,
    case-insensitively. File CONTENTS are never altered; an INCLUDE file that mentions a masked term still mentions it.
 4. File names inside the package are index-based and sanitised, and every write is checked to stay inside the package.
-5. The manifest records SHA-256/MD5 of each original (including withheld ones), a Merkle root, and the audit-log head
+5. Tags: an INCLUDE file that is named in the provenance of records the examiner tagged privileged, complainant
+   or excluded is refused unless the caller acknowledges it, and the flag is written beside the file in the manifest
+   and the viewer. The tool does not decide; it makes the examiner look.
+6. The manifest records SHA-256/MD5 of each original (including withheld ones), a Merkle root, and the audit-log head
    hash when one is given.
 """
 
@@ -48,6 +51,7 @@ class PackageItem:
     disposition: Optional[str] = None
     note: str = ""
     display_name: str = ""
+    tag_flags: Optional[Dict[str, int]] = None   # e.g. {"privileged": 3}: records of this file the examiner tagged
 
 
 @dataclass
@@ -82,6 +86,7 @@ def build_package(
     output_dir: str,
     mask_terms: Optional[List[str]] = None,
     audit_head: str = "",
+    acknowledge_tagged: bool = False,
 ) -> PackageResult:
     if not items:
         raise PackageRefused("No items were selected.")
@@ -95,6 +100,11 @@ def build_package(
     unknown = [f"{os.path.basename(i.source_path)}={i.disposition}" for i in items if i.disposition not in DISPOSITIONS]
     if unknown:
         raise PackageRefused("Unknown disposition: " + ", ".join(unknown))
+    flagged = [os.path.basename(i.source_path) + " (" + ", ".join(f"{k}: {v}" for k, v in sorted(i.tag_flags.items())) + ")"
+               for i in items if i.disposition == INCLUDE and i.tag_flags]
+    if flagged and not acknowledge_tagged:
+        raise PackageRefused("These files hold records the examiner tagged privileged, complainant or excluded: " + "; ".join(flagged)
+                             + ". Withhold them, or build again with the tag warning acknowledged. Nothing was written.")
     unreadable = [os.path.basename(i.source_path) for i in items if not os.path.isfile(i.source_path)]
     if unreadable:
         raise PackageRefused("File not found: " + ", ".join(unreadable))
@@ -123,7 +133,8 @@ def build_package(
         shown = mask(it.display_name or os.path.basename(it.source_path))
         safe = _safe_component(shown, idx)
         entry = {"index": f"{idx:03d}", "name": shown, "disposition": it.disposition, "sha256": mi.sha256,
-                 "md5": mi.md5, "size_bytes": str(mi.byte_size), "note": mask(it.note), "file": ""}
+                 "md5": mi.md5, "size_bytes": str(mi.byte_size), "note": mask(it.note), "file": "",
+                 "tagged_records": ", ".join(f"{k}: {v}" for k, v in sorted((it.tag_flags or {}).items()))}
         if it.disposition == INCLUDE:
             dest = os.path.join(out, "exhibits", safe)
             if os.path.dirname(os.path.abspath(dest)) != os.path.join(out, "exhibits"):
@@ -148,6 +159,7 @@ def build_package(
     root = manifest.merkle_root()
     meta = {
         "case_id": mask(case_id), "items": entries, "merkle_root": root, "audit_head_hash": audit_head or "Not recorded",
+        "tag_warning_acknowledged": bool(acknowledge_tagged and any(i.tag_flags and i.disposition == INCLUDE for i in items)),
         "masking": f"{len(terms)} term(s) masked in names, notes and cards. File contents are not altered.",
     }
     manifest_path = _write_inside(out, "manifest.json", json.dumps(meta, indent=2, sort_keys=True).encode("utf-8"))
@@ -155,7 +167,7 @@ def build_package(
     rows = "".join(
         f"<tr><td>{e['index']}</td><td>{esc(e['name'])}</td><td>{esc(e['disposition'])}</td>"
         f"<td><a href=\"{html.escape(e['file'], quote=True)}\">{html.escape(e['file'])}</a></td>"
-        f"<td class=\"m\">{e['sha256']}</td><td>{esc(e['note'])}</td></tr>" for e in entries
+        f"<td class=\"m\">{e['sha256']}</td><td>{esc(e['note'])}{(' [records tagged: ' + esc(e['tagged_records']) + ']') if e['tagged_records'] else ''}</td></tr>" for e in entries
     )
     viewer = (
         "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\">"
