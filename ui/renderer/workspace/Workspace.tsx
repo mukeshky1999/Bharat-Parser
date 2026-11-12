@@ -16,6 +16,7 @@ import { FileSystemExplorerTab } from '../views/FileSystemExplorerTab';
 import { FindingsView } from '../views/FindingsView';
 import { ReportExportView } from '../views/ReportExportView';
 import { SearchView } from '../views/SearchView';
+import { MediaLibraryView } from '../views/MediaLibraryView';
 import { TagsView } from '../views/TagsView';
 import { TimelineView } from '../views/TimelineView';
 
@@ -61,6 +62,7 @@ export const Workspace: React.FC = () => {
         {activeTab === 'REPORT_EXPORT' && <ReportExportView />}
         {activeTab === 'SEARCH' && <SearchView />}
         {activeTab === 'TAGS' && <TagsView />}
+        {activeTab === 'MEDIA' && <MediaLibraryView />}
         {activeTab === 'TIMELINE' && <TimelineView />}
       </div>
     </main>
