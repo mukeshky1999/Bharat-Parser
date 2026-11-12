@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from src.core.enums import ResidualConfidence
 from src.core.timestamps import ForensicTimestamp
 from src.upi.models import (
+    infer_direction,
     QRArtifactType,
     UPIAppSandboxTransaction,
     UPIInAppP2PChat,
@@ -172,7 +173,7 @@ class PhonePeDecoder:
                             row_dict.get("state")
                             or row_dict.get("status")
                             or payload_data.get("state")
-                            or "SUCCESS"
+                            or "UNKNOWN"
                         )
 
                         inst_type = payload_data.get("instrumentType", "ACCOUNT")
@@ -190,7 +191,7 @@ class PhonePeDecoder:
                             amount_inr_decimal=amt_decimal,
                             raw_amount_value=f"{amount_paise} paise",
                             instrument_mode=inst_mode,
-                            tx_direction=UPITransactionDirection.DEBIT_SENT.value,
+                            tx_direction=infer_direction(row_dict, payer_vpa, payee_vpa),
                             app_recorded_status=str(status_val).upper(),
                             utr_12_digit=str(utr_val) if utr_val else None,
                             app_order_or_tx_id=str(tx_id) if tx_id else None,

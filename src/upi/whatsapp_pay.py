@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from src.core.enums import ResidualConfidence
 from src.core.timestamps import ForensicTimestamp
 from src.upi.models import (
+    infer_direction,
     UPIAppSandboxTransaction,
     UPIInstrumentMode,
     UPITransactionDirection,
@@ -102,8 +103,8 @@ class WhatsAppPayDecoder:
                         amount_inr_decimal=amt_decimal,
                         raw_amount_value=f"{amount_1000} milli-rupees",
                         instrument_mode=UPIInstrumentMode.UPI_BANK_ACCOUNT.value,
-                        tx_direction=UPITransactionDirection.DEBIT_SENT.value,
-                        app_recorded_status="SUCCESS",
+                        tx_direction=infer_direction(row_dict, payer_vpa, payee_vpa),
+                        app_recorded_status=str(row_dict.get("status") or "UNKNOWN").upper(),
                         utr_12_digit=str(utr_val) if utr_val else None,
                         app_order_or_tx_id=str(tx_id) if tx_id else None,
                         payer_vpa=str(payer_vpa) if payer_vpa else (str(sender_jid) if sender_jid else None),

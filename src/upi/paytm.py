@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from src.core.enums import ResidualConfidence
 from src.core.timestamps import ForensicTimestamp
 from src.upi.models import (
+    infer_direction,
     QRArtifactType,
     UPIAppSandboxTransaction,
     UPIInAppP2PChat,
@@ -95,8 +96,8 @@ class PaytmDecoder:
                             amount_inr_decimal=amt_decimal,
                             raw_amount_value=str(raw_amt),
                             instrument_mode=UPIInstrumentMode.UPI_BANK_ACCOUNT.value,
-                            tx_direction=UPITransactionDirection.DEBIT_SENT.value,
-                            app_recorded_status=str(row_dict.get("status") or "SUCCESS").upper(),
+                            tx_direction=infer_direction(row_dict, row_dict.get("payerVpa"), row_dict.get("payeeVpa")),
+                            app_recorded_status=str(row_dict.get("status") or "UNKNOWN").upper(),
                             utr_12_digit=str(utr_val) if utr_val else None,
                             app_order_or_tx_id=str(order_id) if order_id else None,
                             payer_vpa=row_dict.get("payerVpa"),

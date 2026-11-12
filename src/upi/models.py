@@ -29,6 +29,7 @@ class UPITransactionDirection(str, Enum):
     COLLECT_REQUEST_SENT = "COLLECT_REQUEST_SENT"
     COLLECT_REQUEST_RECEIVED = "COLLECT_REQUEST_RECEIVED"
     SELF_TRANSFER = "SELF_TRANSFER"
+    UNKNOWN = "UNKNOWN"  # the app database does not say which way the money moved
 
 
 @unique
@@ -155,3 +156,41 @@ class UPILiteAndCircleDelegation:
     balance_or_limit_inr: Optional[float] = None
     updated_utc_iso: Optional[str] = None
     record_uid: Optional[int] = None
+
+
+_OUT_HINTS = {"debit", "dr", "pay", "paid", "sent", "send", "outgoing", "out", "p2p_pay", "1", "true"}
+_IN_HINTS = {"credit", "cr", "receive", "received", "incoming", "in", "collect_received", "0", "false"}
+_DIRECTION_KEYS = ("direction", "txn_type", "txnType", "tx_type", "transactionType", "type", "txn_direction")
+_BOOL_OUT_KEYS = ("is_outgoing", "isSender", "is_sender", "from_me", "isDebit")
+
+
+def infer_direction(row: dict, payer_vpa=None, payee_vpa=None, owner_vpas=()) -> str:
+    """Direction of a UPI record from evidence, never by default.
+
+    Order: an explicit flag/type column in the record, then a match of the payer/payee VPA against the
+    device owner's VPAs, otherwise UNKNOWN. Returns a UPITransactionDirection value.
+    """
+    for k in _BOOL_OUT_KEYS:
+        if k in row and row[k] is not None:
+            return (UPITransactionDirection.DEBIT_SENT if str(row[k]).strip().lower() in {"1", "true"}
+                    else UPITransactionDirection.CREDIT_RECEIVED).value
+    for k in _DIRECTION_KEYS:
+        v = row.get(k)
+        if v is None:
+            continue
+        t = str(v).strip().lower()
+        if t in _OUT_HINTS and t not in {"1", "0", "true", "false"}:
+            return UPITransactionDirection.DEBIT_SENT.value
+        if t in _IN_HINTS and t not in {"1", "0", "true", "false"}:
+            return UPITransactionDirection.CREDIT_RECEIVED.value
+    owners = {str(v).strip().lower() for v in owner_vpas if v}
+    if owners:
+        payer = str(payer_vpa or "").strip().lower()
+        payee = str(payee_vpa or "").strip().lower()
+        if payer in owners and payee in owners:
+            return UPITransactionDirection.SELF_TRANSFER.value
+        if payer in owners:
+            return UPITransactionDirection.DEBIT_SENT.value
+        if payee in owners:
+            return UPITransactionDirection.CREDIT_RECEIVED.value
+    return UPITransactionDirection.UNKNOWN.value

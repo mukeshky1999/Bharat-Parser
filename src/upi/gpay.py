@@ -11,6 +11,7 @@ from src.core.enums import ResidualConfidence
 from src.core.timestamps import ForensicTimestamp
 from src.nonsqlite.protobuf import decode_raw_protobuf
 from src.upi.models import (
+    infer_direction,
     UPIAppSandboxTransaction,
     UPIInAppP2PChat,
     UPIInstrumentMode,
@@ -134,7 +135,7 @@ class GooglePayDecoder:
                     item_id = row_dict.get("item_id") or row_dict.get("id") or row_dict.get("tx_id")
                     pid = row_dict.get("participant_id")
                     item_type = str(row_dict.get("item_type") or "PAYMENT_TRANSACTION").upper()
-                    status_val = str(row_dict.get("status") or "SUCCESS").upper()
+                    status_val = str(row_dict.get("status") or "UNKNOWN").upper()
                     col_utr = row_dict.get("utr")
                     ts_ms = row_dict.get("timestamp_ms") or row_dict.get("timestamp") or 0
 
@@ -216,7 +217,7 @@ class GooglePayDecoder:
                             amount_inr_decimal=amt_decimal,
                             raw_amount_value=raw_amt_str,
                             instrument_mode=UPIInstrumentMode.UPI_BANK_ACCOUNT.value,
-                            tx_direction=UPITransactionDirection.DEBIT_SENT.value,
+                            tx_direction=infer_direction(row_dict, payer_vpa, payee_vpa),
                             app_recorded_status=status_val,
                             utr_12_digit=str(utr_val) if utr_val else None,
                             app_order_or_tx_id=str(item_id) if item_id else None,

@@ -438,3 +438,14 @@ def test_bank_narration_direction_uses_whole_token_cues():
     assert direction_from_cues("BY TRANSFER NEFT 123") == "CREDIT"
     assert direction_from_cues("NEFT DR RAVI") == "DEBIT"
     assert direction_from_cues("NEFT CR DR AMBIGUOUS") == "UNKNOWN"
+
+
+def test_upi_direction_comes_from_evidence_not_a_default():
+    from src.upi.models import infer_direction
+
+    assert infer_direction({}, "a@ybl", "b@ybl") == "UNKNOWN"
+    assert infer_direction({"txn_type": "CREDIT"}, None, None) == "CREDIT_RECEIVED"
+    assert infer_direction({"is_outgoing": 1}, None, None) == "DEBIT_SENT"
+    assert infer_direction({}, "me@ybl", "x@ybl", owner_vpas=["me@ybl"]) == "DEBIT_SENT"
+    assert infer_direction({}, "x@ybl", "me@ybl", owner_vpas=["me@ybl"]) == "CREDIT_RECEIVED"
+    assert infer_direction({}, "me@ybl", "me@ybl", owner_vpas=["me@ybl"]) == "SELF_TRANSFER"
