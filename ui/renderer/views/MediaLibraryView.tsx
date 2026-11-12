@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Image as ImageIcon, Film } from 'lucide-react';
 import { forensicClient, HashSetInfo, MediaItem } from '../api/forensicClient';
+import { useLatestRequest } from '../utils/latestRequest';
 
 const PAGE = 48;
 const field = 'h-8 rounded bg-slate-950 border border-slate-700 px-2 text-slate-100 placeholder-slate-500';
@@ -20,8 +21,14 @@ const Thumb: React.FC<{ item: MediaItem }> = ({ item }) => {
     if (!item.has_thumbnail) { setUrl(null); return; }
     const ctl = new AbortController();
     let made: string | null = null;
-    void forensicClient.getMediaThumbnail(item.id, ctl.signal).then((u) => { made = u; setUrl(u); });
-    return () => { ctl.abort(); if (made) URL.revokeObjectURL(made); };
+    let cancelled = false;
+    void forensicClient.getMediaThumbnail(item.id, ctl.signal)
+      .then((u) => {
+        if (cancelled) { if (u) URL.revokeObjectURL(u); return; }   // the reply came after this thumbnail was gone: free it
+        made = u; setUrl(u);
+      })
+      .catch(() => { if (!cancelled) setUrl(null); });
+    return () => { cancelled = true; ctl.abort(); if (made) URL.revokeObjectURL(made); };
   }, [item.id, item.has_thumbnail]);
   if (url) return <img src={url} alt={`Thumbnail of ${item.file_name ?? 'file'}`} className="w-full h-28 object-cover bg-slate-950" />;
   const Icon = item.kind === 'video' ? Film : ImageIcon;
@@ -76,7 +83,8 @@ const HashLists: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
 
 const Detail: React.FC<{ item: MediaItem; onOpen: (id: number) => void }> = ({ item, onOpen }) => {
   const [similar, setSimilar] = useState<{ note: string; matches: Array<{ id: number; distance: number; file_name: string | null; identical_bytes: boolean }> } | null>(null);
-  useEffect(() => { setSimilar(null); }, [item.id]);
+  const latestSimilar = useLatestRequest();
+  useEffect(() => { latestSimilar.cancel(); setSimilar(null); }, [item.id, latestSimilar]);   // nothing found for another image stays
   const rows: Array<[string, string]> = [
     ['File', item.vfs_path], ['Device', item.evidence_item ?? NR], ['Size', item.file_size !== null ? `${item.file_size} bytes` : NR],
     ['SHA-256', item.sha256 ?? NR], ['MD5', item.md5 ?? NR],
@@ -103,7 +111,11 @@ const Detail: React.FC<{ item: MediaItem; onOpen: (id: number) => void }> = ({ i
       </table>
       {item.dhash && (
         <div className="mt-3">
-          <button className={btn} onClick={async () => setSimilar((await forensicClient.getSimilarMedia(item.id)).data)}>Find look-alike images (a lead)</button>
+          <button className={btn} onClick={async () => {
+            const { isCurrent } = latestSimilar.begin();
+            const res = await forensicClient.getSimilarMedia(item.id);
+            if (isCurrent()) setSimilar(res.data);
+          }}>Find look-alike images (a lead)</button>
           {similar && (
             <div className="mt-2">
               <p className="text-amber-300">LEAD: {similar.note}</p>
@@ -134,14 +146,20 @@ export const MediaLibraryView: React.FC = () => {
   const [error, setError] = useState('');
   const [working, setWorking] = useState('');
 
+  const latestList = useLatestRequest();
   const load = useCallback(async (off: number) => {
+    const { isCurrent } = latestList.begin();
     const res = await forensicClient.getMedia({
       kind: kind || undefined, status: status || undefined, hasGps: gps === '' ? undefined : gps === 'yes',
       setKind: listFilter === 'notable' ? 'known_notable' : undefined, outsideSets: listFilter === 'outside', limit: PAGE, offset: off,
     });
+    if (!isCurrent()) return;
     if (res.error) { setError(res.error); return; }
-    setError(''); setItems(res.data?.items ?? []); setTotal(res.data?.total ?? 0);
-  }, [kind, status, gps, listFilter]);
+    const list = res.data?.items ?? [];
+    setError(''); setItems(list); setTotal(res.data?.total ?? 0);
+    // the open file is shown as the case holds it now (a hash list imported meanwhile may have changed its matches)
+    setSelected((prev) => (prev ? (list.find((i) => i.id === prev.id) ?? prev) : prev));
+  }, [kind, status, gps, listFilter, latestList]);
 
   useEffect(() => { setOffset(0); void load(0); }, [load]);
 

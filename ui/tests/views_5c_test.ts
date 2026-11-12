@@ -35,7 +35,7 @@ const view = (name: string) => fs.readFileSync(path.join(__dirname, '..', 'rende
 const insp = (name: string) => fs.readFileSync(path.join(__dirname, '..', 'renderer', 'inspectors', name), 'utf8');
 
 // the timeline keeps the "no zone" distinction visible
-const tl = view('TimelineView.tsx');
+const tl = view('TimelineView.tsx') + fs.readFileSync(path.join(__dirname, '..', 'renderer', 'utils', 'timeText.ts'), 'utf8');
 ok(/zone not recorded/.test(tl) && /clock_only/.test(tl) && /no_time/.test(tl), 'timeline labels clock-only and no-time events and does not place them');
 // media: the camera clock and look-alike results carry their labels
 const media = view('MediaLibraryView.tsx');

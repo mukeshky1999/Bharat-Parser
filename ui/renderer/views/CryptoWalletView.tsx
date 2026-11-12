@@ -33,7 +33,9 @@ const col = (key: string, label: string, width: string, field: string | ((r: Row
   const get = typeof field === 'function' ? field : (r: Row) => r[field];
   return { key, label, width, align, cell: (r) => cell(get(r)), text: (r) => text(get(r)) || 'not recorded' };
 };
-const amount = (v: unknown, unit?: unknown) => (text(v) && Number.isFinite(Number(v)) ? `${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 8 })}${text(unit) ? ` ${text(unit)}` : ''}` : '');
+// The amount exactly as stored. It is not passed through Number: a crypto amount can have 18 decimals, and a tiny non-zero
+// amount must not be rounded to "0".
+const amount = (v: unknown, unit?: unknown) => (text(v) ? `${text(v)}${text(unit) ? ` ${text(unit)}` : ''}` : '');
 
 const COLUMNS: Record<Tab, Array<GridColumn<Row>>> = {
   custodial_wallets: [
@@ -83,14 +85,16 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = () => {
     if (!manifest) { setData({ custodial_wallets: [], p2p_orders: [], fiat_crypto_bridge: [], crypto_addresses: [] }); return; }
     const ctl = new AbortController();
     setLoading(true); setError('');
+    setData({ custodial_wallets: [], p2p_orders: [], fiat_crypto_bridge: [], crypto_addresses: [] });   // not the previous case's rows
     (async () => {
       try {
         const [a, b, c, d] = await Promise.all(TABS.map((t) => fetchAllRows(t.id, ctl.signal)));
+        if (ctl.signal.aborted) return;
         setData({ custodial_wallets: a, p2p_orders: b, fiat_crypto_bridge: c, crypto_addresses: d });
       } catch (e: any) {
-        if (e?.name !== 'AbortError') setError(e?.message || 'The crypto records could not be loaded.');
+        if (e?.name !== 'AbortError' && !ctl.signal.aborted) setError(e?.message || 'The crypto records could not be loaded.');
       } finally {
-        setLoading(false);
+        if (!ctl.signal.aborted) setLoading(false);       // an older load finishing must not end a newer one's "loading"
       }
     })();
     return () => ctl.abort();

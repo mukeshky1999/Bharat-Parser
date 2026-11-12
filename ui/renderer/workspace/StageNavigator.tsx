@@ -21,7 +21,6 @@ export const StageNavigator: React.FC = () => {
   const chats = useWorkbenchStore((s) => s.chats);
   const contacts = useWorkbenchStore((s) => s.contacts);
   const calls = useWorkbenchStore((s) => s.callLogs);
-  const spill = useWorkbenchStore((s) => s.osSpillovers);
   const findings = useFindings((s) => s.findings.length);
   const collapsed = usePreferences((s) => s.navCollapsed);
   const setPref = usePreferences((s) => s.set);
@@ -31,7 +30,7 @@ export const StageNavigator: React.FC = () => {
   const counts: Partial<Record<StageId, { n: number; rec: number }>> = {
     people: { n: contacts.length + calls.length, rec: recovered(contacts as HasRecovery[]) + recovered(calls as HasRecovery[]) },
     money: { n: upi.length, rec: recovered(upi as HasRecovery[]) },
-    messages: { n: chats.length + spill.length, rec: recovered(chats as HasRecovery[]) },
+    messages: { n: chats.length, rec: recovered(chats as HasRecovery[]) },
     findings: { n: findings, rec: 0 },
   };
   const viewCount = (tab: string): number | null => {
@@ -40,7 +39,6 @@ export const StageNavigator: React.FC = () => {
       case 'CALLS': return calls.length;
       case 'UPI_LEDGER': return upi.length;
       case 'CHATS': return chats.length;
-      case 'OS_SPILLOVER': return spill.length;
       case 'FINDINGS': return findings;
       default: return null;
     }

@@ -7,6 +7,7 @@ import { StatusLine } from './StatusLine';
 import { CommandPalette } from './CommandPalette';
 import { SettingsDialog } from './SettingsDialog';
 import { Toasts } from './Toasts';
+import { LoadErrors } from './LoadErrors';
 import { EvidenceCard, buildPin } from '../inspectors/EvidenceCard';
 import { AddExtractionModal } from '../views/AddExtractionModal';
 import { useWorkbenchStore } from '../state/workbenchStore';
@@ -110,6 +111,7 @@ export const AppShell: React.FC = () => {
         Skip to workspace
       </a>
       <CaseBar onPickFile={pickFile} onPickFolder={pickFolder} />
+      <LoadErrors />
 
       <div className="flex-1 flex min-h-0">
         <div style={{ width: prefs.navCollapsed ? 56 : prefs.navWidth }} className="shrink-0 min-h-0">

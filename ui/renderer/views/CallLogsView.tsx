@@ -37,9 +37,10 @@ export const CallLogsView: React.FC = () => {
     return callLogs.filter((c) => {
       if (kind === 'CELLULAR' && c.callType !== 'CELLULAR_CDR') return false;
       if (kind === 'VOIP' && c.callType !== 'VOIP_APP') return false;
-      if (dir !== 'ALL' && c.direction !== dir) return false;
+      if (dir === 'MISSED') { if (!(c.direction === 'MISSED' || /missed/i.test(c.callResult || ''))) return false; }
+      else if (dir !== 'ALL' && c.direction !== dir) return false;
       if (!q) return true;
-      return [c.callerNumberOrId, c.callerName, c.calleeNumberOrId, c.calleeName, c.sourceApp, c.callResult].some((v) => !!v && String(v).toLowerCase().includes(q));
+      return [c.callerNumberOrId, c.callerName, c.calleeNumberOrId, c.calleeName, c.peerNumberOrId, c.sourceApp, c.callResult].some((v) => !!v && String(v).toLowerCase().includes(q));
     });
   }, [callLogs, kind, dir, query]);
 
@@ -51,6 +52,7 @@ export const CallLogsView: React.FC = () => {
     { key: 'app', label: 'App', width: '8rem', cell: (c) => present(c.sourceApp) || <Unset />, text: (c) => present(c.sourceApp) || 'not recorded' },
     { key: 'kind', label: 'Kind', width: '8rem', cell: (c) => (c.callType === 'VOIP_APP' ? 'App call' : 'Cellular'), text: (c) => (c.callType === 'VOIP_APP' ? 'App call' : 'Cellular') },
     { key: 'direction', label: 'Direction', width: '8rem', cell: (c) => DIRECTION_TEXT[c.direction] ?? <Unset />, text: (c) => DIRECTION_TEXT[c.direction] ?? 'not recorded' },
+    { key: 'peer', label: 'Other party', width: 'minmax(10rem,1fr)', cell: (c) => present(c.peerNumberOrId) || <Unset />, text: (c) => present(c.peerNumberOrId) || 'not recorded' },
     { key: 'from', label: 'From', width: 'minmax(10rem,1fr)', cell: (c) => party(c.callerNumberOrId, c.callerName) || <Unset />, text: (c) => party(c.callerNumberOrId, c.callerName) || 'not recorded' },
     { key: 'to', label: 'To', width: 'minmax(10rem,1fr)', cell: (c) => party(c.calleeNumberOrId, c.calleeName) || <Unset />, text: (c) => party(c.calleeNumberOrId, c.calleeName) || 'not recorded' },
     { key: 'duration', label: 'Duration', width: '8rem', align: 'right', cell: (c) => duration(c) || <Unset />, text: (c) => duration(c) || 'not recorded' },

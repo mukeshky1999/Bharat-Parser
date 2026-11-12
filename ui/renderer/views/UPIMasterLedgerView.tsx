@@ -28,7 +28,7 @@ const RECOVERY_TEXT: Record<string, string> = {
 const DIRECTION_TEXT: Record<string, string> = { DEBIT: 'Debit', CREDIT: 'Credit', COLLECT_REQUEST: 'Collect request', GHOST_INTENT: 'Intent, not completed' };
 const STATUS_TEXT: Record<string, string> = { SUCCESS: 'Success', FAILED: 'Failed', PENDING: 'Pending', ABANDONED_INTENT: 'Abandoned', UNKNOWN: 'Not established' };
 
-const inr = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+const inr = (n: number | null) => (n === null ? <span className="text-slate-400" title="The evidence has no amount for this record">not recorded</span> : `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`);
 
 /**
  * Payments found in the case, every app and device together. The filters are on recorded facts (direction, where the
@@ -65,8 +65,8 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
       if (app !== 'ALL' && (tx.sourceApp || 'App not recorded') !== app) return false;
       if (direction !== 'ALL' && tx.direction !== direction) return false;
       if (recovery === 'RECOVERED' && tx.provenance?.recoveryState !== 'WAL_RECOVERED' && tx.provenance?.recoveryState !== 'CARVED_UNALLOCATED') return false;
-      if (amount === 'BAND_40_50' && !(tx.amountInr >= 40000 && tx.amountInr <= 50000)) return false;
-      if (amount === 'OVER_1L' && !(tx.amountInr >= 100000)) return false;
+      if (amount === 'BAND_40_50' && !(tx.amountInr !== null && tx.amountInr >= 40000 && tx.amountInr <= 50000)) return false;
+      if (amount === 'OVER_1L' && !(tx.amountInr !== null && tx.amountInr >= 100000)) return false;
       if (clockOnly && !tx.clockTamperDetected) return false;
       if (!q) return true;
       return [tx.utrNumber, tx.appTransactionId, tx.payerVpa, tx.payeeVpa, tx.accountMask, tx.amountInr?.toString(), tx.sourceApp]
@@ -80,7 +80,7 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
       id: tx.id || tx.appTransactionId || `TX_${tx.provenance?.byteOffset}`,
       provenance: tx.provenance,
       timestamp: tx.timestamp,
-      notes: `INR ${tx.amountInr.toLocaleString('en-IN')} | UTR: ${tx.utrNumber || 'not recorded'} | Payee: ${tx.payeeVpa || 'not recorded'}`,
+      notes: `INR ${tx.amountInr === null ? 'not recorded' : tx.amountInr.toLocaleString('en-IN')} | UTR: ${tx.utrNumber || 'not recorded'} | Payee: ${tx.payeeVpa || 'not recorded'}`,
       itemType: 'Financial Transaction',
       rawData: tx,
     });
@@ -105,9 +105,10 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
     },
     { key: 'utr', label: 'UTR / reference', width: '11rem', cell: (t) => t.utrNumber || <Unset />, text: (t) => t.utrNumber || 'not recorded' },
     { key: 'app', label: 'App', width: '8rem', cell: (t) => t.sourceApp || <Unset />, text: (t) => t.sourceApp || 'not recorded' },
-    { key: 'amount', label: 'Amount', width: '9rem', align: 'right', cell: (t) => inr(t.amountInr), text: (t) => String(t.amountInr) },
+    { key: 'amount', label: 'Amount', width: '9rem', align: 'right', cell: (t) => inr(t.amountInr), text: (t) => (t.amountInr === null ? 'not recorded' : String(t.amountInr)) },
     { key: 'direction', label: 'Direction', width: '8rem', cell: (t) => DIRECTION_TEXT[t.direction] ?? <span className="text-slate-400" title="The evidence does not establish the direction">Not established</span>, text: (t) => DIRECTION_TEXT[t.direction] ?? 'not established' },
     { key: 'status', label: 'Status', width: '8rem', cell: (t) => (t.status ? STATUS_TEXT[t.status] ?? String(t.status) : <Unset />), text: (t) => (t.status ? STATUS_TEXT[t.status] ?? String(t.status) : 'not recorded') },
+    { key: 'other', label: 'Other party', width: 'minmax(10rem,1fr)', cell: (t) => t.counterpartyVpa || <Unset />, text: (t) => t.counterpartyVpa || 'not recorded' },
     { key: 'payer', label: 'Payer VPA / account', width: 'minmax(10rem,1fr)', cell: (t) => t.payerVpa || t.accountMask || <Unset />, text: (t) => t.payerVpa || t.accountMask || 'not recorded' },
     { key: 'payee', label: 'Payee VPA', width: 'minmax(10rem,1fr)', cell: (t) => t.payeeVpa || <Unset />, text: (t) => t.payeeVpa || 'not recorded' },
     { key: 'sources', label: 'Also found in', width: '10rem', cell: (t) => (t.corroboratedSources || []).join(', ') || <Unset />, text: (t) => (t.corroboratedSources || []).join('; ') || 'not recorded' },

@@ -3,6 +3,8 @@ import { forensicClient, TimelineEvent, TimelineGroup, TimelineResult } from '..
 import { usePreferences } from '../state/preferencesStore';
 import { RecordDetail, RecordRef, TagPills } from '../inspectors/RecordDetail';
 import { SavedFilters } from '../workspace/SavedFilters';
+import { useLatestRequest } from '../utils/latestRequest';
+import { whenText } from '../utils/timeText';
 
 const GROUPS: Array<{ id: TimelineGroup; label: string; help: string }> = [
   { id: 'fixed', label: 'Placed in time', help: 'The source gave a zone or an absolute time, so the instant is known. Listed in time order. A device clock that was wrong is not corrected.' },
@@ -13,11 +15,6 @@ const GROUPS: Array<{ id: TimelineGroup; label: string; help: string }> = [
 const PAGE = 100;
 const field = 'h-8 rounded bg-slate-950 border border-slate-700 px-2 text-slate-100 placeholder-slate-500';
 
-function whenText(e: TimelineEvent, tz: 'IST' | 'UTC'): string {
-  if (e.utc) return tz === 'IST' && e.ist ? e.ist : `${e.utc} UTC`;
-  if (e.local_clock) return `${e.local_clock} (local clock, zone not recorded)`;
-  return 'time not recorded';
-}
 
 /** Every record that has a time, from every table and device, in one list. Records without a fixed instant are counted apart. */
 export const TimelineView: React.FC = () => {
@@ -34,16 +31,19 @@ export const TimelineView: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<RecordRef | null>(null);
 
+  const latest = useLatestRequest();
   const load = useCallback(async (off: number) => {
+    const { isCurrent } = latest.begin();            // an older reply must not overwrite a newer one
     setBusy(true); setError('');
     const res = await forensicClient.getTimeline({
       group, from: from || undefined, to: to || undefined, application: app.trim() || undefined, tag: tag.trim() || undefined,
       limit: PAGE, offset: off, descending, bucket: group === 'fixed' ? 'day' : undefined,
     });
+    if (!isCurrent()) return;
     setBusy(false);
     if (res.error) { setError(res.error); setData(null); return; }
     setData(res.data);
-  }, [group, from, to, app, tag, descending]);
+  }, [group, from, to, app, tag, descending, latest]);
 
   useEffect(() => { setOffset(0); void load(0); }, [load]);
 
@@ -63,8 +63,8 @@ export const TimelineView: React.FC = () => {
         </div>
         <p className="text-slate-400 text-xs mb-3">{help}</p>
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <label className="text-xs text-slate-400">From <input type="date" aria-label="From date" value={from} onChange={(e) => setFrom(e.target.value)} className={field} /></label>
-          <label className="text-xs text-slate-400">To <input type="date" aria-label="To date" value={to} onChange={(e) => setTo(e.target.value)} className={field} /></label>
+          <label className="text-xs text-slate-400" title="The dates and the day bars are Indian Standard Time days, whichever zone the times are shown in">From (IST day) <input type="date" aria-label="From date" value={from} onChange={(e) => setFrom(e.target.value)} className={field} /></label>
+          <label className="text-xs text-slate-400" title="The dates and the day bars are Indian Standard Time days, whichever zone the times are shown in">To (IST day) <input type="date" aria-label="To date" value={to} onChange={(e) => setTo(e.target.value)} className={field} /></label>
           <input aria-label="Only this app" value={app} onChange={(e) => setApp(e.target.value)} placeholder="App (optional)" className={`${field} w-32`} />
           <input aria-label="Only records with this tag" value={tag} onChange={(e) => setTag(e.target.value)} placeholder="Tag (optional)" className={`${field} w-32`} />
           <SavedFilters scope="timeline" current={{ group, from, to, app, tag, descending }} isDefault={group === 'fixed' && !from && !to && !app && !tag && !descending}
@@ -77,14 +77,14 @@ export const TimelineView: React.FC = () => {
         {data && (
           <>
             {data.buckets && data.buckets.items.length > 0 && (
-              <figure className="mb-3" aria-label="Records per day">
+              <figure className="mb-3" aria-label="Records per Indian Standard Time day">
                 <div className="flex items-end gap-px h-16 overflow-x-auto">
                   {data.buckets.items.map((b) => (
                     <div key={b.start} title={`${b.start}: ${b.count}`} className="w-2 shrink-0 bg-cyan-600" style={{ height: `${Math.max(4, (b.count / max) * 100)}%` }} />
                   ))}
                 </div>
                 <figcaption className="text-[0.6875rem] text-slate-500">
-                  Records per day, {data.buckets.items[0].start} to {data.buckets.items[data.buckets.items.length - 1].start}
+                  Records per IST day, {data.buckets.items[0].start} to {data.buckets.items[data.buckets.items.length - 1].start}
                   {data.buckets.truncated ? ' (only part of the range is shown)' : ''}. Hover a bar for its count.
                 </figcaption>
               </figure>

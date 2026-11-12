@@ -44,19 +44,20 @@ export const BankAlertsView: React.FC = () => {
   useEffect(() => {
     if (!manifest) { setRows([]); return; }
     const ctl = new AbortController();
-    setLoading(true); setError('');
+    setLoading(true); setError(''); setRows([]);
     fetchAllRows('bank_alerts', ctl.signal)
-      .then(setRows)
-      .catch((e) => { if (e?.name !== 'AbortError') setError(e?.message || 'The alerts could not be loaded.'); })
-      .finally(() => setLoading(false));
+      .then((r) => { if (!ctl.signal.aborted) setRows(r); })
+      .catch((e) => { if (e?.name !== 'AbortError' && !ctl.signal.aborted) setError(e?.message || 'The alerts could not be loaded.'); })
+      .finally(() => { if (!ctl.signal.aborted) setLoading(false); });
     return () => ctl.abort();
   }, [manifest?.caseId, manifest?.evidenceFileName]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const kinds = useMemo(() => Array.from(new Set(rows.map((r) => String(r.Category)))).sort(), [rows]);
+  const NONE = '__none__';                                 // an alert with no kind recorded
+  const kinds = useMemo(() => Array.from(new Set(rows.map((r) => (r.Category === null || r.Category === undefined || r.Category === '' ? NONE : String(r.Category))))).sort(), [rows]);
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
-      if (category && r.Category !== category) return false;
+      if (category === NONE ? !(r.Category === null || r.Category === undefined || r.Category === '') : (category && r.Category !== category)) return false;
       if (!q) return true;
       return Object.values(r).some((v) => v !== null && String(v).toLowerCase().includes(q));
     });
@@ -117,7 +118,7 @@ export const BankAlertsView: React.FC = () => {
               <label className="text-slate-300 inline-flex items-center gap-2">Kind
                 <select aria-label="Kind of notice" value={category} onChange={(e) => setCategory(e.target.value)} className="h-8 rounded bg-slate-900 border border-slate-700 px-2 text-slate-100">
                   <option value="">All kinds</option>
-                  {kinds.map((k) => <option key={k} value={k}>{CATEGORY_TEXT[k] ?? k}</option>)}
+                  {kinds.map((k) => <option key={k} value={k}>{k === NONE ? 'Kind not recorded' : (CATEGORY_TEXT[k] ?? k)}</option>)}
                 </select>
               </label>
               <SavedFilters scope="bank_alerts" current={{ category, query }} isDefault={!category && !query}

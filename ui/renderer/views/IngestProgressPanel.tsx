@@ -12,10 +12,17 @@ export const IngestProgressPanel: React.FC<{ active: boolean }> = ({ active }) =
   useEffect(() => {
     if (!active) return;
     let alive = true;
+    let inFlight = false;                  // a slow reply must not be overtaken by a later request, or progress could run backwards
     const ctl = new AbortController();
     const tick = async () => {
-      const r = await forensicClient.getIngestProgress(0, ctl.signal);
-      if (alive && r) setP(r);
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const r = await forensicClient.getIngestProgress(0, ctl.signal);
+        if (alive && r) setP(r);
+      } finally {
+        inFlight = false;
+      }
     };
     void tick();
     const id = setInterval(tick, 700);

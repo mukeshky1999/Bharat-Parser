@@ -65,6 +65,7 @@ export function DataGrid<T>({
   const template = `3.5rem ${shown.map((c) => c.width).join(' ')}`;
 
   const ref = useRef<HTMLDivElement | null>(null);
+  const headerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewport, setViewport] = useState(600);
   useEffect(() => {
@@ -93,9 +94,11 @@ export function DataGrid<T>({
     onSelect(rows[next]);
     const el = ref.current;
     if (el) {
-      const top = next * rowHeight;
-      if (top < el.scrollTop) el.scrollTop = top;
-      else if (top + rowHeight > el.scrollTop + el.clientHeight) el.scrollTop = top + rowHeight - el.clientHeight;
+      // The sticky header sits inside the same scroll box, so a row's top is the header's height plus its place in the list.
+      const hh = headerRef.current?.offsetHeight ?? 32;
+      const rowTop = hh + next * rowHeight;
+      if (rowTop - hh < el.scrollTop) el.scrollTop = next * rowHeight;                       // just below the header
+      else if (rowTop + rowHeight > el.scrollTop + el.clientHeight) el.scrollTop = rowTop + rowHeight - el.clientHeight;
     }
   };
 
@@ -132,12 +135,12 @@ export function DataGrid<T>({
       </div>
 
       <div ref={ref} tabIndex={0} onKeyDown={onKey} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-        className="flex-1 overflow-auto min-h-0 outline-none" role="grid" aria-label={title} aria-rowcount={rows.length}>
+        className="flex-1 overflow-auto min-h-0 outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-inset" role="grid" aria-label={title} aria-rowcount={rows.length + 1}>
         {rows.length === 0 ? (
           <div className="p-10 text-center text-slate-400">{empty}</div>
         ) : (
           <div className="min-w-max">
-            <div role="row" className="sticky top-0 z-10 grid items-center gap-x-3 px-3 h-8 bg-slate-900 border-b border-slate-700 text-slate-300 font-medium" style={{ gridTemplateColumns: template }}>
+            <div ref={headerRef} role="row" className="sticky top-0 z-10 grid items-center gap-x-3 px-3 h-8 bg-slate-900 border-b border-slate-700 text-slate-300 font-medium" style={{ gridTemplateColumns: template }}>
               <span role="columnheader" className="text-right">#</span>
               {shown.map((c) => <span key={c.key} role="columnheader" className={c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}>{c.label}</span>)}
             </div>

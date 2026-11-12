@@ -112,6 +112,8 @@ export interface WorkbenchStoreState {
   pageSize: number;
 
   // Synchronized Selection & Hex Stream
+  /** Kinds of record that could not be read from the backend, with the reason. A list shown for one of them may be incomplete. */
+  loadErrors: Record<string, string>;
   selectedArtifact: SelectedArtifactState | null;
   hexWindow: HexWindowData | null;
   isLoadingHex: boolean;
@@ -155,17 +157,35 @@ let activeHexAbortController: AbortController | null = null;
 type BackendRow = Record<string, any>;
 
 /** Fetches every row of a category, page by page (the UI must never silently show only page 1). */
-async function fetchAllArtifactRows(category: string): Promise<{ rows: BackendRow[] } | null> {
+async function fetchAllArtifactRows(category: string): Promise<{ rows: BackendRow[]; error: string | null }> {
   const PAGE = 500;
   const rows: BackendRow[] = [];
   for (let offset = 0; offset < 1_000_000; offset += PAGE) {
     const res: any = await forensicClient.queryArtifacts(category, undefined, undefined, undefined, undefined, PAGE, offset);
-    if (!res || !Array.isArray(res.rows)) break;
+    // A failed page is not the last page: report it, so a short list is never shown as if it were complete.
+    if (!res || res.success === false || !Array.isArray(res.rows)) {
+      return { rows, error: (res && res.error) || 'The backend did not return the records.' };
+    }
     rows.push(...res.rows);
     const total = typeof res.total === 'number' ? res.total : (typeof res.total_count === 'number' ? res.total_count : null);
     if (res.rows.length < PAGE || (total !== null && rows.length >= total)) break;
   }
-  return { rows };
+  return { rows, error: null };
+}
+
+/** A number from the evidence, or null when the field is empty or not a number (never 0 for "unknown"). */
+export function numberOrNull(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Call parties from the direction. The device owner is not named by the evidence, so "This phone" is a label, not an identity. */
+export function callParties(direction: string, peerNumber: string, peerName: string) {
+  if (direction === 'OUTGOING') return { callerNumberOrId: '', callerName: 'This phone', calleeNumberOrId: peerNumber, calleeName: peerName };
+  if (direction === 'INCOMING') return { callerNumberOrId: peerNumber, callerName: peerName, calleeNumberOrId: '', calleeName: 'This phone' };
+  // missed, rejected or not recorded: the evidence does not say who called whom
+  return { callerNumberOrId: '', callerName: '', calleeNumberOrId: '', calleeName: '' };
 }
 
 /** X-13: a transaction time is UTC/IST only when the source fixed the instant; otherwise the clock string is shown as recorded. */
@@ -260,6 +280,7 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
   currentPage: 1,
   pageSize: 100,
 
+  loadErrors: {},
   selectedArtifact: null,
   hexWindow: null,
   isLoadingHex: false,
@@ -429,6 +450,11 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
     try {
       const summary = await forensicClient.getCaseSummary();
       if (summary && summary.loaded) {
+        // Nothing of the previous case may stay on screen: the lists, the open record and its bytes start empty.
+        set({
+          upiTransactions: [], chats: [], contacts: [], callLogs: [], osSpillovers: [], loadErrors: {},
+          selectedArtifact: null, hexWindow: null, hexError: null, isLoadingHex: false,
+        });
         set({
           integrity: summary.hashes && summary.hashes.sha256 ? {
             preSha256: String(summary.hashes.sha256),
@@ -444,8 +470,8 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
             calculatedAt: summary.hashes.calculatedAt || '' // not recorded: never use the time the page was opened
           } : null,
           caseManifest: summary.extractions?.[0] ? {
-            caseId: summary.case_id || 'CASE_01',
-            caseNumber: summary.case_id || 'CASE_01',
+            caseId: summary.case_id || '',
+            caseNumber: summary.case_id || '',
             // Case particulars come from the examiner, never from placeholders (review U-07).
             firNumber: '',
             policeStation: '',
@@ -472,7 +498,13 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
           fetchAllArtifactRows('calls')
         ]);
 
-        if (txRes && txRes.rows && txRes.rows.length > 0) {
+        const errors: Record<string, string> = {};
+        for (const [label, res] of [['payments', txRes], ['chats', chatRes], ['contacts', contactRes], ['calls', callRes]] as const) {
+          if (res.error) errors[label] = res.error;
+        }
+        set({ loadErrors: errors });
+
+        {
           set({
             upiTransactions: txRes.rows.map((r: any) => {
               const direction = mapTxDirection(r.Type ?? r.Direction);
@@ -484,11 +516,13 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
                 utrNumber: r.Bank_Ref_No || (hasId ? r.Transaction_ID : '') || '',
                 appTransactionId: hasId ? r.Transaction_ID : '',
                 sourceApp: r.Application || 'UPI',
-                payerVpa: direction === 'DEBIT' ? owner : counterparty,
-                payeeVpa: direction === 'CREDIT' ? owner : counterparty,
+                // Only a known direction says who paid whom; otherwise neither side is named, only the other party.
+                payerVpa: direction === 'DEBIT' ? owner : direction === 'CREDIT' ? counterparty : null,
+                payeeVpa: direction === 'CREDIT' ? owner : direction === 'DEBIT' ? counterparty : null,
+                counterpartyVpa: counterparty || null,
                 accountMask: r.Account || '',
                 ifscCode: null,
-                amountInr: Number(r.Amount) || 0,
+                amountInr: numberOrNull(r.Amount),
                 currency: 'INR',
                 direction,
                 status: mapTxStatus(r.Status),
@@ -501,7 +535,7 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
           });
         }
 
-        if (chatRes && chatRes.rows && chatRes.rows.length > 0) {
+        {
           set({
             chats: chatRes.rows.map((r: any) => ({
               id: `${r.Message_ID || 'MSG'}#${r.id}`,
@@ -526,7 +560,7 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
           });
         }
 
-        if (contactRes && contactRes.rows && contactRes.rows.length > 0) {
+        {
           set({
             contacts: contactRes.rows.map((r: any) => ({
               id: `CNT_${r.id}`,
@@ -540,16 +574,14 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
           });
         }
 
-        if (callRes && callRes.rows && callRes.rows.length > 0) {
+        {
           set({
             callLogs: callRes.rows.map((r: any) => ({
               id: `CALL_${r.id}`,
-              callType: (r.Call_Type === 'VOIP' || (r.Application && r.Application !== 'Cellular')) ? 'VOIP_APP' : 'CELLULAR_CDR',
+              callType: (/^voip/i.test(String(r.Call_Type ?? '')) || (r.Application && r.Application !== 'Cellular')) ? 'VOIP_APP' : 'CELLULAR_CDR',
               direction: mapCallDirection(r.Direction),
-              callerNumberOrId: r.Caller || r.Peer || '', // empty = not recorded
-              callerName: r.Peer || '',
-              calleeNumberOrId: r.Callee || '',
-              calleeName: '',
+              ...callParties(mapCallDirection(r.Direction), String(r.Peer ?? ''), ''), // empty = not recorded
+              peerNumberOrId: String(r.Peer ?? ''),
               durationSeconds: r.Duration_Sec === null || r.Duration_Sec === undefined || r.Duration_Sec === '' ? -1 : Number(r.Duration_Sec), // -1 = not recorded
               callResult: r.Call_Result || '',
               timestamp: normalizeTimestamp(r.Timestamp_IST || '', 'ISO_8601'),
@@ -564,6 +596,10 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
           dualHashes: null,
           integrity: null,
           caseManifest: null,
+          loadErrors: {},
+          selectedArtifact: null,
+          hexWindow: null,
+          hexError: null,
           upiTransactions: [],
           chats: [],
           contacts: [],

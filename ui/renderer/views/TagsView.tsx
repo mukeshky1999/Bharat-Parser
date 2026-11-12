@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { forensicClient, TagSummary, TaggedRecord } from '../api/forensicClient';
 import { RecordDetail, RecordRef } from '../inspectors/RecordDetail';
 import { useUi } from '../state/uiStore';
+import { useLatestRequest } from '../utils/latestRequest';
 
 const PAGE = 100;
 
@@ -14,6 +15,7 @@ export const TagsView: React.FC = () => {
   const [detachedTotal, setDetachedTotal] = useState(0);
   const [current, setCurrent] = useState<string>('');
   const [records, setRecords] = useState<TaggedRecord[]>([]);
+  const [recordsTag, setRecordsTag] = useState<string>('');   // the tag the listed records really belong to
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [error, setError] = useState('');
@@ -28,20 +30,24 @@ export const TagsView: React.FC = () => {
     setDetachedTotal(res.data?.detached_total ?? 0);
   }, []);
 
+  const latest = useLatestRequest();
   const loadRecords = useCallback(async (tag: string, off: number) => {
-    if (!tag) { setRecords([]); setTotal(0); return; }
+    const { isCurrent } = latest.begin();
+    if (!tag) { setRecords([]); setTotal(0); setRecordsTag(''); return; }
     const res = await forensicClient.getTaggedRecords(tag, { limit: PAGE, offset: off });
-    if (res.error) { setError(res.error); return; }
+    if (!isCurrent()) return;                          // a newer choice has been made
+    if (res.error) { setError(res.error); setRecords([]); setTotal(0); setRecordsTag(tag); return; }
     setRecords(res.data?.records ?? []);
     setTotal(res.data?.total ?? 0);
-  }, []);
+    setRecordsTag(tag);
+  }, [latest]);
 
   useEffect(() => { void loadTags(); }, [loadTags]);
   useEffect(() => { setOffset(0); void loadRecords(current, 0); }, [current, loadRecords]);
 
   const remove = async (r: TaggedRecord) => {
-    if (r.id === null) return;
-    const res = await forensicClient.untagRecords(current, [{ table: r.table, id: r.id }]);
+    if (r.id === null || recordsTag !== current) return;   // only the tag these records were listed under
+    const res = await forensicClient.untagRecords(recordsTag, [{ table: r.table, id: r.id }]);
     if (res.error) { setError(res.error); return; }
     await loadTags();
     await loadRecords(current, offset);
@@ -77,10 +83,10 @@ export const TagsView: React.FC = () => {
           <p className="text-slate-400">Choose a tag to see its records. To tag a record, open it from Search, the Timeline or a table and use the tag buttons in the record panel.</p>
         ) : (
           <>
-            <h2 className="text-slate-50 font-semibold mb-1">{current}: {total} record{total === 1 ? '' : 's'}</h2>
-            {records.length === 0 && <p className="text-slate-500">No records under this tag.</p>}
+            <h2 className="text-slate-50 font-semibold mb-1">{current}{recordsTag === current ? `: ${total} record${total === 1 ? '' : 's'}` : ': loading…'}</h2>
+            {recordsTag === current && records.length === 0 && !error && <p className="text-slate-500">No records under this tag.</p>}
             <ul className="space-y-1">
-              {records.map((r, i) => (
+              {(recordsTag === current ? records : []).map((r, i) => (
                 <li key={`${r.table}-${r.id}-${i}`} className="rounded border border-slate-800 bg-slate-900 p-2">
                   <div className="flex justify-between gap-2">
                     <button className="text-left min-w-0 flex-1 hover:underline" disabled={r.id === null} onClick={() => r.id !== null && setOpen({ table: r.table, id: r.id })}>

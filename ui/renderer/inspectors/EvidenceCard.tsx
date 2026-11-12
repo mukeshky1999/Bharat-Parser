@@ -99,7 +99,7 @@ function LinksTab({ artifact }: { artifact: SelectedArtifactState }) {
   const links = useMemo(() => {
     const out: Array<{ why: string; label: string; open: () => void }> = [];
     const utr = typeof raw.utrNumber === 'string' && raw.utrNumber.length >= 8 ? raw.utrNumber : null;
-    const cpty = raw.payeeVpa || raw.payerVpa || null;
+    const cpty = raw.counterpartyVpa || raw.payeeVpa || raw.payerVpa || null;
     if (!utr && !cpty) return out;
     for (const t of upi) {
       if (t.id === artifact.id) continue;

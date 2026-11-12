@@ -5,6 +5,7 @@ import { useWorkbenchStore } from '../state/workbenchStore';
 import { RecordDetail, RecordRef } from '../inspectors/RecordDetail';
 import { BulkTagBar } from '../inspectors/BulkTagBar';
 import { SavedFilters } from '../workspace/SavedFilters';
+import { useLatestRequest } from '../utils/latestRequest';
 
 const MODES: Array<{ id: SearchMode; label: string; help: string }> = [
   { id: 'keyword', label: 'Words', help: 'Every word must appear, in any order. Indic scripts work.' },
@@ -30,22 +31,29 @@ export const SearchView: React.FC = () => {
   const [open, setOpen] = useState<RecordRef | null>(null);
   const [picked, setPicked] = useState<Record<string, RecordRef>>({});
 
+  // The query behind the results on screen. Paging and "refresh after tagging" use this, not the box, which may have been edited.
+  const [shown, setShown] = useState<{ q: string; m: SearchMode; a: string } | null>(null);
+  const latest = useLatestRequest();
+
   const run = useCallback(async (q: string, m: SearchMode, a: string, off: number) => {
-    if (!q.trim()) { setResult(null); return; }
+    const { isCurrent } = latest.begin();            // an older reply must not overwrite a newer one
+    if (!q.trim()) { setResult(null); setShown(null); setBusy(false); return; }
     setBusy(true); setError('');
     const res = await forensicClient.searchCase(q.trim(), { mode: m, application: a.trim() || undefined, limit: PAGE, offset: off });
+    if (!isCurrent()) return;
     setBusy(false);
-    if (res.error) { setError(res.error); setResult(null); return; }
+    if (res.error) { setError(res.error); setResult(null); setShown(null); return; }
     setResult(res.data);
-  }, []);
+    setShown({ q, m, a });
+  }, [latest]);
 
-  // arriving from the command palette with a text already typed
+  // arriving from the command palette: the text is already in the box, so run it when the view opens, and again when it changes
   useEffect(() => {
-    if (searchQuery && searchQuery !== text) { setText(searchQuery); setOffset(0); void run(searchQuery, mode, app, 0); }
+    if (searchQuery.trim()) { setText(searchQuery); setOffset(0); void run(searchQuery, mode, app, 0); }
   }, [searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = (e: React.FormEvent) => { e.preventDefault(); setOffset(0); setSearchQuery(text); void run(text, mode, app, 0); };
-  const go = (off: number) => { setOffset(off); void run(text, mode, app, off); };
+  const go = (off: number) => { if (!shown) return; setOffset(off); void run(shown.q, shown.m, shown.a, off); };
   const help = MODES.find((m) => m.id === mode)?.help;
 
   return (
@@ -91,7 +99,7 @@ export const SearchView: React.FC = () => {
                 for (const r of recs) { if (on) next[`${r.table}-${r.id}`] = r; else delete next[`${r.table}-${r.id}`]; }
                 return next;
               })}
-              onDone={() => void run(text, mode, app, offset)}
+              onDone={() => { if (shown) void run(shown.q, shown.m, shown.a, offset); }}
             />
             <ul className="space-y-2">
               {result.hits.map((h) => (
@@ -103,7 +111,7 @@ export const SearchView: React.FC = () => {
                     <div className="flex flex-wrap items-center gap-x-3 text-[0.75rem] text-slate-400">
                       <span className="text-slate-200">{h.table} #{h.id}</span>
                       <span>{h.application || 'app not recorded'}</span>
-                      <span>{h.time || 'time not recorded'}</span>
+                      <span>{h.time ? `${h.time}${h.time_basis ? ` (${h.time_basis})` : ''}` : 'time not recorded'}</span>
                       <span>found in {h.matched_fields.join(', ') || 'field not named'}</span>
                     </div>
                     <div className="text-slate-100 break-words">{h.snippet}</div>

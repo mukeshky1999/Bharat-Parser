@@ -27,6 +27,8 @@ export interface PaginatedRecordsResponse {
   total_pages: number;
   apps_available: string[];
   execution_time_ms?: number;
+  /** Set when success is false: why the records could not be read. An empty `rows` then means "unknown", not "none". */
+  error?: string;
 }
 
 export interface ChatThreadsResponse {
@@ -182,6 +184,8 @@ export interface SearchHit {
   application: string;
   source_file: string;
   time: string;
+  /** What `time` is: "IST", "UTC", or "local clock, zone not recorded"; null when the record has no time. */
+  time_basis?: string | null;
   /** Parser and version that produced the record; null when it was not recorded. */
   decoded_by: string | null;
   matched_fields: string[];
@@ -1037,6 +1041,7 @@ class ForensicClient {
     if (sortCol) params.append('sort_col', sortCol);
     if (sortAsc) params.append('sort_asc', 'true');
 
+    let failure = '';
     try {
       const res = await this.fetchApi<PaginatedRecordsResponse>(`/api/artifacts/query?${params.toString()}`, {
         signal
@@ -1044,13 +1049,15 @@ class ForensicClient {
       if (res.data && res.data.success) {
         return res.data;
       }
-    } catch {
-      // Fall through
+      failure = (res as any)?.error || (res.data as any)?.detail || 'The backend did not return the records.';
+    } catch (e) {
+      failure = e instanceof Error ? e.message : 'The request failed.';
     }
 
     const calculatedPage = Math.floor(offset / Math.max(1, limit)) + 1;
     return {
       success: false,
+      error: String(failure),
       category,
       table_name: category,
       rows: [],

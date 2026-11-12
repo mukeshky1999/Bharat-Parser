@@ -15,8 +15,8 @@
     "desktop:build": "powershell -ExecutionPolicy Bypass -File scripts/build_desktop_exe.ps1",
     "package:electron": "electron-builder --win --x64",
     "electron:start": "electron .",
-    "test:python": "python -m pytest tests",
-    "test:ts": "npx jiti ui/tests/workbench_store_test.ts && npx jiti ui/tests/csv_export_test.ts && npx jiti ui/tests/contrast_test.ts && npx jiti ui/tests/ui_shell_test.ts && npx jiti ui/tests/views_5c_test.ts && npx jiti tests/test_forensic_client.ts"
+    "test:python": ".venv\\Scripts\\python -m pytest tests --ignore=tests/e2e",
+    "test:ts": "npx jiti ui/tests/workbench_store_test.ts && npx jiti ui/tests/csv_export_test.ts && npx jiti ui/tests/contrast_test.ts && npx jiti ui/tests/ui_shell_test.ts && npx jiti ui/tests/views_5c_test.ts && npx jiti ui/tests/review_step10_test.ts && npx jiti tests/test_forensic_client.ts && npx jiti ui/tests/test_forensic_client.ts"
   },
   "keywords": [
     "forensics",

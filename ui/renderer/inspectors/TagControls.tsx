@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Tag } from 'lucide-react';
 import { forensicClient, TagSummary } from '../api/forensicClient';
 import { useUi } from '../state/uiStore';
+import { useLatestRequest } from '../utils/latestRequest';
 
 export interface RecordRef { table: string; id: number }
 
@@ -33,15 +34,22 @@ export const TagControls: React.FC<{
   const [busy, setBusy] = useState(false);
   const bumpTags = useUi((s) => s.bumpTags);
 
+  const latest = useLatestRequest();
   const load = useCallback(async () => {
+    const { isCurrent } = latest.begin();             // a reply for a record that is no longer open is dropped
     const res = await forensicClient.getRecord(record.table, record.id);
+    if (!isCurrent()) return;
     setError(res.error ?? '');
     setTags(res.tags);
     onLoaded?.(res.data, res.error ?? '');
-  }, [record.table, record.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [record.table, record.id, latest]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => { void forensicClient.getTags().then((r) => setKnown(r.data?.tags ?? [])); }, [record.table, record.id]);
+  useEffect(() => {
+    let alive = true;
+    void forensicClient.getTags().then((r) => { if (alive) setKnown(r.data?.tags ?? []); });
+    return () => { alive = false; };
+  }, [record.table, record.id]);
 
   const toggle = async (tag: string, on: boolean) => {
     setBusy(true); setError('');

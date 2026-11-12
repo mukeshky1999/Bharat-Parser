@@ -611,7 +611,7 @@ export const ExtractionSummaryTab: React.FC<ExtractionSummaryTabProps> = ({
               </h2>
             </div>
             <span className="text-[0.6875rem] font-mono text-cyan-300 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800/60">
-              Cross-App Corroboration Engine Verified
+              Compiled from the apps' own records
             </span>
           </div>
 

@@ -1212,7 +1212,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
               <ImageIcon className="w-16 h-16 mx-auto text-teal-400" />
               <div className="text-xs font-mono font-semibold text-slate-200">{activeImageModal}</div>
               <div className="text-[0.6875rem] text-slate-500 font-mono">
-                Decrypted & verified from VFS physical stream. SHA-256 match validated.
+                This is the path recorded for the attachment. The tool does not display the file here; use the media library to see recorded hashes.
               </div>
             </div>
           </div>

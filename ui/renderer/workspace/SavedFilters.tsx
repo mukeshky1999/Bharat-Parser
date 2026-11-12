@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { forensicClient, SavedFilter } from '../api/forensicClient';
+import { useWorkbenchStore } from '../state/workbenchStore';
+import { useLatestRequest } from '../utils/latestRequest';
 
 export type FilterScope = 'upi_ledger' | 'calls' | 'search' | 'timeline' | 'crypto_custodial' | 'crypto_p2p' | 'crypto_bridge' | 'crypto_addresses' | 'bank_alerts';
 
@@ -19,11 +21,18 @@ export const SavedFilters: React.FC<{
   const [name, setName] = useState('');
   const [msg, setMsg] = useState('');
 
+  const caseId = useWorkbenchStore((s) => s.caseManifest?.caseId ?? '');   // another case has its own saved filters
+  const [loadError, setLoadError] = useState('');
+  const latest = useLatestRequest();
   const load = useCallback(async () => {
+    const { isCurrent } = latest.begin();
     const res = await forensicClient.getSavedFilters(scope);
+    if (!isCurrent()) return;
+    if (res.error) { setLoadError(res.error); setFilters([]); return; }
+    setLoadError('');
     setFilters(res.data?.filters ?? []);
-  }, [scope]);
-  useEffect(() => { void load(); }, [load]);
+  }, [scope, latest]);
+  useEffect(() => { void load(); }, [load, caseId]);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,7 +45,8 @@ export const SavedFilters: React.FC<{
   };
 
   const remove = async (n: string) => {
-    await forensicClient.removeSavedFilter(scope, n);
+    const res = await forensicClient.removeSavedFilter(scope, n);
+    if (res.error) setMsg(`Could not delete “${n}”: ${res.error}`);
     await load();
   };
 
@@ -46,7 +56,8 @@ export const SavedFilters: React.FC<{
         Saved filters{filters.length ? ` (${filters.length})` : ''}
       </summary>
       <div className="absolute z-20 mt-1 w-80 rounded border border-slate-700 bg-slate-900 p-2 shadow-xl text-slate-200">
-        {filters.length === 0 ? <p className="text-slate-400 text-xs">No saved filters on this screen yet.</p> : (
+        {loadError ? <p role="alert" className="text-rose-300 text-xs mb-2">Saved filters could not be read: {loadError}</p>
+          : filters.length === 0 ? <p className="text-slate-400 text-xs">No saved filters on this screen yet.</p> : (
           <ul className="mb-2 space-y-1">
             {filters.map((f) => (
               <li key={f.name} className="flex items-center justify-between gap-2">

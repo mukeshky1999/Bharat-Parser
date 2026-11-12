@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import { forensicClient } from '../api/forensicClient';
 import { useWorkbenchStore } from '../state/workbenchStore';
 import { Segmented } from '../workspace/DataGrid';
+import { useLatestRequest } from '../utils/latestRequest';
 
 type Mode = 'network' | 'sankey';
 const btn = 'h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40';
@@ -33,35 +34,44 @@ export const MuleLinkGraphTab: React.FC = () => {
   const [chain, setChain] = useState<any | null>(null);
   const [tracing, setTracing] = useState(false);
 
+  const latestSankey = useLatestRequest();
+  const latestGraph = useLatestRequest();
+
   const loadSankey = useCallback(async () => {
+    const { isCurrent } = latestSankey.begin();
     setLoadingSankey(true);
+    setSankeySvg('');                       // the drawing of the previous case or device must not stay if this one fails
     try {
       const svg = await forensicClient.getSankeySvg();
-      if (svg) setSankeySvg(svg);
+      if (isCurrent() && svg) setSankeySvg(svg);
     } catch {
-      setSankeySvg('');
+      if (isCurrent()) setSankeySvg('');
     } finally {
-      setLoadingSankey(false);
+      if (isCurrent()) setLoadingSankey(false);
     }
-  }, []);
+  }, [latestSankey]);
 
   const loadGraph = useCallback(async () => {
+    const { isCurrent } = latestGraph.begin();
     setLoadingGraph(true);
+    setNetworkHtml(''); setAlerts([]); setRoles([]);   // nothing of the earlier drawing stays if this load fails
     try {
       void loadSankey();
       const res = await forensicClient.authFetch(forensicClient.getNetworkHtmlUrl());
-      if (res.ok) setNetworkHtml(await res.text());
+      const html = res.ok ? await res.text() : '';
       const summary = await forensicClient.getCaseSummary();
+      if (!isCurrent()) return;
+      setNetworkHtml(html);
       if (summary) {
         setAlerts(summary.mule_alerts || []);
         setRoles(summary.syndicate_roles || []);
       }
     } catch {
-      setNetworkHtml('');
+      if (isCurrent()) setNetworkHtml('');
     } finally {
-      setLoadingGraph(false);
+      if (isCurrent()) setLoadingGraph(false);
     }
-  }, [loadSankey]);
+  }, [loadSankey, latestGraph]);
 
   useEffect(() => { void loadGraph(); }, [loadGraph, store.caseManifest]);
 

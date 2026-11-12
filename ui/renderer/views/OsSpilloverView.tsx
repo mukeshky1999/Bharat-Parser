@@ -1,118 +1,78 @@
-import React from 'react';
-import { useWorkbenchStore } from '../state/workbenchStore';
-import { OsSpilloverArtifact } from '../../shared/forensic-types';
-import { Bell, Key, Clipboard, Camera, Clock, ShieldAlert, FileText } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useWorkbenchStore, parseProvenance } from '../state/workbenchStore';
+import { fetchAllRows } from '../utils/artifactRows';
+import { DataGrid, FilterInput, GridColumn, Unset } from '../workspace/DataGrid';
 
+type Row = Record<string, any>;
+
+const text = (v: unknown) => (v === null || v === undefined || v === '' ? '' : String(v));
+const cell = (v: unknown) => (text(v) ? text(v) : <Unset />);
+
+/**
+ * Traces the operating system kept outside the apps' own databases (notification logs, keyboard caches, clipboard,
+ * app-switcher snapshots, usage history), as the case holds them. Each row is what was recorded; the tool does not
+ * rank any row as more valuable than another.
+ */
 export const OsSpilloverView: React.FC = () => {
-  const { osSpillovers, setSelectedArtifact, selectedArtifact } = useWorkbenchStore();
+  const manifest = useWorkbenchStore((s) => s.caseManifest);
+  const selected = useWorkbenchStore((s) => s.selectedArtifact);
+  const setSelectedArtifact = useWorkbenchStore((s) => s.setSelectedArtifact);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
 
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case 'NOTIFICATION_LOG':
-        return <Bell className="w-3.5 h-3.5 text-yellow-400" />;
-      case 'KEYBOARD_CACHE':
-        return <Key className="w-3.5 h-3.5 text-purple-400" />;
-      case 'CLIPBOARD':
-        return <Clipboard className="w-3.5 h-3.5 text-cyan-400" />;
-      case 'APP_SWITCHER_SNAPSHOT':
-        return <Camera className="w-3.5 h-3.5 text-rose-400" />;
-      case 'TIMELINE_USAGE':
-        return <Clock className="w-3.5 h-3.5 text-emerald-400" />;
-      default:
-        return <FileText className="w-3.5 h-3.5 text-slate-400" />;
-    }
+  useEffect(() => {
+    if (!manifest) { setRows([]); return; }
+    const ctl = new AbortController();
+    setLoading(true); setError(''); setRows([]);
+    fetchAllRows('os_spillover', ctl.signal)
+      .then((r) => { if (!ctl.signal.aborted) setRows(r); })
+      .catch((e) => { if (e?.name !== 'AbortError' && !ctl.signal.aborted) setError(e?.message || 'The traces could not be loaded.'); })
+      .finally(() => { if (!ctl.signal.aborted) setLoading(false); });
+    return () => ctl.abort();
+  }, [manifest?.caseId, manifest?.evidenceFileName]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => Object.values(r).some((v) => v !== null && String(v).toLowerCase().includes(q)));
+  }, [rows, query]);
+
+  const columns: Array<GridColumn<Row>> = [
+    { key: 'time', label: 'Time (IST)', width: '14rem', cell: (r) => cell(text(r.Timestamp_IST).substring(0, 19)), text: (r) => text(r.Timestamp_IST).substring(0, 19) || 'not recorded' },
+    { key: 'vector', label: 'Kind of trace', width: '13rem', cell: (r) => cell(r.Vector_Type), text: (r) => text(r.Vector_Type) || 'not recorded' },
+    { key: 'pkg', label: 'App package', width: '14rem', cell: (r) => cell(r.Package_Name), text: (r) => text(r.Package_Name) || 'not recorded' },
+    { key: 'snippet', label: 'Text recorded', width: 'minmax(20rem,3fr)', cell: (r) => cell(r.Content_Snippet), text: (r) => text(r.Content_Snippet) || 'not recorded' },
+    { key: 'entity', label: 'Value found in it', width: '14rem', cell: (r) => cell(r.Extracted_Entity), text: (r) => text(r.Extracted_Entity) || 'not recorded' },
+    { key: 'device', label: 'Device', width: '7rem', cell: (r) => cell(r.Evidence_Item), text: (r) => text(r.Evidence_Item) || 'not recorded' },
+    { key: 'prov', label: 'Where it came from', width: 'minmax(12rem,1fr)', cell: (r) => cell(r.Forensic_Provenance), text: (r) => text(r.Forensic_Provenance) || 'not recorded' },
+  ];
+
+  const select = (r: Row) => {
+    const summary = { case_id: manifest?.caseId ?? '', evidence_path: manifest?.evidencePath ?? '' };
+    void setSelectedArtifact({
+      id: `SPILL_${r.id}`,
+      provenance: parseProvenance(r.Forensic_Provenance, summary, 'os_spillover', ''),
+      itemType: 'Device trace',
+      notes: `${text(r.Vector_Type) || 'Kind of trace not recorded'}${text(r.Package_Name) ? ` · ${text(r.Package_Name)}` : ''}`,
+      rawData: r,
+    });
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-950 overflow-hidden select-text">
-      {/* Header */}
-      <div className="h-10 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between text-xs shrink-0 select-none">
-        <div className="flex items-center space-x-2">
-          <ShieldAlert className="w-4 h-4 text-cyan-400" />
-          <span className="font-bold text-slate-100">OS-Level Privacy Spillover & Ephemeral Recovery</span>
-          <span className="text-[0.6875rem] text-slate-400 font-mono">({osSpillovers.length} Artifacts)</span>
-        </div>
-        <div className="text-[0.6875rem] text-slate-400 font-mono">
-          Notification Logs • Gboard Dictionaries • App Switcher CE Snapshots • UsageStats
-        </div>
-      </div>
-
-      {/* Grid */}
-      <div className="flex-1 overflow-auto">
-        <table className="w-full text-left text-[0.6875rem] font-mono border-collapse">
-          <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 uppercase text-[0.6875rem] sticky top-0 z-10">
-            <tr>
-              <th className="p-2 w-10">#</th>
-              <th className="p-2 w-48">Spillover Vector</th>
-              <th className="p-2 w-48">Target Package / App</th>
-              <th className="p-2">Extracted Forensic Value / Snippet</th>
-              <th className="p-2 w-64">High-Value Target Indicator</th>
-              <th className="p-2 w-44">Timestamp (IST +05:30)</th>
-              <th className="p-2 w-24">Byte Offset</th>
-              <th className="p-2 w-28">Recovery State</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800/60 bg-slate-950">
-            {osSpillovers.map((spill, idx) => {
-              const isSelected = selectedArtifact?.id === spill.id;
-              const hexOffset = `0x${spill.provenance.byteOffset.toString(16).toUpperCase().padStart(8, '0')}`;
-
-              return (
-                <tr
-                  key={spill.id}
-                  onClick={() => {
-                    setSelectedArtifact({
-                      id: spill.id,
-                      provenance: spill.provenance,
-                      timestamp: spill.timestamp,
-                      itemType: 'OS_SPILLOVER',
-                      rawData: spill
-                    });
-                  }}
-                  className={`cursor-pointer transition-colors ${
-                    isSelected
-                      ? 'bg-cyan-950/40 text-cyan-100 border-l-2 border-cyan-500'
-                      : 'hover:bg-slate-900/60 text-slate-300'
-                  }`}
-                >
-                  <td className="p-2 text-slate-500">{idx + 1}</td>
-                  <td className="p-2">
-                    <div className="flex items-center space-x-1.5 font-bold text-slate-200">
-                      {getCategoryIcon(spill.category)}
-                      <span className="text-[0.6875rem]">{spill.category}</span>
-                    </div>
-                  </td>
-                  <td className="p-2 font-mono text-[0.6875rem] text-slate-400 truncate max-w-[180px]" title={spill.sourceApp}>
-                    {spill.sourceApp || 'System'}
-                  </td>
-                  <td className="p-2 font-sans text-xs text-slate-200 leading-snug">
-                    <div className="font-semibold text-slate-100">{spill.title}</div>
-                    <div className="text-[0.6875rem] text-slate-400 mt-0.5">{spill.snippet}</div>
-                  </td>
-                  <td className="p-2">
-                    {spill.targetData && (
-                      <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60 font-mono text-[0.6875rem] font-bold inline-block">
-                        {spill.targetData}
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-2 text-slate-300 text-[0.6875rem] whitespace-nowrap">
-                    {spill.timestamp.istFormatted.substring(0, 19)}
-                  </td>
-                  <td className="p-2 text-amber-400 font-bold text-[0.6875rem]">
-                    {hexOffset}
-                  </td>
-                  <td className="p-2">
-                    <span className="text-[0.6875rem] bg-purple-950 text-purple-300 border border-purple-800/60 px-1.5 py-0.2 rounded font-mono font-bold">
-                      [OS SPILLOVER]
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-slate-950">
+      {error && <p role="alert" className="shrink-0 px-4 pt-2 text-rose-300">{error} What is listed below may be incomplete.</p>}
+      {loading ? <div className="flex-1 p-10 text-center text-slate-400" role="status">Loading device traces…</div> : (
+        <DataGrid<Row>
+          tags={{ table: 'os_spillover', idOf: (r) => (Number.isFinite(Number(r.id)) ? Number(r.id) : null) }}
+          tableId="os_spillover" title="Device traces outside the apps" columns={columns} rows={shown} totalBeforeFilter={rows.length}
+          rowKey={(r, i) => `s${r.id ?? i}`} selectedKey={selected?.id?.startsWith('SPILL_') ? `s${selected.id.slice(6)}` : null}
+          onSelect={select} exportName="device_traces.csv"
+          toolbar={<FilterInput label="Search the traces" value={query} onChange={setQuery} placeholder="App, text, value…" />}
+          empty={rows.length === 0 ? (manifest ? 'No device trace was found in the evidence, or the reader found none.' : 'No case is open.') : 'No trace matches the search.'}
+        />
+      )}
     </div>
   );
 };

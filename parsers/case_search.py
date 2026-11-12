@@ -150,6 +150,17 @@ def _snippet(value: str, needles: Sequence[str], pattern: Optional["re.Pattern[s
     return ("…" if a else "") + text[a:b] + ("…" if b < len(text) else "")
 
 
+def _time_and_basis(row: Dict[str, Any]) -> Tuple[str, Optional[str]]:
+    """The record's time and what it is: Indian time, UTC, or a local clock whose zone was not recorded."""
+    for col, basis in (("Timestamp_IST", "IST"), ("Timestamp_UTC", "UTC"), ("Received_IST", "IST"), ("Received_UTC", "UTC"),
+                       ("Date", "local clock, zone not recorded"), ("Start_Time", "local clock, zone not recorded"),
+                       ("Timestamp", "local clock, zone not recorded")):
+        v = row.get(col)
+        if v not in (None, ""):
+            return str(v), basis
+    return "", None
+
+
 def _hit(table: str, row: Dict[str, Any], fields: Sequence[str], needles: Sequence[str],
          pattern: Optional["re.Pattern[str]"], rank: Optional[float]) -> Dict[str, Any]:
     matched: List[str] = []
@@ -173,7 +184,8 @@ def _hit(table: str, row: Dict[str, Any], fields: Sequence[str], needles: Sequen
         "evidence_item": row.get("Evidence_Item"),
         "application": _first(row, ("Application", "Source_App")),
         "source_file": _first(row, ("Source_File", "vfs_path", "file_name")),
-        "time": _first(row, ("Timestamp_IST", "Timestamp_UTC", "Date", "Start_Time", "Timestamp")),
+        "time": _time_and_basis(row)[0],
+        "time_basis": _time_and_basis(row)[1],
         "decoded_by": row.get("Decoded_By"),
         "matched_fields": matched,
         "snippet": snippet,

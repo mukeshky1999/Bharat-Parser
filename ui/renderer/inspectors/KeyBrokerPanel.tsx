@@ -97,12 +97,22 @@ export const KeysNeededCard: React.FC<KeysNeededCardProps> = ({ onProcessed, ref
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
 
+  const [loadError, setLoadError] = useState('');
+
   const load = useCallback(async () => {
     const res = await forensicClient.getCaseKeys();
+    if (res.error || !res.data) { setLoadError(res.error || 'No answer from the backend.'); setData(null); return; }
+    setLoadError('');
     setData(res.data);
   }, []);
   useEffect(() => { void load(); }, [load, refreshKey]);
 
+  // If it cannot be checked, say so: staying silent would read as "no file needs a key".
+  if (loadError) {
+    return <p role="alert" className="rounded border border-amber-700 bg-amber-950/40 p-3 text-xs text-amber-100">
+      The tool could not check whether any file in this case is encrypted and unread ({loadError}). Do not take the absence of this notice as meaning every file was read.
+    </p>;
+  }
   if (!data || data.needed.length === 0) return null;
 
   const run = async (item: KeysNeeded['needed'][number]) => {

@@ -33,11 +33,12 @@ export interface UnifiedUPITransaction {
   utrNumber: string | null;           // 12-digit NPCI UTR / RRN
   appTransactionId: string | null;    // e.g., PhonePe "T261014..." or GPay "CICAg..."
   sourceApp: 'PhonePe' | 'GPay' | 'Paytm' | 'BHIM' | 'CRED' | 'WhatsAppPay' | 'BankApp' | 'SMS_DLT' | 'Notif_Log' | 'OCR_Receipt';
+  counterpartyVpa?: string | null;    // the other party as recorded, whatever the direction
   payerVpa: string | null;            // e.g., "suspect@ybl"
   payeeVpa: string | null;            // e.g., "mule.account@okaxis"
   accountMask: string | null;         // e.g., "SBI XX4921"
   ifscCode: string | null;
-  amountInr: number;
+  amountInr: number | null;           // null = the evidence has no amount (never 0 for "unknown")
   currency: 'INR' | string;
   direction: 'DEBIT' | 'CREDIT' | 'COLLECT_REQUEST' | 'GHOST_INTENT' | 'UNKNOWN';
   status: 'SUCCESS' | 'FAILED' | 'PENDING' | 'ABANDONED_INTENT' | 'UNKNOWN';
@@ -121,6 +122,7 @@ export interface CallLogArtifact {
   callerName?: string;
   calleeNumberOrId: string;
   calleeName?: string;
+  peerNumberOrId?: string;            // the other party as recorded, whatever the direction
   direction: 'INCOMING' | 'OUTGOING' | 'MISSED' | 'REJECTED' | 'UNKNOWN';
   callResult?: string;
   durationSeconds: number;
