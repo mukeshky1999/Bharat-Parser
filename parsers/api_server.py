@@ -1725,6 +1725,36 @@ def case_coverage(evidence_item: Optional[str] = Query(None, description="Limit 
     }
 
 
+class KeyCheckIn(BaseModel):
+    keys: Dict[str, str]
+
+
+@app.post("/api/keys/check")
+def keys_check(body: KeyCheckIn):
+    """Describe the keys the examiner typed: which readings the ingest would try and each reading's fingerprint (what the
+    audit log records). Nothing is stored or logged, and no value is sent back."""
+    from parsers import key_broker
+    try:
+        rows = key_broker.inspect_keys(body.keys)
+    except key_broker.KeyBrokerError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return JSONResponse({"keys": rows}, headers=_NO_STORE)
+
+
+@app.get("/api/case/keys")
+def case_keys():
+    """Files this case could not open for want of a key (with the source to process again), and what the audit log says about key use."""
+    from parsers import key_broker
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=412, detail="No case is loaded.")
+    return {
+        "needed": key_broker.keys_needed(_active_store.get_coverage(), _case_state.get("items") or []),
+        "events": key_broker.key_events(_audit_summary().get("entries") or []),
+        "note": "Keys are used only while a device is processed and are never written to the case file, the processing log or the audit log. "
+                "The audit log records each key's name and an 8-digit fingerprint. Nothing is guessed or tried from a word list.",
+    }
+
+
 @app.get("/api/case/search")
 def case_search(
     q: str = Query(..., description="Search text"),
