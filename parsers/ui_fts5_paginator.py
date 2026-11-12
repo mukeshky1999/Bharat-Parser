@@ -185,7 +185,8 @@ class CaseUIPaginatorStore:
                     Clock_Tamper_Detected INTEGER DEFAULT 0,
                     Direction TEXT,
                     Forensic_Provenance TEXT,
-                    Timestamp_IST TEXT
+                    Timestamp_IST TEXT,
+                    Possible_Link TEXT
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_tx_app ON transactions(Application);

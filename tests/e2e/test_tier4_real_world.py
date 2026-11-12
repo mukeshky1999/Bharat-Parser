@@ -291,10 +291,13 @@ class TestTier4RealWorld(unittest.TestCase):
         self.assertEqual(row0["Counterparty"], "mule_account@okaxis")
         self.assertEqual(row0["Type"], "DEBIT")
 
-        # Row 1: Damaged carved record must be healed to victim_mule@ybl and DEBIT via Amount+Date compatibility
+        # Row 1 (REVIEW M-04): same amount and date in another app is NOT proof of the same payment.
+        # The damaged record is left as it was and the candidate is offered as an unconfirmed lead.
         row1 = healed_phonepe_txs[healed_phonepe_txs["Transaction_ID"] == "CARVED_01"].iloc[0]
-        self.assertEqual(row1["Counterparty"], "victim_mule@ybl")
-        self.assertEqual(row1["Type"], "DEBIT")
+        self.assertNotEqual(row1["Counterparty"], "victim_mule@ybl")
+        self.assertEqual(row1["Type"], "TRANSFER")
+        self.assertIn("victim_mule@ybl", str(row1.get("Possible_Link", "")))
+        self.assertIn("unconfirmed", str(row1.get("Possible_Link", "")))
 
     def test_scenario_anti_forensics_clock_tampering_audit(self):
         """

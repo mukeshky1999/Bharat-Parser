@@ -323,10 +323,15 @@ def heal_counterparties_across_apps(
     owner_identifiers: Optional[Set[str]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
-    Cross-App Counterparty, Name <-> VPA & Direction Healer:
-    1. Builds a global lookup of `Name (vpa@bank)` across all apps on the device.
-    2. Upgrades any Name-only (`THUNGA TEJASWARI`) or VPA-only (`tejeswari19@ybl`) or placeholder
-       counterparty in any app to its full `Name (vpa@bank)` representation!
+    Cross-App Counterparty Healer.
+
+    * Exact reference match (same valid transaction / UTR ID in another app): the counterparty and
+      DEBIT/CREDIT direction are copied. This is a fact of the record.
+    * Name <-> VPA: a name-only or VPA-only counterparty is upgraded to `Name (vpa@bank)` only when
+      that name (or VPA) maps to exactly one full form on the device.
+    * Same amount on a compatible date but no shared reference ID is NOT evidence of the same payment
+      (M-04). Nothing is overwritten; a unique candidate is recorded in `Possible_Link` as an
+      unconfirmed lead with the rule that produced it.
     """
     from parsers.heuristic_engine import _merge_two_counterparties
 
@@ -334,6 +339,8 @@ def heal_counterparties_across_apps(
     known_by_amt: Dict[float, List[Tuple[Optional[str], str, str]]] = {}
     global_name_to_full: Dict[str, str] = {}
     global_vpa_to_full: Dict[str, str] = {}
+    ambiguous_names: Set[str] = set()
+    possible_links: Dict[Tuple[str, float, str], str] = {}
 
     for app_name, cats in app_artifacts.items():
         tx_df = cats.get('transactions', pd.DataFrame())
@@ -350,6 +357,8 @@ def heal_counterparties_across_apps(
                 n_clean = m_pair.group(1).strip()
                 v_clean = m_pair.group(2).strip().lower()
                 full_str = f"{n_clean} ({v_clean})"
+                if global_name_to_full.get(n_clean.lower(), full_str) != full_str:
+                    ambiguous_names.add(n_clean.lower())  # same name, different VPAs: do not guess
                 global_name_to_full[n_clean.lower()] = full_str
                 global_vpa_to_full[v_clean] = full_str
 
@@ -397,15 +406,19 @@ def heal_counterparties_across_apps(
                 cand_c, cand_t = known_by_txid[txid]
                 healed_cpty = _merge_two_counterparties(healed_cpty, cand_c)
                 healed_type = cand_t
-            if amt in known_by_amt and dt:
-                for cand_dt, cand_cpty, cand_type in known_by_amt[amt]:
-                    if cand_dt and _are_dates_compatible(dt, cand_dt):
-                        healed_cpty = _merge_two_counterparties(healed_cpty, cand_cpty)
-                        if not healed_type or healed_type == 'TRANSFER':
-                            healed_type = cand_type
+            if amt in known_by_amt and dt and (_is_placeholder_counterparty(cparty) or cparty == 'Unknown'):
+                cands = {cand_cpty for cand_dt, cand_cpty, _t in known_by_amt[amt]
+                         if cand_dt and _are_dates_compatible(dt, cand_dt)}
+                if len(cands) == 1:
+                    lead = next(iter(cands))
+                    possible_links[(txid, amt, dt[:10])] = (
+                        f"Possible counterparty: {lead} (unconfirmed: same amount {amt:.2f} and compatible date "
+                        f"in another app, no shared reference ID)"
+                    )
 
             # Also check global Name <-> VPA dictionary
-            if '@' not in healed_cpty and healed_cpty.lower() in global_name_to_full:
+            if '@' not in healed_cpty and healed_cpty.lower() in global_name_to_full \
+                    and healed_cpty.lower() not in ambiguous_names:
                 healed_cpty = global_name_to_full[healed_cpty.lower()]
             elif '@' in healed_cpty and '(' not in healed_cpty and healed_cpty.lower() in global_vpa_to_full:
                 healed_cpty = global_vpa_to_full[healed_cpty.lower()]
@@ -422,20 +435,37 @@ def heal_counterparties_across_apps(
                 tx_df, owner_identifiers=owner_identifiers
             )
 
-        # Ensure Saved Contacts for this app reflects the newly healed `Name (vpa@bank)` counterparties
         final_tx = cats.get('transactions', pd.DataFrame())
+        if possible_links and not final_tx.empty:
+            final_tx = final_tx.copy()
+
+            def _lead_for(row) -> str:
+                try:
+                    amt_v = round(float(row.get('Amount')), 2)
+                except (TypeError, ValueError):
+                    return ''
+                dt_v = str(row.get('Date', '')) if pd.notna(row.get('Date')) else ''
+                return possible_links.get((str(row.get('Transaction_ID', 'N/A')).strip(), amt_v, dt_v[:10]), '')
+
+            final_tx['Possible_Link'] = final_tx.apply(_lead_for, axis=1)
+            cats['transactions'] = final_tx
+
+        # Saved-contact rows derived from the (healed) payees; labelled as derived above.
         if not final_tx.empty:
             c_rows = []
             for _, tr in final_tx.iterrows():
                 cp = str(tr.get('Counterparty', 'Unknown')).strip()
                 if not _is_placeholder_counterparty(cp):
                     m_b = re.match(r'^([^()]+?)\s*\(([^()]+)\)$', cp)
+                    # M-05: these are payees seen in transactions, not address-book entries. They are
+                    # labelled as derived, and a name with no account/VPA is not invented an identifier.
+                    derived = 'DERIVED: payee seen in transactions (not an address-book entry)'
                     if m_b:
-                        c_rows.append({'Contact_Name': m_b.group(1).strip(), 'Identifier': m_b.group(2).strip()})
+                        c_rows.append({'Contact_Name': m_b.group(1).strip(), 'Identifier': m_b.group(2).strip(),
+                                       'Forensic_Provenance': derived})
                     elif '@' in cp:
-                        c_rows.append({'Contact_Name': cp.split('@')[0], 'Identifier': cp})
-                    else:
-                        c_rows.append({'Contact_Name': cp, 'Identifier': 'Verified Counterparty'})
+                        c_rows.append({'Contact_Name': cp.split('@')[0], 'Identifier': cp,
+                                       'Forensic_Provenance': derived})
             if c_rows:
                 new_cnt_df = pd.DataFrame(c_rows).drop_duplicates(subset=['Identifier'])
                 curr_cnt = cats.get('contacts', pd.DataFrame())

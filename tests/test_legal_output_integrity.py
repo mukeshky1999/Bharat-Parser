@@ -223,3 +223,41 @@ def test_recovered_counts_ignore_file_names_containing_wal_or_carved(tmp_path):
     wa = [v for k, v in flat.items() if "whatsapp" in k.lower() and isinstance(v, dict) and v.get("total") == 3]
     assert wa, flat
     assert wa[0]["wal_and_carved"] == 2 and wa[0]["active"] == 1, wa[0]
+
+
+# ---------------- M-04 / M-05: healing and derived contacts ----------------
+def test_same_amount_in_other_app_does_not_overwrite_counterparty_or_direction():
+    import pandas as pd
+
+    from parsers.corroboration_engine import heal_counterparties_across_apps
+
+    arts = {
+        "A": {"transactions": pd.DataFrame([{
+            "Transaction_ID": "N/A", "Linked_Reference_IDs": "N/A", "Date": "2024-05-04", "Amount": 500.0,
+            "Counterparty": "Unknown", "Status": "SUCCESS", "Type": "TRANSFER"}])},
+        # Two different payees paid the same amount on the same day: ambiguous, so no lead either.
+        "B": {"transactions": pd.DataFrame([
+            {"Transaction_ID": "111111111111", "Linked_Reference_IDs": "111111111111", "Date": "2024-05-04",
+             "Amount": 500.0, "Counterparty": "alice@ybl", "Status": "SUCCESS", "Type": "DEBIT"},
+            {"Transaction_ID": "222222222222", "Linked_Reference_IDs": "222222222222", "Date": "2024-05-04",
+             "Amount": 500.0, "Counterparty": "bob@okaxis", "Status": "SUCCESS", "Type": "CREDIT"}])},
+    }
+    out = heal_counterparties_across_apps(arts)["A"]["transactions"].iloc[0]
+    assert out["Counterparty"] == "Unknown" and out["Type"] == "TRANSFER"
+    assert not str(out.get("Possible_Link", "") or "")
+
+
+def test_derived_contacts_are_labelled_and_have_no_invented_identifier():
+    import pandas as pd
+
+    from parsers.corroboration_engine import heal_counterparties_across_apps
+
+    arts = {"A": {"transactions": pd.DataFrame([
+        {"Transaction_ID": "111111111111", "Linked_Reference_IDs": "111111111111", "Date": "2024-05-04",
+         "Amount": 10.0, "Counterparty": "RAVI KUMAR", "Status": "SUCCESS", "Type": "DEBIT"},
+        {"Transaction_ID": "222222222222", "Linked_Reference_IDs": "222222222222", "Date": "2024-05-05",
+         "Amount": 20.0, "Counterparty": "ravi@ybl", "Status": "SUCCESS", "Type": "DEBIT"},
+    ])}}
+    contacts = heal_counterparties_across_apps(arts)["A"]["contacts"]
+    assert "Verified Counterparty" not in set(contacts["Identifier"])
+    assert set(contacts["Forensic_Provenance"]) == {"DERIVED: payee seen in transactions (not an address-book entry)"}
