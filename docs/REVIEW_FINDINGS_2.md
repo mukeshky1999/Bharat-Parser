@@ -373,5 +373,5 @@ The four confirmed `src/sqlite` defects from the first review are fixed and pinn
 | H-05 | Records are given to the table whose column count equals the record, checked against each column's declared affinity. A record shorter than the table (rows from before `ALTER TABLE ADD COLUMN`) fills the first columns and nothing is shifted. If more than one table still fits, the record is labelled `AMBIGUOUS: a | b` instead of going to whichever table came first. |
 | H-06 | A column is a rowid alias only when its declared type is exactly `INTEGER` (not `INT` or `BIGINT`), is not `DESC`, and the table is not WITHOUT ROWID. The table-constraint form `PRIMARY KEY (id)` is recognised for one `INTEGER` column. Stored 64-bit keys are no longer replaced by the rowid. |
 
-Still open from the first review's `src/` list: M-08 (`src/crypto/sqlcipher.py` checks only page 1 and re-signs WAL frames) and H-14, H-15, M-09, M-10, L-01, L-03.
+Fixed afterwards in Phase 5B.1 steps 3 to 5: M-08, H-14, H-15, M-09, M-10, L-01, L-03, X-10 (see `docs/REMEDIATION.md`). H-15's container-breadth part is wired: Android backups and iOS backup folders are read through `src/vfs`.
 The carver and engine are not yet called for recovered transactions; only the b-tree reader is used (through the row locator) for live rows.

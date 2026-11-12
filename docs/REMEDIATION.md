@@ -41,7 +41,7 @@ TypeScript suites all pass; `tsc --noEmit` and `vite build` succeed.
 ## Not done (still open)
 - **S-01 (decisive):** the tested `src/` engines (VFS, provenance, SQLite/WAL, UPI, banking, DLT, correlator, crypto, legal) are still not wired into either product pipeline. Choosing and wiring one stack is a design decision, not a patch.
 - H-02 remainder: the transaction `Date` column is still an unlabelled naive string (UTC when from an epoch, wall time when from a string); the odd-hour badge inherits that. WebKit/out-of-range values still fall through as raw numbers.
-- H-03 to H-06, H-14, H-15, M-08 to M-10, L-01, L-03: defects in `src/sqlite`, `src/vfs`, `src/crypto`, `src/dlt`. H-03 to H-06 were fixed in Phase 5B.1 (below); the rest are still open.
+- H-03 to H-06, H-14, H-15, M-08 to M-10, L-01, L-03: defects in `src/sqlite`, `src/vfs`, `src/crypto`, `src/dlt`. All fixed in Phase 5B.1 (below), with tests.
 - M-01 (WAL frame validity in `wal_rollback_analyzer`), M-02 (carver alignment), M-03 (recovered-state counts by substring), M-04/M-05 (cross-app healing, counterparties written to contacts), M-06 (OS type always "android").
 - Annexure truncation to 50/30 rows in the TypeScript Section 63 generator (that generator is no longer used by the UI and should be deleted with the other duplicate TypeScript engines).
 - Legacy dashboard (`main.py`, `src/workstation_app`) still contains H-10 sample devices and figures; its evidence-modifying path (C-01) is fixed, but the review's recommendation to retire it stands.
@@ -181,3 +181,10 @@ The ingest could not read two common containers: an Android backup (`.ab`) was c
 - The evidence is unchanged after indexing (tested by hash, including `Manifest.db`).
 ZIP, UFDR, TAR and E01 handling is unchanged.
 Python 587 passed (580 before).
+
+### Phase 5B.1: what is left (2026-11-12)
+Everything on the 5B.1 list is done except **stage C, wiring `src/upi` and `src/dlt` into the product**. It is left on purpose:
+- The product already extracts completed transactions from bank SMS and from the UPI apps' databases (`parse_indian_financial_text` and the plugin parsers are word-bounded and tuned to bank templates). Swapping in `src/dlt`'s generic grammar would lose that, and there is no product output for `src/upi` or `src/dlt` to diff against, so the "golden-output diff" the plan asks for has no baseline.
+- The `src/upi` decoders were written to schemas in the specification and have only been run on synthetic databases. Putting them into the case would add records whose layout assumptions are not checked against a real PhonePe, Google Pay or Paytm database. That needs real samples.
+- What `src/dlt` adds and the product lacks is real: the sender header resolved to an institution, spoofed-SMS detection (no service-centre number plus a third-party creator), and the lien/freeze, OTP and beneficiary-added categories. That is a new "bank alerts" table and screen, not a defect fix, and belongs with a design decision and an invention-record entry.
+Still open from the earlier lists: M-01 to M-06 in the live (`parsers/`) path, and the Phase 5B.3 onward items.
