@@ -83,38 +83,52 @@ def decode_record_payload(payload: bytes) -> List[Any]:
                     val = struct.unpack('>b', payload[body_offset:body_offset + 1])[0]
                     values.append(val)
                     body_offset += 1
+                else:
+                    values.append(None)
             elif st == 2:
                 if body_offset + 2 <= len(payload):
                     val = struct.unpack('>h', payload[body_offset:body_offset + 2])[0]
                     values.append(val)
                     body_offset += 2
+                else:
+                    values.append(None)
             elif st == 3:
                 if body_offset + 3 <= len(payload):
                     b = payload[body_offset:body_offset + 3]
                     val = int.from_bytes(b, byteorder='big', signed=True)
                     values.append(val)
                     body_offset += 3
+                else:
+                    values.append(None)
             elif st == 4:
                 if body_offset + 4 <= len(payload):
                     val = struct.unpack('>i', payload[body_offset:body_offset + 4])[0]
                     values.append(val)
                     body_offset += 4
+                else:
+                    values.append(None)
             elif st == 5:
                 if body_offset + 6 <= len(payload):
                     b = payload[body_offset:body_offset + 6]
                     val = int.from_bytes(b, byteorder='big', signed=True)
                     values.append(val)
                     body_offset += 6
+                else:
+                    values.append(None)
             elif st == 6:
                 if body_offset + 8 <= len(payload):
                     val = struct.unpack('>q', payload[body_offset:body_offset + 8])[0]
                     values.append(val)
                     body_offset += 8
+                else:
+                    values.append(None)
             elif st == 7:
                 if body_offset + 8 <= len(payload):
                     val = struct.unpack('>d', payload[body_offset:body_offset + 8])[0]
                     values.append(val)
                     body_offset += 8
+                else:
+                    values.append(None)
             elif st == 8:
                 values.append(0)
             elif st == 9:
@@ -124,18 +138,121 @@ def decode_record_payload(payload: bytes) -> List[Any]:
                 if body_offset + blob_len <= len(payload):
                     values.append(payload[body_offset:body_offset + blob_len])
                     body_offset += blob_len
+                else:
+                    values.append(None)
             elif st >= 13 and (st % 2 != 0):
                 text_len = (st - 13) // 2
                 if body_offset + text_len <= len(payload):
                     text_bytes = payload[body_offset:body_offset + text_len]
                     values.append(text_bytes.decode('utf-8', errors='replace'))
                     body_offset += text_len
+                else:
+                    values.append(None)
             else:
                 values.append(None)
 
         return values
     except Exception:
         return []
+
+
+def _serial_type_size(st: int) -> int:
+    if st in (0, 8, 9):
+        return 0
+    if 1 <= st <= 4:
+        return st
+    if st == 5:
+        return 6
+    if st in (6, 7):
+        return 8
+    if st >= 12:
+        return (st - 12) // 2 if st % 2 == 0 else (st - 13) // 2
+    return -1  # 10, 11 are reserved
+
+
+def _decode_bare_record(buf: bytes, offset: int, limit: int) -> Optional[List[Any]]:
+    """Decode a record that starts at its header-length varint, with no cell prefix.
+
+    When SQLite frees a cell it overwrites the first 4 bytes with a freeblock header, destroying the
+    payload-size and rowid varints, so a freed record can only be recognised by its own header.
+    Returns None unless the header is self-consistent and the whole body fits before `limit`.
+    """
+    if offset < 0 or offset >= limit:
+        return None
+    hl, pos = read_varint(buf, offset)
+    if not (2 <= hl <= 64) or offset + hl > limit:
+        return None
+    types: List[int] = []
+    while pos < offset + hl:
+        st, pos = read_varint(buf, pos)
+        types.append(st)
+    if pos != offset + hl or len(types) < 3:
+        return None
+    body = 0
+    for st in types:
+        size = _serial_type_size(st)
+        if size < 0:
+            return None
+        body += size
+    if offset + hl + body > limit:
+        return None
+    return decode_record_payload(buf[offset:offset + hl + body])
+
+
+def _sweep_region(
+    page: bytes,
+    start: int,
+    end: int,
+    tag: str,
+    page_num: int,
+    allow_crypto_addresses: bool,
+    cell_limit: int,
+) -> List[Dict[str, Any]]:
+    """Look for deleted records anywhere (any byte alignment) in page[start:end].
+
+    Two shapes are tried at every candidate offset: an intact cell (payload size, rowid, record) and a
+    bare record (cell prefix destroyed). A carved VPA contains '@', so candidate starts are limited to
+    the 2048 bytes before each '@' (the largest payload we accept); this keeps full coverage without
+    trying every byte of every page.
+    """
+    found: List[Dict[str, Any]] = []
+    seen_content: set = set()
+
+    def _add(tx: Optional[Dict[str, Any]]) -> None:
+        # The same record is reachable from several start offsets (cell prefix vs bare record).
+        if not tx:
+            return
+        key = (tx.get('Counterparty'), tx.get('Amount'), tx.get('Date'))
+        if key not in seen_content:
+            seen_content.add(key)
+            found.append(tx)
+
+    if end - start < 8:
+        return found
+    if allow_crypto_addresses:
+        offsets = range(start, end)
+    else:
+        offs = set()
+        pos = page.find(b'@', start, end)
+        while pos != -1:
+            offs.update(range(max(start, pos - 2048), pos))
+            pos = page.find(b'@', pos + 1, end)
+        offsets = sorted(offs)
+    for o in offsets:
+        try:
+            p_size, v1 = read_varint(page, o)
+            if 12 <= p_size <= 2048:
+                rowid, v2 = read_varint(page, v1)
+                if v2 + p_size <= cell_limit:
+                    vals = decode_record_payload(page[v2:v2 + p_size])
+                    if vals and len(vals) >= 3:
+                        _add(_record_to_transaction(vals, f'{tag}{page_num}_O{o}', allow_crypto_addresses=allow_crypto_addresses))
+            vals = _decode_bare_record(page, o, min(end, cell_limit))
+            if vals:
+                _add(_record_to_transaction(vals, f'{tag}{page_num}_O{o}', allow_crypto_addresses=allow_crypto_addresses))
+        except Exception:
+            continue
+    return found
 
 
 def _record_to_transaction(
@@ -274,18 +391,15 @@ def parse_page_unallocated_cells(
                 visited_fb.add(fb_offset)
                 next_fb = int.from_bytes(page_bytes[fb_offset:fb_offset + 2], 'big')
                 fb_size = int.from_bytes(page_bytes[fb_offset + 2:fb_offset + 4], 'big')
-                if fb_size >= 12 and fb_offset + fb_size <= len(page_bytes):
-                    try:
-                        p_size, v_off = read_varint(page_bytes, fb_offset + 4)
-                        if 8 <= p_size <= fb_size and v_off < len(page_bytes):
-                            rowid, v_off2 = read_varint(page_bytes, v_off)
-                            if v_off2 + p_size <= len(page_bytes):
-                                rec_vals = decode_record_payload(page_bytes[v_off2:v_off2 + p_size])
-                                tx = _record_to_transaction(rec_vals, f'FB_P{page_num}_O{fb_offset}', allow_crypto_addresses=allow_crypto_addresses)
-                                if tx:
-                                    transactions.append(tx)
-                    except Exception:
-                        pass
+                if fb_size >= 8 and fb_offset + fb_size <= len(page_bytes):
+                    # The first 4 bytes of a freed cell are now the freeblock header; the record (or
+                    # what is left of it) lies in the rest of the freed extent.
+                    transactions.extend(
+                        _sweep_region(
+                            page_bytes, fb_offset + 4, fb_offset + fb_size, 'FB_P', page_num,
+                            allow_crypto_addresses, fb_offset + fb_size,
+                        )
+                    )
                 fb_offset = next_fb
         except Exception:
             pass
@@ -294,6 +408,18 @@ def parse_page_unallocated_cells(
     s_end = max(8, slack_end)
     if not allow_crypto_addresses and b'@' not in page_bytes:
         return transactions
+
+    transactions.extend(
+        _sweep_region(
+            page_bytes, s_start, s_end, 'SLACK_P', page_num, allow_crypto_addresses, len(page_bytes),
+        )
+    )
+    # Cells that start in the gap but were in the active pointer list are not deleted records.
+    transactions = [t for t in transactions if not any(
+        str(t.get('Transaction_ID', '')).endswith(f'_O{o}') for o in active_offsets
+    )]
+
+    return transactions
 
     for offset in range(s_start, s_end, 4):
         if offset in active_offsets:

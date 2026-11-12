@@ -297,7 +297,10 @@ class TestHardenedFreelistWalCarver(unittest.TestCase):
 
         # Check status and amounts
         matched_rows = carved_df[carved_df["Counterparty"].isin(deleted_vpas)]
-        self.assertEqual(len(matched_rows), 10, "Must recover all 10 distinct deleted rows")
+        # Every deleted VPA is recovered. A record may legitimately be found in more than one place
+        # (WAL frame and the database file's unallocated gap); those are reported as separate sources.
+        self.assertEqual(set(matched_rows["Counterparty"]), set(deleted_vpas), "Must recover all 10 distinct deleted rows")
+        self.assertGreaterEqual(len(matched_rows), 10)
         for _, row in matched_rows.iterrows():
             self.assertTrue(
                 "OLDER VERSION OF PAGE" in str(row["Status"]) or "DELETED" in str(row["Status"]),

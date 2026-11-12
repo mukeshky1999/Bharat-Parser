@@ -50,7 +50,7 @@ TypeScript suites all pass; `tsc --noEmit` and `vite build` succeed.
 
 ## Phase 2 (second review, `REVIEW_FINDINGS_2.md`), in progress
 
-Test status: Python 501 passed, 0 failed; TypeScript suites pass; `tsc --noEmit` and `vite build` succeed;
+Test status: Python 493 passed, 0 failed; TypeScript suites pass; `tsc --noEmit` and `vite build` succeed;
 the Electron app was launched and ran end to end (see X-09).
 
 | Finding | What changed | Tests |
@@ -66,6 +66,24 @@ the Electron app was launched and ran end to end (see X-09).
 | X-10 | SQLCipher open/decrypt uses a real SQLCipher driver (`sqlcipher3`) if installed, otherwise logs "not installed" and returns nothing; opened `mode=ro`; unexpected errors logged. Decryption is therefore **not available** until a driver is installed or `src/crypto/sqlcipher` is wired (Phase 4) | same |
 | X-11 | IST timestamps are real IST (`ist_now_str`), not machine local time | same |
 | X-09, H-12 (rest) | Per-launch API token (`X-Bharat-Token`, `BHARAT_API_TOKEN`) enforced for every `/api/` request; backend on a free random port and never reused; renderer window is `sandbox: true`; `will-navigate`, `window.open` and permission requests denied; IPC handlers accept only our own pages; `showItemInFolder` takes only local absolute paths; backend gets an allow-listed environment instead of the whole one | `TestApiToken`; launched `electron .`: backend came up on a random port, token passed through the sandboxed preload, renderer calls returned 200 |
+
+### Phase 2, second batch (open items from the first review, plus findings made while fixing them)
+
+| Finding | What changed | Tests |
+|---|---|---|
+| Legacy dashboard (H-10) | `main.py` and `src/workstation_app` deleted with the tests that exercised their sample data; README and architecture updated | suite |
+| Duplicate TS engines | `ui/main/` (including an old Electron main with `nodeIntegration: true`), `ui/shared/universal_hasher.ts`, `loadGoldenDataset` and the 8 TS suites that asserted the demo data deleted; the store test now uses its own fixture and asserts nothing is preloaded. TS Section 63 generator (annexure truncation) gone with them | `workbench_store_test.ts` |
+| M-01 | WAL frames follow SQLite's validity chain (header checksum, salt, rolling checksum, last commit). All-zero checksums are no longer valid. Recovered rows say `OLDER VERSION OF PAGE (committed WAL frame #n)` or `RESIDUAL WAL FRAME #n (reason)`; the old "MODIFIED / WIPED" wording asserted an inference | `test_legal_output_integrity.py`, `test_hardened_freelist_wal_carver.py` |
+| M-02 | Slack scan tries every byte offset (it stepped by 4, missing cells at other alignments); freeblocks are decoded as bare records because SQLite overwrites the first 4 bytes of a freed cell; a truncated column no longer shifts later columns. The real-WAL test now also finds a record in the database file's gap that the old stride missed, so it asserts coverage of all 10 VPAs rather than exactly 10 rows | same |
+| M-03 | Recovered counts and filters match the `State=` field. SQLite `LIKE` is case-insensitive, so `%WAL%` had been counting every path containing "wallet" | same |
+| M-04 | Amount + date matches no longer overwrite counterparty or direction. A unique candidate is stored in a new `Possible_Link` column as an unconfirmed lead; an ambiguous name is not upgraded to a VPA. Exact reference-ID healing is unchanged | same, e2e test updated |
+| M-05 | Payees derived into contacts are labelled `DERIVED: payee seen in transactions (not an address-book entry)`; the invented `Verified Counterparty` identifier is gone | same |
+| M-06 | OS type detected from the extraction layout (`android`/`ios`/`unknown`). "Acquisition time" is no longer set to the time the tool processed the files; it is `Not recorded` and `processedAtUtc` is reported separately | same |
+
+### New finding while testing (not fixed yet)
+- **X-13** (see `REVIEW_FINDINGS_2.md`): transactions in the case store have no provenance and no normalised time. This also
+  covers the H-02 remainder. It needs the provenance threaded through clustering, so it is scheduled with the `src/` wiring
+  (Phase 4, stage C) and not patched around.
 
 Not yet done from the second review: X-12 and the rest of U-01..U-05 (UI claims; part of the UI redesign), L-04..L-06,
 dossier_builder unconditional claims (unwired), and the Phase 1 review of the remaining modules.

@@ -117,6 +117,24 @@ Summary: 2 Critical, 8 High, 7 Medium, 4 Low.
 - Fix: route through `src/crypto/sqlcipher.py` on the working copy (after its M-08 defects are fixed) and record a
   per-file "encrypted, no key" outcome in the processing log.
 
+### X-13 (High) Transactions lose their source location and normalised time (CONFIRMED on the fixtures)
+
+Found by ingesting `test_evidence/paisa.db` and reading the stored rows (second review, continued).
+
+- The transaction path (`parse_database_artifacts` -> `synthesize_and_deduplicate_records`) reduces each row to
+  seven columns (`Date, Transaction_ID, Linked_Reference_IDs, Amount, Counterparty, Status, Type`) and merges rows
+  into clusters. Table, rowid, byte offset and source page are dropped. Result in the case store: every transaction
+  has `Forensic_Provenance = NULL`, `Timestamp_IST = NULL`, `Direction = NULL`, and `Application` is the file name
+  (`paisa.db`), not an app.
+- Consequence: no transaction can point back to its evidence row, so the evidence card, the Section 63 certificate
+  and any cross-examination answer "where is this in the phone?" cannot be produced for the ledger. Chats do carry
+  it (`msgstore.db :: <path> :: message :: RowID=1 :: State=Allocated B-Tree`).
+- Also: `Date` is a naive string of unknown zone (H-02 remainder). The odd-hour badge and the IST/UTC display both
+  inherit that.
+- Fix (planned, Phase 4 stage C, with the `src/provenance` and `src/core/timestamps` wiring): carry
+  `(source file, table, rowid, offset)` through clustering as a list of contributing rows, and store
+  `Timestamp_UTC`, `Timestamp_IST`, `Timestamp_Raw` from one converter.
+
 ### Medium
 
 **U-01. Integrity indicators in the renderer are static text. CONFIRMED (from code).**
@@ -190,6 +208,10 @@ Pattern-swept only (database opens, `except Exception: pass`, hard-coded default
   The sweep found only the one read-write open (X-10); all other `sqlite3.connect` calls use `mode=ro`.
   It also found 12 `except Exception: pass` blocks in `social_interaction_comms_parsers.py` and 21 in
   `commercial_parity_engine.py`, which are candidates for the H-13 silent-failure class.
+
+Reviewed after the first version of this document (2026-11-12): the `Forensic_Provenance` values the
+product stores (X-13), `corroboration_engine.heal_counterparties_across_apps` (M-04/M-05), `wal_rollback_analyzer`
+(M-01), `freelist_carver` (M-02), and the recovered-state SQL in `ui_fts5_paginator` (M-03). All were fixed except X-13.
 
 Not reviewed:
 - `src/banking`, `src/correlator`, `src/whatsapp`, `src/telegram_signal`, `src/nonsqlite`, `src/legal_and_bsa`,

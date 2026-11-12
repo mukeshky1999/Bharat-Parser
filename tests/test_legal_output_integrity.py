@@ -326,3 +326,61 @@ def test_zero_checksums_are_not_valid(tmp_path):
     revs, _ = parse_wal_file(str(p))
     f = revs[2][0]
     assert not f.is_committed and not f.is_valid_checksum
+
+
+# ---------------- M-02: carver alignment ----------------
+def _record(txid=b"987654321098", vpa=b"merchant@okhdfcbank", amount=4500.0):
+    import struct
+
+    st_txid, st_vpa = len(txid) * 2 + 13, len(vpa) * 2 + 13
+    hdr_body = bytes([st_txid, st_vpa, 7])
+    return bytes([len(hdr_body) + 1]) + hdr_body + txid + vpa + struct.pack(">d", amount)
+
+
+def _leaf_page(placed, num_cells=0, freeblock=0):
+    """4096-byte leaf table page; `placed` is a list of (offset, bytes) written verbatim."""
+    import struct
+
+    pg = bytearray(4096)
+    pg[0] = 0x0D
+    struct.pack_into(">H", pg, 1, freeblock)
+    struct.pack_into(">H", pg, 3, num_cells)
+    struct.pack_into(">H", pg, 5, 4096)
+    for off, data in placed:
+        pg[off:off + len(data)] = data
+    return bytes(pg)
+
+
+def test_deleted_cell_at_unaligned_offset_is_found():
+    from parsers.freelist_carver import parse_page_unallocated_cells
+
+    rec = _record()
+    cell = bytes([len(rec), 1]) + rec
+    for off in (1001, 1002, 1003, 1004):  # all four alignments
+        txs = parse_page_unallocated_cells(_leaf_page([(off, cell)]), 2, include_active_cells=False)
+        assert any(t["Counterparty"] == "merchant@okhdfcbank" and t["Amount"] == 4500.0 for t in txs), off
+
+
+def test_record_in_a_freeblock_with_destroyed_cell_prefix_is_found():
+    import struct
+
+    from parsers.freelist_carver import parse_page_unallocated_cells
+
+    rec = _record()
+    fb_off = 3000
+    fb_size = 4 + len(rec)
+    # SQLite overwrites the first 4 bytes of the freed cell with (next=0, size); the record follows.
+    fb = struct.pack(">HH", 0, fb_size) + rec
+    page = _leaf_page([(fb_off, fb)], freeblock=fb_off)
+    txs = parse_page_unallocated_cells(page, 2, include_active_cells=False)
+    assert any(t["Counterparty"] == "merchant@okhdfcbank" and t["Amount"] == 4500.0
+               and t["Transaction_ID"] == "987654321098" for t in txs)
+
+
+def test_truncated_column_does_not_shift_following_values():
+    from parsers.freelist_carver import decode_record_payload
+
+    # header: len 4, types [8-byte float, text(3), text(2)]; body is cut inside the float
+    payload = bytes([4, 7, 13 + 6, 13 + 4]) + b"\x40\x00\x00"
+    vals = decode_record_payload(payload)
+    assert len(vals) == 3 and vals[0] is None
