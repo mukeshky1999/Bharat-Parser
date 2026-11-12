@@ -51,6 +51,7 @@ function backendEnv() {
     HOST: BACKEND_HOST,
     PORT: String(backendPort),
     BHARAT_API_TOKEN: API_TOKEN,
+    BHARAT_PARENT_PID: String(process.pid),
   };
 }
 
@@ -171,6 +172,7 @@ async function startBackend() {
       backendProcess.stdout?.on('data', (d) => console.log(`[Backend-Out] ${d.toString().trim()}`));
       backendProcess.stderr?.on('data', (d) => console.error(`[Backend-Err] ${d.toString().trim()}`));
 
+      backendProcess.on('error', (err) => reportBackendSpawnError(err));
       backendProcess.on('exit', (code) => {
         console.log(`[BharatAnalyzer] Backend process exited with code ${code}`);
         backendProcess = null;
@@ -190,6 +192,7 @@ async function startBackend() {
         stdio: 'inherit',
       });
 
+      backendProcess.on('error', (err) => reportBackendSpawnError(err));
       backendProcess.on('exit', (code) => {
         console.log(`[BharatAnalyzer DEV] Python server process exited with code ${code}`);
         backendProcess = null;
@@ -204,6 +207,16 @@ async function startBackend() {
   if (!isReady) {
     console.warn('[BharatAnalyzer] Backend health check timed out. Continuing frontend initialization...');
   }
+}
+
+function reportBackendSpawnError(err) {
+  console.error('[BharatAnalyzer] Backend could not be started:', err);
+  backendProcess = null;
+  try {
+    dialog.showErrorBox('Backend could not be started',
+      `The forensic engine did not start (${err && err.code ? err.code : 'error'}). ` +
+      'Check that Python (development) or the installed backend (packaged) is available and not blocked by security software.');
+  } catch { /* dialog not available yet */ }
 }
 
 function stopBackend() {
@@ -235,6 +248,25 @@ function stopBackend() {
 // -----------------------------------------------------------------------------
 // 3. Electron Window Creation & Navigation
 // -----------------------------------------------------------------------------
+function ingestRunning() {
+  return new Promise((resolve) => {
+    const req = http.get({ host: BACKEND_HOST, port: backendPort, path: '/api/case/ingest/progress',
+      headers: { 'X-Bharat-Token': API_TOKEN }, timeout: 1500 }, (res) => {
+      let b = ''; res.on('data', (c) => { b += c; });
+      res.on('end', () => { try { resolve(JSON.parse(b).state === 'running'); } catch { resolve(false); } });
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
+}
+async function askToCloseDuringIngest() {
+  if (!(await ingestRunning())) return true;
+  const r = await dialog.showMessageBox(mainWindow, { type: 'warning', buttons: ['Keep working', 'Close and stop'], defaultId: 0, cancelId: 0,
+    title: 'Evidence is being processed', message: 'An evidence ingest is still running.',
+    detail: 'Closing now stops it. The case may be left incomplete and the device will have to be processed again.' });
+  return r.response === 1;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     title: 'BharatAnalyzer — Digital Forensics & Financial Intelligence Workbench',
@@ -260,6 +292,28 @@ function createWindow() {
   // The window may only ever show our own UI: no navigation away, no new windows, no permissions.
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (!isTrustedUrl(url)) event.preventDefault();
+  });
+  // Sub-frames (the link graph is shown in one) may only be inline documents, never a URL.
+  mainWindow.webContents.on('will-frame-navigate', (event) => {
+    if (!event.isMainFrame && event.url !== 'about:srcdoc' && !event.url.startsWith('blob:') && !event.url.startsWith('data:')) event.preventDefault();
+  });
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, cb) => {
+    const headers = { ...details.responseHeaders };
+    if (app.isPackaged && details.resourceType === 'mainFrame') {
+      headers['Content-Security-Policy'] = [
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+        "font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; " +
+        `connect-src 'self' http://${BACKEND_HOST}:* ws://localhost:3000; frame-src 'self' blob: data: about:; object-src 'none'; base-uri 'none'`,
+      ];
+    }
+    cb({ responseHeaders: headers });
+  });
+  mainWindow.on('close', (event) => {
+    if (isShuttingDown || mainWindow.__confirmedClose) return;
+    event.preventDefault();
+    askToCloseDuringIngest().then((ok) => {
+      if (ok) { mainWindow.__confirmedClose = true; mainWindow.close(); }
+    });
   });
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   mainWindow.webContents.session.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
@@ -403,7 +457,7 @@ function registerIpcHandlers() {
   // Native Open/Reveal File in Explorer
   ipcMain.handle('shell:showItemInFolder', async (event, fullPath) => {
     // Reveal only: a local absolute path that exists. No UNC/network paths, no relative paths.
-    const isUnc = typeof fullPath === 'string' && fullPath.slice(0, 2) === String.fromCharCode(92, 92);
+    const isUnc = typeof fullPath === 'string' && /^[\/]{2}/.test(fullPath);
     if (!trustedSender(event) || typeof fullPath !== 'string' || !path.isAbsolute(fullPath) || isUnc) return false;
     if (fs.existsSync(fullPath)) {
       shell.showItemInFolder(fullPath);

@@ -95,6 +95,8 @@ from src.geospatial_media_and_tamper.bilingual_ocr_engine import BilingualOcrEng
 async def lifespan(app: FastAPI):
     # Startup sequence
     print("[*] Bharat-PA Forensics API initializing...")
+    from parsers import parent_watchdog
+    parent_watchdog.start()
     yield
     # Shutdown sequence
     print("[*] Bharat-PA Forensics API shutting down. Draining thread pools and checkpointing databases...")

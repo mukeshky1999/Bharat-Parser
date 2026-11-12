@@ -77,6 +77,20 @@ for (const f of files) {
   }
 }
 
+// ---- N-01: a frame that shows server-made HTML must never share the app's origin ------------------------------
+{
+  const rendererRoot = path.resolve(__dirname, '..', 'renderer');
+  const walk = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(path.join(d, e.name)) : /\.tsx?$/.test(e.name) ? [path.join(d, e.name)] : []);
+  for (const f of walk(rendererRoot)) {
+    if (/allow-same-origin/.test(fs.readFileSync(f, 'utf8'))) ok(false, `${path.relative(rendererRoot, f)} uses allow-same-origin`);
+  }
+  const main = fs.readFileSync(path.resolve(__dirname, '..', '..', 'electron', 'main.cjs'), 'utf8');
+  ok(/Content-Security-Policy/.test(main), 'the Electron shell sets a Content-Security-Policy');
+  ok(/will-frame-navigate/.test(main), 'sub-frame navigation is restricted');
+  ok(/BHARAT_PARENT_PID/.test(main), 'the backend is told which process to watch');
+}
+
 if (failures > 0) {
   console.error(`${failures} failure(s)`);
   process.exit(1);

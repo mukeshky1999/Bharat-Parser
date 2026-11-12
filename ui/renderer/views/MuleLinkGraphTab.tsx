@@ -102,7 +102,7 @@ export const MuleLinkGraphTab: React.FC = () => {
           {mode === 'network' ? (
             loadingGraph ? <Notice><span role="status">Drawing the graph…</span></Notice>
               : !networkHtml || !hasData ? <Notice>No graph yet. Open evidence that holds payments and the links between accounts are drawn here.</Notice>
-                : <iframe srcDoc={networkHtml} title="Link graph" className="w-full h-full border-0" sandbox="allow-scripts allow-same-origin" />
+                : <iframe srcDoc={networkHtml} title="Link graph" className="w-full h-full border-0" sandbox="allow-scripts" />
           ) : (
             <div className="h-full overflow-auto p-4">
               {loadingSankey ? <Notice><span role="status">Drawing the flow of money…</span></Notice>
