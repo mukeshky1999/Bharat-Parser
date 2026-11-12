@@ -90,6 +90,19 @@ def serial_type_data_len(serial_type: int) -> int:
     return 0
 
 
+def _value_fits_affinity(val, affinity: str) -> bool:
+    """Plausibility check of a carved value against the column's declared affinity (H-05)."""
+    if val is None:
+        return True
+    if "TEXT" in affinity:
+        return isinstance(val, str) and is_printable_text(val)
+    if affinity in ("INTEGER", "REAL", "NUMERIC"):
+        if isinstance(val, (int, float)):
+            return True
+        return isinstance(val, str) and is_printable_text(val)    # non-numeric text may stay text
+    return True
+
+
 class ResidualCarver:
     """Carves deleted records from Freeblocks, Unallocated Gaps, Freelist, and Post-EOF pages."""
 
@@ -359,42 +372,60 @@ class ResidualCarver:
                     p += 1
                     continue
 
-                # Successfully found genuine cell! Match against table schemas
-                for tbl in candidate_tables:
-                    if len(tbl.columns) == len(serial_types) or len(tbl.columns) == len(serial_types) + 1:
-                        cols_dict = {}
-                        data_cursor = payload_start + hdr_size
-                        cols_to_use = tbl.columns if len(tbl.columns) == len(serial_types) else tbl.columns[1:]
-                        matched = True
+                # Successfully found a genuine cell. Which table does it belong to?
+                # H-05: tables with exactly as many columns as the record has values are tried first. A record
+                # with FEWER values than a table has columns can be a row written before ALTER TABLE ADD COLUMN;
+                # its values belong to the FIRST columns (added columns are at the end), so nothing is shifted.
+                # Every candidate is checked against the declared affinities; if more than one still fits, the
+                # record is reported as ambiguous instead of being given to whichever table came first.
+                n_vals = len(serial_types)
+                exact = [t for t in candidate_tables if len(t.columns) == n_vals]
+                pool = exact or [t for t in candidate_tables if len(t.columns) > n_vals]
+                fits = []
+                for tbl in pool:
+                    cols_dict = {}
+                    data_cursor = payload_start + hdr_size
+                    ok = True
+                    for col_def, st in zip(tbl.columns, serial_types):
+                        val, consumed = decode_serial_type(st, slice_bytes, data_cursor, self.text_encoding)
+                        data_cursor += consumed
+                        if not _value_fits_affinity(val, col_def.affinity):
+                            ok = False
+                            break
+                        cols_dict[col_def.name] = val
+                    if ok:
+                        fits.append((tbl, cols_dict))
 
-                        for col_def, st in zip(cols_to_use, serial_types):
+                if fits:
+                    if len(fits) == 1:
+                        tbl, cols_dict = fits[0]
+                        if tbl.ipk_column_name:
+                            cols_dict[tbl.ipk_column_name] = row_id
+                        table_name = tbl.name
+                    else:
+                        names = sorted(t.name for t, _ in fits)
+                        table_name = "AMBIGUOUS: " + " | ".join(names)
+                        data_cursor = payload_start + hdr_size
+                        cols_dict = {}
+                        for i, st in enumerate(serial_types):
                             val, consumed = decode_serial_type(st, slice_bytes, data_cursor, self.text_encoding)
                             data_cursor += consumed
-
-                            if "TEXT" in col_def.affinity and isinstance(val, str):
-                                if not is_printable_text(val):
-                                    matched = False
-                                    break
-                            cols_dict[col_def.name] = val
-
-                        if matched:
-                            if tbl.ipk_column_name and tbl.ipk_column_name not in cols_dict:
-                                cols_dict[tbl.ipk_column_name] = row_id
-
-                            recovered.append(
-                                RecoveredRecord(
-                                    table_name=tbl.name,
-                                    sqlite_rowid=row_id,
-                                    recovery_classification=ResidualConfidence.RESIDUAL_RECORD,
-                                    source_origin_zone=zone,
-                                    source_page_number=page_num,
-                                    source_byte_offset=base_byte_offset + p,
-                                    columns_dict=cols_dict,
-                                )
-                            )
-                            # Advance past this cell
-                            p = payload_start + P
-                            break
+                            cols_dict[f"column_{i}"] = val
+                    recovered.append(
+                        RecoveredRecord(
+                            table_name=table_name,
+                            sqlite_rowid=row_id,
+                            recovery_classification=ResidualConfidence.RESIDUAL_RECORD,
+                            source_origin_zone=zone,
+                            source_page_number=page_num,
+                            source_byte_offset=base_byte_offset + p,
+                            columns_dict=cols_dict,
+                        )
+                    )
+                    # H-04: continue after this cell. (The old code broke out of the table loop and then
+                    # advanced one more byte, which skipped the start of the next adjacent deleted cell.)
+                    p = payload_start + P
+                    continue
             except Exception as exc:
                 logger.debug("Fast sanity filter speculative parse failed: %s", exc)
 

@@ -136,7 +136,7 @@ def test_every_stored_transaction_points_to_its_real_source_row(ingested):
         prov = r['Forensic_Provenance']
         assert prov, f"transaction {r['Transaction_ID']} has no provenance"
         part = prov.split(' + ')[0]
-        file_, table, rowid, state = [x.strip() for x in part.split(' :: ')]
+        file_, table, rowid, state = [x.strip() for x in part.split(' :: ')][:4]
         assert table == 'Transaction' and state == 'State=Allocated B-Tree'
         rid = int(rowid.split('=')[1])
         amount, utr = src.execute('SELECT amount, utr FROM "Transaction" WHERE rowid = ?', (rid,)).fetchone()
@@ -192,3 +192,49 @@ def test_old_case_store_gets_the_new_columns(tmp_path):
     cols = {r[1] for r in c.execute("PRAGMA table_info(transactions)")}
     c.close()
     assert {'Timestamp_Raw', 'Timestamp_UTC', 'Timestamp_Basis'} <= cols
+
+
+# ---------------------------------------------------------------- page and byte offset (stage B)
+def test_recorded_offset_is_the_real_cell_in_the_file(ingested):
+    from src.sqlite.varint import decode_varint
+    db, rows = ingested
+    data = open(db, "rb").read()
+    seen = 0
+    for r in rows:
+        if 'payments.db' not in (r['Source_File'] or ''):
+            continue
+        prov = r['Forensic_Provenance']
+        assert ':: Offset=0x' in prov, prov
+        rowid = int(prov.split('RowID=')[1].split(' ')[0])
+        offset = int(prov.split('Offset=0x')[1].split(' ')[0], 16)
+        page = int(prov.split('Page=')[1].split(' ')[0])
+        payload_len, n1 = decode_varint(data, offset)
+        cell_rowid, n2 = decode_varint(data, offset + n1)
+        assert cell_rowid == rowid                                    # the cell at that offset is this row
+        assert (offset // 4096) + 1 == page                            # and it lies on the stated page
+        assert r['Transaction_ID'].encode() in data[offset:offset + n1 + n2 + payload_len]   # its bytes hold the UTR
+        seen += 1
+    assert seen == 3
+
+
+def test_locator_declines_when_a_wal_holds_frames(tmp_path):
+    from parsers.sqlite_locator import RowLocator
+    db = tmp_path / "w.db"
+    keep = sqlite3.connect(db)
+    keep.execute("PRAGMA journal_mode=WAL")
+    keep.execute("PRAGMA wal_autocheckpoint=0")
+    keep.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)")
+    keep.execute("INSERT INTO t(v) VALUES ('x')")
+    keep.commit()
+    try:
+        loc = RowLocator(str(db))
+        assert loc.exact is False and "write-ahead log" in loc.reason
+        assert loc.locate("t", [1]) == {}
+        loc.close()
+    finally:
+        keep.close()
+
+
+def test_rows_in_a_database_with_a_wal_say_offset_not_recorded():
+    line = compose_tx_provenance("f.db", json.dumps([{"table": "t", "rowid": 3, "state": "Allocated B-Tree"}]))
+    assert line.endswith(":: Offset=Not recorded")

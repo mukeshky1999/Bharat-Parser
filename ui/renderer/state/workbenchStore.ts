@@ -211,7 +211,8 @@ function mapCallDirection(v: unknown): 'INCOMING' | 'OUTGOING' | 'MISSED' | 'REJ
 
 function parseProvenance(prov: unknown, summary: any, fallbackTable: string, vfsPath: string): any {
   const text = String(prov ?? '');
-  const row = text.match(/RowID=([^\s:]+)/i)?.[1];
+  const rowRaw = text.match(/RowID=([^\s:]+)/i)?.[1];
+  const row = rowRaw && !/^not$/i.test(rowRaw) ? rowRaw : undefined; // "Not recorded" is not a row id
   const off = text.match(/Offset=(0x[0-9a-f]+|\d+)/i)?.[1];
   const table = text.split('::').map(x => x.trim()).find(x => /^[A-Za-z_][A-Za-z0-9_]*$/.test(x) && !/^(State|Offset)$/i.test(x)) || fallbackTable;
   const upper = text.toUpperCase();

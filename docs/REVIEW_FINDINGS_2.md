@@ -117,7 +117,7 @@ Summary: 2 Critical, 8 High, 7 Medium, 4 Low.
 - Fix: route through `src/crypto/sqlcipher.py` on the working copy (after its M-08 defects are fixed) and record a
   per-file "encrypted, no key" outcome in the processing log.
 
-### X-13 (High) Transactions lose their source location and normalised time (CONFIRMED on the fixtures)
+### X-13 (High) Transactions lose their source location and normalised time (CONFIRMED on the fixtures; FIXED in Phase 5B.1, see the end of this entry)
 
 Found by ingesting `test_evidence/paisa.db` and reading the stored rows (second review, continued).
 
@@ -134,6 +134,20 @@ Found by ingesting `test_evidence/paisa.db` and reading the stored rows (second 
 - Fix (planned, Phase 4 stage C, with the `src/provenance` and `src/core/timestamps` wiring): carry
   `(source file, table, rowid, offset)` through clustering as a list of contributing rows, and store
   `Timestamp_UTC`, `Timestamp_IST`, `Timestamp_Raw` from one converter.
+- **Fixed (Phase 5B.1, `tests/test_tx_provenance.py`, 16 tests).**
+  * Each parsed row keeps its table and rowid (`SELECT rowid, *`; a view or WITHOUT ROWID table has none and says "Not recorded").
+    Clustering unions the source rows of everything it merges, so a merged transaction lists every contributing row.
+    The store line has the chat shape: `file :: table :: RowID=n :: State=... :: Page=p :: Offset=0x...` joined with ` + `.
+  * Page and absolute byte offset come from `parsers/sqlite_locator.py` (the `src/sqlite` reader). They are given only when the main file is the
+    whole truth: if a write-ahead log with frames sits beside the database the newest row version may be in the log, so the offset reads "Not recorded".
+  * One converter (`timestamp_record`) gives `Timestamp_Raw`, `Timestamp_UTC`, `Timestamp_IST` and `Timestamp_Basis`. A numeric epoch is UTC;
+    an offset-aware string is converted to UTC; a bare local string such as `2026-11-01 22:43:19` (every row in the `paisa.db` fixture) is
+    `LOCAL_ZONE_UNKNOWN` and claims **no** UTC or IST. A time read from a PhonePe-style reference ID is `DERIVED_FROM_TRANSACTION_ID`, also without a zone.
+  * The renderer used to show such a bare string as an IST time (it treated it as UTC and added 5:30). It now shows the clock time as recorded,
+    marked "zone not recorded", and the evidence card says the same.
+  * `Direction` follows the recorded `Type` (DEBIT is OUTGOING, CREDIT is INCOMING); a TRANSFER has no established direction and stays empty.
+  * Case stores written before this change gain the three new columns when opened.
+  * Not changed: `Application` is still the file name when the app cannot be identified from the path (an app-identification question, not provenance).
 
 ### Medium
 
@@ -346,3 +360,18 @@ Still open from the interface work: the older views keep their internal layouts 
 | U-13 | `ChatsMasterWorkspace` thread list, header and table | A per-app invented participant profile ("@mule_handler :: Escrow specialist", "Military Grade ID: 1084920194", "Elena, 26 :: 4.2 km") shown for every Tinder, Telegram, Zangi or Session thread | REMOVED |
 | U-14 | `ExtractionSummaryTab` | A handler built a provenance record with an invented payload (decoding to "ACCOUNTS_IDENTITY_SEAL..."), length 64 and state ACTIVE; never called | REMOVED |
 | X-18 | `/api/report/sec230-bnss` (old) | The client chose the output directory, so a bundle could be written anywhere | REMOVED with the route; the review package writes only under the case workspace |
+
+## 10. Phase 5B.1: `src/sqlite` defects fixed (2026-11-12)
+
+The four confirmed `src/sqlite` defects from the first review are fixed and pinned by `tests/test_sqlite_engine_fixes.py`
+(eight tests; seven of them fail against the previous code, checked by stashing the fix).
+
+| ID | Fix |
+|---|---|
+| H-03 | The schema is read by walking `sqlite_schema` from page 1 through interior pages, so a database with more than one schema page (for example 120 tables) no longer reads as empty. |
+| H-04 | After a recovered cell the carver continues after that cell instead of skipping one more byte, so adjacent deleted rows are all found (600 of 600; it was 301, every second row). |
+| H-05 | Records are given to the table whose column count equals the record, checked against each column's declared affinity. A record shorter than the table (rows from before `ALTER TABLE ADD COLUMN`) fills the first columns and nothing is shifted. If more than one table still fits, the record is labelled `AMBIGUOUS: a | b` instead of going to whichever table came first. |
+| H-06 | A column is a rowid alias only when its declared type is exactly `INTEGER` (not `INT` or `BIGINT`), is not `DESC`, and the table is not WITHOUT ROWID. The table-constraint form `PRIMARY KEY (id)` is recognised for one `INTEGER` column. Stored 64-bit keys are no longer replaced by the rowid. |
+
+Still open from the first review's `src/` list: M-08 (`src/crypto/sqlcipher.py` checks only page 1 and re-signs WAL frames) and H-14, H-15, M-09, M-10, L-01, L-03.
+The carver and engine are not yet called for recovered transactions; only the b-tree reader is used (through the row locator) for live rows.

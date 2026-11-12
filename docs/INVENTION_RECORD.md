@@ -19,7 +19,7 @@ Rules for this file:
 |---|---|---|---|---|
 | 1 | Provenance-linked evidence card: a record, its source file, table, row, page, byte offset, length and recovery state, and the raw bytes at that offset, shown as one unit; unrecorded values read "not recorded" | exists | 6d7fda3 (2026-11-12) `ui/renderer/inspectors/EvidenceCard.tsx` | `ui/tests/ui_shell_test.ts`, `tests/test_ui_fts5_paginator.py` |
 | 2 | "Unknown" as a first-class value through parser, store, UI and export, with tests that fail if any layer substitutes a default (direction, status, time, page, counterparty) | exists | R-01..R-20, U-07 (see `REVIEW_FINDINGS_2.md`) | `tests/test_review_regressions.py`, `tests/test_financial_integrity.py`, `ui/tests/workbench_store_test.ts` |
-| 3 | Merged (clustered) records that keep the list of contributing source rows and byte locations | planned (X-13) | - | - |
+| 3 | Merged (clustered) records that keep the list of contributing source rows, with page and byte offset where the main file is the whole truth | exists (rows, state, page and offset for live rows; offsets for WAL-served rows still planned) | Phase 5B.1 commits on `feature/parity-and-independence`: `parsers/heuristic_engine.py`, `parsers/sqlite_locator.py` | `tests/test_tx_provenance.py` (`test_merged_record_lists_every_contributing_row`, `test_recorded_offset_is_the_real_cell_in_the_file`) |
 | 4 | Hash-chained audit log; chain head embedded in every report, annexure and package | exists | f3a931c, 69b4704, 13644e9 (2026-11-12) `src/audit/ledger.py` | `tests/test_audit.py`, `tests/test_examination_report.py` |
 | 5 | "Limitations" section generated from the processing log: what was not decoded, truncated, or encrypted without a key | partly exists (failures and warnings; encrypted-without-key outcome not yet logged) | 69b4704 `parsers/examination_report.py` | `tests/test_examination_report.py` |
 | 6 | Fail-closed disposition gate: no export is built until every item has an explicit decision; masking applied to data before rendering | exists | 50cadf9, 13644e9 `parsers/review_package.py` | `tests/test_review_package.py` |
@@ -36,6 +36,12 @@ the technical effect; who decided what (human contribution); earliest date and c
 ### Entry 1: evidence card
 * Problem: examiners must show where a displayed value came from; tools often show a decoded value with the source in a separate view.
 * Method: one card that binds the decoded record, its recorded provenance fields and the bytes read from the working copy at the recorded offset; absent fields shown as "not recorded".
+* Human contribution: _to be written by the named inventor._
+
+### Entry 3: merged records keep their sources
+* Problem: tools merge duplicate rows from several tables or apps into one display record and then cannot say which stored rows it came from.
+* Method: every parsed row carries (table, rowid, recovery state, page, byte offset); merging takes the union of the contributing rows; the stored provenance line lists each one; the offset is withheld when a write-ahead log means the main file may not hold the newest version.
+* Also (supports entries 1 and 2): a time value is labelled with what it means (epoch, offset-converted, local zone unknown), and no UTC or IST is stated unless the source fixes the instant.
 * Human contribution: _to be written by the named inventor._
 
 ### Entry 2: unknown as a first-class value

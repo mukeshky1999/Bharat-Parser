@@ -37,6 +37,7 @@ from parsers.app_overrides import (
 )
 from parsers.corrupt_db_carver import carve_corrupted_sqlite_file
 from parsers.freelist_carver import KNOWN_UPI_SUFFIXES, carve_sqlite_freelists
+from parsers.sqlite_locator import RowLocator
 from parsers.npci_storage_carver import NPCI_TXID_REGEX, parse_npci_upi_uri
 from parsers.protobuf_decoder import (
     ProtobufSchemaSynthesizer,
@@ -1110,6 +1111,8 @@ def _row_sources(row: Dict[str, Any]) -> List[Dict[str, Any]]:
     table = _clean_cell(row.get('Source_Table'))
     rowid = _clean_cell(row.get('Source_RowID'))
     state = _clean_cell(row.get('Recovery_State'))
+    page = _clean_cell(row.get('Source_Page'))
+    offset = _clean_cell(row.get('Source_Offset'))
     if table is None and rowid is None and state is None:
         return []
     if rowid is not None:
@@ -1117,7 +1120,11 @@ def _row_sources(row: Dict[str, Any]) -> List[Dict[str, Any]]:
             rowid = int(rowid)
         except (TypeError, ValueError):
             rowid = str(rowid)
-    return [{'table': table, 'rowid': rowid, 'state': state}]
+    entry: Dict[str, Any] = {'table': table, 'rowid': rowid, 'state': state}
+    if page is not None and offset is not None:
+        entry['page'] = int(page)
+        entry['offset'] = int(offset)
+    return [entry]
 
 
 def _union_sources(a: List[Dict[str, Any]], b: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1147,7 +1154,11 @@ def compose_tx_provenance(source_file: str, source_rows_json: Any) -> Optional[s
         table = it.get('table') or 'Not recorded'
         rowid = it.get('rowid')
         state = it.get('state') or 'Not recorded'
-        parts.append(f"{source_file} :: {table} :: RowID={rowid if rowid is not None else 'Not recorded'} :: State={state}")
+        where = (f"Page={it['page']} :: Offset=0x{int(it['offset']):08X}"
+                 if it.get('offset') is not None else "Offset=Not recorded")
+        parts.append(
+            f"{source_file} :: {table} :: RowID={rowid if rowid is not None else 'Not recorded'} :: State={state} :: {where}"
+        )
     return ' + '.join(parts) if parts else None
 
 
@@ -1540,6 +1551,13 @@ def parse_database_artifacts(
             except Exception:
                 pass
         return artifacts
+
+    locator: List[Optional[RowLocator]] = [None]       # created on first use, closed in the finally below
+
+    def _locator() -> RowLocator:
+        if locator[0] is None:
+            locator[0] = RowLocator(db_path)
+        return locator[0]
 
     collected_txs: List[pd.DataFrame] = []
     collected_chats: List[pd.DataFrame] = []
@@ -2174,16 +2192,28 @@ def parse_database_artifacts(
                                     tx_df.at[idx, 'Counterparty'] = 'Unknown'
 
                     valid_mask = tx_df['Amount'].notna() & (tx_df['Amount'] > 0) & (tx_df['Amount'] <= _AMOUNT_MAX_ABS)
-                    tx_df = tx_df[valid_mask]
+                    tx_df = tx_df[valid_mask].copy()
+                    tx_df['Source_Page'] = None
+                    tx_df['Source_Offset'] = None
+                    if not tx_df.empty and src_rowids is not None:
+                        loc = _locator()
+                        if loc.exact:
+                            located = loc.locate(table, [int(x) for x in tx_df['Source_RowID'].dropna()])
+                            tx_df['Source_Page'] = [located[int(r)][0] if pd.notna(r) and int(r) in located else None
+                                                    for r in tx_df['Source_RowID']]
+                            tx_df['Source_Offset'] = [located[int(r)][1] if pd.notna(r) and int(r) in located else None
+                                                      for r in tx_df['Source_RowID']]
                     if not tx_df.empty:
                         collected_txs.append(tx_df[[
                             'Date', 'Transaction_ID', 'Amount', 'Counterparty', 'Status', 'Type',
                             'Timestamp_Raw', 'Timestamp_UTC', 'Timestamp_IST', 'Timestamp_Basis',
-                            'Source_Table', 'Source_RowID', 'Recovery_State',
+                            'Source_Table', 'Source_RowID', 'Recovery_State', 'Source_Page', 'Source_Offset',
                         ]])
                 except Exception:
                     continue
     finally:
+        if locator[0] is not None:
+            locator[0].close()
         if conn is not None:
             try:
                 conn.close()

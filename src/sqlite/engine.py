@@ -124,7 +124,14 @@ def parse_create_table_sql(sql: str) -> Tuple[str, List[ColumnSchema], bool, Opt
         else:
             affinity = "NUMERIC"
 
-        if is_pk and affinity == "INTEGER" and not is_without_rowid:
+        # H-06: SQLite makes a column an alias of the rowid only when its declared type is exactly
+        # INTEGER (not BIGINT, INT, ...) and the key is not DESC. Anything else keeps its stored value.
+        if (
+            is_pk
+            and data_type == "INTEGER"
+            and not is_without_rowid
+            and not re.search(r"PRIMARY\s+KEY\s+(?:ASC\s+|DESC\s+)?(?:ON\s+CONFLICT\s+\w+\s+)?DESC", col_upper)
+        ):
             ipk_column_name = raw_name
 
         columns.append(
@@ -136,6 +143,23 @@ def parse_create_table_sql(sql: str) -> Tuple[str, List[ColumnSchema], bool, Opt
                 not_null=not_null,
             )
         )
+
+    # H-06: the table-constraint form, `id INTEGER, ..., PRIMARY KEY (id)`, is an alias too when it names
+    # exactly one column whose declared type is exactly INTEGER.
+    if ipk_column_name is None and not is_without_rowid:
+        for col_def in raw_col_defs:
+            m_pk = re.match(
+                r"(?:CONSTRAINT\s+\S+\s+)?PRIMARY\s+KEY\s*\(\s*[\"`\[]?([A-Za-z0-9_]+)[\"`\]]?\s*\)",
+                col_def.strip(),
+                re.IGNORECASE,
+            )
+            if m_pk:
+                target = m_pk.group(1)
+                for c in columns:
+                    if c.name.lower() == target.lower() and c.data_type == "INTEGER":
+                        ipk_column_name = c.name
+                        c.is_primary_key = True
+                break
 
     return table_name, columns, is_without_rowid, ipk_column_name
 
@@ -482,16 +506,50 @@ class ForensicSQLiteEngine:
         text_encoding: str,
         page_fetcher: Callable[[int], bytes]
     ) -> None:
-        """Parses sqlite_schema from Page 1 starting at B-Tree header offset 100."""
-        if len(page1_bytes) < 108:
-            return
+        """Reads sqlite_schema. Page 1 is its root: a leaf when there are few tables, an interior page
+        (H-03) when the schema spans several pages, in which case every child page is read too."""
+        queue: List[Tuple[int, bytes]] = [(1, page1_bytes)]
+        visited: set = set()
+        while queue:
+            page_num, data = queue.pop(0)
+            if page_num in visited or not data:
+                continue
+            visited.add(page_num)
+            hdr_off = 100 if page_num == 1 else 0
+            if len(data) < hdr_off + 8:
+                continue
+            hdr = parse_btree_page_header(data, page_num=page_num)
+            if hdr.page_type == 0x0D:
+                self._parse_schema_leaf(data, page_num, usable_page_size, text_encoding, page_fetcher)
+            elif hdr.page_type == 0x05:
+                children: List[int] = []
+                ptr_base = hdr_off + hdr.header_size
+                for c in range(hdr.cell_count):
+                    pos = ptr_base + c * 2
+                    if pos + 2 > len(data):
+                        break
+                    cell_off = struct.unpack(">H", data[pos:pos + 2])[0]
+                    if cell_off + 4 <= len(data):
+                        children.append(struct.unpack(">I", data[cell_off:cell_off + 4])[0])
+                if hdr.right_most_child_page:
+                    children.append(hdr.right_most_child_page)
+                for child in children:
+                    if child > 0 and child not in visited:
+                        queue.append((child, page_fetcher(child)))
 
-        bt_hdr = parse_btree_page_header(page1_bytes, page_num=1)
-        if bt_hdr.page_type not in (0x0D, 0x05):
-            return
-
+    def _parse_schema_leaf(
+        self,
+        page1_bytes: bytes,
+        page_num: int,
+        usable_page_size: int,
+        text_encoding: str,
+        page_fetcher: Callable[[int], bytes]
+    ) -> None:
+        """Parses the sqlite_schema rows held on one leaf page."""
+        hdr_off = 100 if page_num == 1 else 0
+        bt_hdr = parse_btree_page_header(page1_bytes, page_num=page_num)
         cell_count = bt_hdr.cell_count
-        ptr_array_offset = 100 + bt_hdr.header_size
+        ptr_array_offset = hdr_off + bt_hdr.header_size
 
         for i in range(cell_count):
             p_offset = ptr_array_offset + (i * 2)

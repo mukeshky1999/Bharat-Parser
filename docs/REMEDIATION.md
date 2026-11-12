@@ -41,7 +41,7 @@ TypeScript suites all pass; `tsc --noEmit` and `vite build` succeed.
 ## Not done (still open)
 - **S-01 (decisive):** the tested `src/` engines (VFS, provenance, SQLite/WAL, UPI, banking, DLT, correlator, crypto, legal) are still not wired into either product pipeline. Choosing and wiring one stack is a design decision, not a patch.
 - H-02 remainder: the transaction `Date` column is still an unlabelled naive string (UTC when from an epoch, wall time when from a string); the odd-hour badge inherits that. WebKit/out-of-range values still fall through as raw numbers.
-- H-03 to H-06, H-14, H-15, M-08 to M-10, L-01, L-03: defects in `src/sqlite`, `src/vfs`, `src/crypto`, `src/dlt` (not reachable from the product today, so not fixed here).
+- H-03 to H-06, H-14, H-15, M-08 to M-10, L-01, L-03: defects in `src/sqlite`, `src/vfs`, `src/crypto`, `src/dlt`. H-03 to H-06 were fixed in Phase 5B.1 (below); the rest are still open.
 - M-01 (WAL frame validity in `wal_rollback_analyzer`), M-02 (carver alignment), M-03 (recovered-state counts by substring), M-04/M-05 (cross-app healing, counterparties written to contacts), M-06 (OS type always "android").
 - Annexure truncation to 50/30 rows in the TypeScript Section 63 generator (that generator is no longer used by the UI and should be deleted with the other duplicate TypeScript engines).
 - Legacy dashboard (`main.py`, `src/workstation_app`) still contains H-10 sample devices and figures; its evidence-modifying path (C-01) is fixed, but the review's recommendation to retire it stands.
@@ -132,3 +132,12 @@ Done, one commit per step:
 Guards: `test_no_statutory_form_routes_exist`, `test_report_contains_no_legal_form_wording`, and the renderer check in `ui/tests/ui_shell_test.ts`.
 Python 491 passed; `npm run test:ts` passes; `tsc` clean; `vite build` OK; the new screen was opened in Electron and the endpoints exercised against a running server on the test evidence.
 Open: `/api/report/package` lists media files only; tag-based selection and the reviewer round trip (5C.10); `abilities.md` is not re-verified line by line (a status banner says so); `financial_graph_and_storyboard/freeze_cart_manager.py` still has a "freeze cart" for graph views.
+
+### Phase 5B.1: transactions keep their source and an honest time (2026-11-12, branch `feature/parity-and-independence`)
+Done:
+1. **X-13 fixed.** Table, rowid and state are carried through clustering as a list of every contributing row; one converter gives raw, UTC and IST time with a stated basis; a bare local clock string claims no UTC or IST; direction follows the recorded type; old case stores gain the new columns; the renderer no longer presents an unzoned string as IST.
+2. **`src/sqlite` defects H-03, H-04, H-05, H-06 fixed** with eight tests on real database files (seven fail on the old code).
+3. **Page and byte offset** for live rows through `parsers/sqlite_locator.py`; the test reads the file at the recorded offset and checks that the cell is that row.
+4. A flaky guard in `test_examination_report.py` was fixed: the pattern for "1930" had no word boundary and matched a random SHA-256 in about one run in a hundred.
+Python 515 passed (491 before this phase); `npm run test:ts` passes; `tsc` clean.
+Not done in this step (still planned): wiring `src/vfs` (stage A) and `src/upi`/`src/dlt` (stage C) into the product; M-08 and the `src/crypto/sqlcipher.py` wiring (X-10); offsets for rows served from a WAL; the odd-hour risk badge still reads the unzoned `Date` string.
