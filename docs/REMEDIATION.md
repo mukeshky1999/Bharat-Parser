@@ -322,3 +322,29 @@ Still not done: restyling the ledger / fusion / graph into the record-table patt
 - **Bug found while building it**: `/api/artifacts/query` crashed (HTTP 500) on any table whose text column mixed NULLs and values, because pandas read the NULL as NaN and JSON cannot carry it. Fixed for the query and the thread endpoints (`_records_json_safe`).
 - **Tag pills on tables**: a Tags column on the UPI ledger, calls, crypto tabs and bank alerts (the shared grid), on People contacts/calls, and on chat messages (grid and bubbles). Pills are read from `GET /api/case/tags/index?table=` and read again whenever a tag is applied or removed anywhere. They show only what the examiner tagged. The tag column is also in the CSV.
 - Not done: tag pills on search hits; the iOS and Android SMS readers have not seen a real device.
+
+### Review of Phases 5A to 5C and its fixes (2026-11-12). See `REVIEW_FINDINGS_3.md`
+Three reviewers read the code written since the last review; each serious finding was re-checked and fixed with a test,
+one commit per step (`Review step 1` to `Review step 10`). Python 696 passed (636 before); `npm run test:ts` passes (adds
+`review_step10_test.ts` and the second client test file); `tsc` clean; `vite build` OK.
+1. **Shell**: the link-graph frame lost `allow-same-origin`; CSP and frame-navigation limits (packaged build); spawn errors
+   shown, backend ends when the shell is gone (`BHARAT_PARENT_PID`), confirmation before closing during an ingest.
+2. **Case storage**: folder name carries a hash of the exact case id (old folders still found); cases live under
+   `%LOCALAPPDATA%\BharatAnalyzer\cases` in an installed build (`BHARAT_WORKSPACE_ROOT` overrides); `/api/case/open` takes
+   only folders inside the cases folder and only our own store.
+3. **Replace-mode ingest** sets the old folders aside until the new ingest succeeds, keeps tags, hash lists, saved filters
+   and marks (tags are put back by provenance only when the source is the same), switches store and case state together,
+   and holds its lock in the worker thread.
+4. **Validation** no longer shares the server with other requests while it runs.
+5. **Audit log** hash v2 (times and every field covered, old logs still verify); verify and append read the file; actions
+   that change the case or produce output are refused while the log fails verification.
+6. **Keep-out** checks include tags set aside; file-name matching is exact; package masking is one pass; package built aside
+   and copies re-hashed.
+7. **Server**: fusion paths confined, UNC refused, refusals not turned into results, analysis failures in the processing log,
+   links not followed, docs off by default, limits.
+8. **Search**: regular expressions run with a time limit per match (`regex` package, now in `requirements.txt`).
+9. **Modules**: bank alerts, SQLite URIs, key cap, EXIF clock, media upsert and thumbnails, saved filters, marks, timeline,
+   case listing, report tallies, validation corpus, dialogs.
+10. **Renderer**: nothing of the previous case stays, failures are reported, unknown stays unknown, late replies dropped,
+    zones labelled, static claims removed, device-trace view reads the case.
+Open: see section 3 of `REVIEW_FINDINGS_3.md` (port-0 handshake, token off the command line, regenerating the graph HTML).
