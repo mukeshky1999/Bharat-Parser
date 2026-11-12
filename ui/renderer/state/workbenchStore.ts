@@ -36,7 +36,11 @@ export type ActiveTabType =
   | 'CRYPTO'
   | 'SQLITE_WIZARD'
   | 'FILE_SYSTEM'
-  | 'KEYS';
+  | 'KEYS'
+  | 'SEARCH'
+  | 'TIMELINE'
+  | 'TAGS'
+  | 'MEDIA';
 
 export interface SelectedArtifactState {
   id: string;

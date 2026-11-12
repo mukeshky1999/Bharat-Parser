@@ -203,3 +203,13 @@ def test_search_endpoints(client, tmp_path):
     assert client.get("/api/case/search", params={"q": "x", "mode": "fuzzy"}).status_code == 422
     assert client.get("/api/case/record", params={"table": "transactions", "id": 999999}).status_code == 404
     assert client.get("/api/case/record", params={"table": "sqlite_master", "id": 1}).status_code == 422
+
+
+def test_record_endpoint_lists_the_records_tags(client, tmp_path):
+    res = _ingest(client, _mixed_folder(tmp_path))
+    c = sqlite3.connect(res["workspace_dir"] + "/bharat_case_store.db")
+    rid = c.execute("SELECT id FROM transactions").fetchone()[0]
+    c.close()
+    assert client.get("/api/case/record", params={"table": "transactions", "id": rid}).json()["tags"] == []
+    client.post("/api/case/tags", json={"tag": "of_interest", "records": [{"table": "transactions", "id": rid}]})
+    assert client.get("/api/case/record", params={"table": "transactions", "id": rid}).json()["tags"] == ["of_interest"]

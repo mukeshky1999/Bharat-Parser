@@ -595,6 +595,15 @@ class CaseUIPaginatorStore:
         finally:
             conn.close()
 
+    def record_tags(self, table: str, record_id: int) -> List[str]:
+        """The tags on one record (detached tags are not included)."""
+        from parsers import case_tags
+        conn = self._get_connection()
+        try:
+            return case_tags.tags_for(conn, table.lower().strip(), [record_id]).get(record_id, [])
+        finally:
+            conn.close()
+
     def delete_evidence_item(self, item_id: str) -> Dict[str, int]:
         """Removes every record of one evidence item (used when that item is processed again). Other items are untouched."""
         removed: Dict[str, int] = {}

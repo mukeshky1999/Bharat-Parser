@@ -1881,7 +1881,7 @@ def case_record(table: str = Query(...), id: int = Query(..., ge=1)):
         raise HTTPException(status_code=422, detail=str(exc))
     if rec is None:
         raise HTTPException(status_code=404, detail=f"No record {id} in {table}.")
-    return {"table": table, "id": id, "record": rec}
+    return {"table": table, "id": id, "record": rec, "tags": _active_store.record_tags(table, id)}
 
 
 @app.get("/api/case/tree-counts")

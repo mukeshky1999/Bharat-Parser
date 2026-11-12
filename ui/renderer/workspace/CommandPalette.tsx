@@ -17,7 +17,6 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
   const open = useUi((s) => s.open);
   const setActiveTab = useWorkbenchStore((s) => s.setActiveTab);
   const setSearchQuery = useWorkbenchStore((s) => s.setSearchQuery);
-  const activeTab = useWorkbenchStore((s) => s.activeTab);
   const setPref = usePreferences((s) => s.set);
   const [q, setQ] = useState('');
   const [idx, setIdx] = useState(0);
@@ -48,10 +47,10 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
         {
           id: 'search',
           label: `Search records for “${q.trim()}”`,
-          hint: 'Filters the current view',
+          hint: 'Lists every record that contains it',
           run: () => {
             setSearchQuery(q.trim());
-            if (!['UPI_LEDGER', 'CHATS', 'CONTACTS', 'CALLS'].includes(activeTab)) setActiveTab('CHATS');
+            setActiveTab('SEARCH');
           },
         },
       ]

@@ -887,10 +887,10 @@ class ForensicClient {
   }
 
   /** One record exactly as stored; a value that was not recorded is null. */
-  public async getRecord(table: string, id: number): Promise<{ data: Record<string, unknown> | null; error: string | null }> {
-    const res = await this.fetchApi<{ record: Record<string, unknown> }>(
+  public async getRecord(table: string, id: number): Promise<{ data: Record<string, unknown> | null; tags: string[]; error: string | null }> {
+    const res = await this.fetchApi<{ record: Record<string, unknown>; tags?: string[] }>(
       `/api/case/record?table=${encodeURIComponent(table)}&id=${encodeURIComponent(String(id))}`);
-    return { data: res.data?.record ?? null, error: res.error };
+    return { data: res.data?.record ?? null, tags: res.data?.tags ?? [], error: res.error };
   }
 
   /** Which decoder produced the records, and which files were seen but not decoded, with the reason. */

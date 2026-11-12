@@ -26,7 +26,7 @@ export const STAGES: Stage[] = [
   { id: 'intake', no: 1, label: 'Intake', hint: 'Open evidence, see what was read', icon: FolderInput,
     views: [{ tab: 'SUMMARY', label: 'Case overview' }] },
   { id: 'evidence', no: 2, label: 'Evidence', hint: 'Files, databases, integrity', icon: HardDrive,
-    views: [{ tab: 'FILE_SYSTEM', label: 'Files' }, { tab: 'SQLITE_WIZARD', label: 'Database inspector' }] },
+    views: [{ tab: 'FILE_SYSTEM', label: 'Files' }, { tab: 'SQLITE_WIZARD', label: 'Database inspector' }, { tab: 'SEARCH', label: 'Search records' }] },
   { id: 'people', no: 3, label: 'People', hint: 'Contacts and calls', icon: Users,
     views: [{ tab: 'CONTACTS', label: 'Contacts' }, { tab: 'CALLS', label: 'Calls' }] },
   { id: 'money', no: 4, label: 'Money', hint: 'UPI, bank, crypto, links', icon: IndianRupee,

@@ -15,6 +15,7 @@ import { CryptoWalletView } from '../views/CryptoWalletView';
 import { FileSystemExplorerTab } from '../views/FileSystemExplorerTab';
 import { FindingsView } from '../views/FindingsView';
 import { ReportExportView } from '../views/ReportExportView';
+import { SearchView } from '../views/SearchView';
 
 export const Workspace: React.FC = () => {
   const activeTab = useWorkbenchStore((s) => s.activeTab);
@@ -56,6 +57,7 @@ export const Workspace: React.FC = () => {
         {activeTab === 'LOCATIONS_MEDIA' && <LocationsMediaView />}
         {activeTab === 'FINDINGS' && <FindingsView />}
         {activeTab === 'REPORT_EXPORT' && <ReportExportView />}
+        {activeTab === 'SEARCH' && <SearchView />}
       </div>
     </main>
   );
