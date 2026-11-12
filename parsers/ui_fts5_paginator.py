@@ -540,7 +540,7 @@ class CaseUIPaginatorStore:
                 total = cur.fetchone()['cnt'] or 0
 
                 # WAL and Carved count
-                wal_where_clause = "Forensic_Provenance LIKE '%WAL%' OR Forensic_Provenance LIKE '%CARVED%' OR Forensic_Provenance LIKE '%FREELIST%' OR Forensic_Provenance LIKE '%SLACK%' OR Forensic_Provenance LIKE '%Unallocated%'"
+                wal_where_clause = "Forensic_Provenance LIKE '%:: State=WAL%' OR Forensic_Provenance LIKE '%:: State=CARVED%' OR Forensic_Provenance LIKE '%:: State=FREELIST%' OR Forensic_Provenance LIKE '%:: State=SLACK%' OR Forensic_Provenance LIKE '%:: State=Unallocated%'"
                 if table == 'chats':
                     wal_where_clause += " OR Is_Revoked_Deleted = 1"
 
@@ -644,11 +644,11 @@ class CaseUIPaginatorStore:
             if recovery_filter and recovery_filter != 'ALL':
                 if recovery_filter == 'WAL_AND_CARVED_ONLY':
                     where_clauses.append(
-                        "(Forensic_Provenance LIKE '%WAL%' OR Forensic_Provenance LIKE '%CARVED%' OR Forensic_Provenance LIKE '%FREELIST%' OR Is_Revoked_Deleted = 1)"
+                        "(Forensic_Provenance LIKE '%:: State=WAL%' OR Forensic_Provenance LIKE '%:: State=CARVED%' OR Forensic_Provenance LIKE '%:: State=FREELIST%' OR Is_Revoked_Deleted = 1)"
                     )
                 elif recovery_filter == 'ACTIVE':
                     where_clauses.append(
-                        "(Forensic_Provenance NOT LIKE '%WAL%' AND Forensic_Provenance NOT LIKE '%CARVED%' AND Forensic_Provenance NOT LIKE '%FREELIST%' AND Is_Revoked_Deleted = 0)"
+                        "(COALESCE(Forensic_Provenance, '') NOT LIKE '%:: State=WAL%' AND COALESCE(Forensic_Provenance, '') NOT LIKE '%:: State=CARVED%' AND COALESCE(Forensic_Provenance, '') NOT LIKE '%:: State=FREELIST%' AND Is_Revoked_Deleted = 0)"
                     )
 
             base_where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
@@ -662,7 +662,7 @@ class CaseUIPaginatorStore:
                     COALESCE(MAX(Recipient_Identifier), MAX(Sender_Identifier), '') AS Participant_Identifier,
                     COALESCE(MAX(Participant_Bio_Meta), '') AS Participant_Bio_Meta,
                     COUNT(*) AS Total_Messages,
-                    SUM(CASE WHEN (Forensic_Provenance LIKE '%WAL%' OR Forensic_Provenance LIKE '%CARVED%' OR Forensic_Provenance LIKE '%FREELIST%' OR Is_Revoked_Deleted = 1) THEN 1 ELSE 0 END) AS Deleted_Carved_Count,
+                    SUM(CASE WHEN (Forensic_Provenance LIKE '%:: State=WAL%' OR Forensic_Provenance LIKE '%:: State=CARVED%' OR Forensic_Provenance LIKE '%:: State=FREELIST%' OR Is_Revoked_Deleted = 1) THEN 1 ELSE 0 END) AS Deleted_Carved_Count,
                     MAX(Timestamp_IST) AS Last_Timestamp_IST
                 FROM chats
                 {base_where}
@@ -764,11 +764,11 @@ class CaseUIPaginatorStore:
                     elif k == 'recovery_filter':
                         if v == 'WAL_AND_CARVED_ONLY' or v == 'CARVED':
                             where_clauses.append(
-                                "(Forensic_Provenance LIKE '%WAL%' OR Forensic_Provenance LIKE '%CARVED%' OR Forensic_Provenance LIKE '%FREELIST%' OR Is_Revoked_Deleted = 1)"
+                                "(Forensic_Provenance LIKE '%:: State=WAL%' OR Forensic_Provenance LIKE '%:: State=CARVED%' OR Forensic_Provenance LIKE '%:: State=FREELIST%' OR Is_Revoked_Deleted = 1)"
                             )
                         elif v == 'ACTIVE':
                             where_clauses.append(
-                                "(Forensic_Provenance NOT LIKE '%WAL%' AND Forensic_Provenance NOT LIKE '%CARVED%' AND Forensic_Provenance NOT LIKE '%FREELIST%' AND Is_Revoked_Deleted = 0)"
+                                "(COALESCE(Forensic_Provenance, '') NOT LIKE '%:: State=WAL%' AND COALESCE(Forensic_Provenance, '') NOT LIKE '%:: State=CARVED%' AND COALESCE(Forensic_Provenance, '') NOT LIKE '%:: State=FREELIST%' AND Is_Revoked_Deleted = 0)"
                             )
                         elif v == 'OS_SPILLOVER':
                             where_clauses.append("Forensic_Provenance LIKE '%OS_SPILLOVER%'")

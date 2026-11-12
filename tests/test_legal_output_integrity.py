@@ -197,3 +197,29 @@ def test_sqlcipher_open_without_driver_reports_unavailable_and_does_not_touch_fi
     assert "not installed" in caplog.text
     assert hashlib.sha256(db.read_bytes()).hexdigest() == before
     assert not [p for p in tmp_path.iterdir() if p.name.startswith("decrypted_")]
+
+
+# ---------------- M-03: recovered-state counts must not match file names ----------------
+def test_recovered_counts_ignore_file_names_containing_wal_or_carved(tmp_path):
+    import pandas as pd
+
+    from parsers.ui_fts5_paginator import CaseUIPaginatorStore
+
+    store = CaseUIPaginatorStore(str(tmp_path), db_name="m03.db")
+    store.ingest_dataframe_chunked("chats", pd.DataFrame([
+        # Active rows whose PATH contains the letters WAL / CARVED / FREELIST (case-insensitive LIKE bait)
+        {"Application": "WhatsApp", "Message_ID": "1", "Thread_ID": "T1", "Is_Revoked_Deleted": 0,
+         "Forensic_Provenance": "wallet.db :: C:/cases/WALLET/carved_notes/wallet.db :: tx :: RowID=1 :: State=Allocated B-Tree"},
+        # Genuinely recovered rows
+        {"Application": "WhatsApp", "Message_ID": "2", "Thread_ID": "T1", "Is_Revoked_Deleted": 0,
+         "Forensic_Provenance": "msgstore.db :: Page_1 :: Offset=0x2000 :: State=WAL_RECOVERED"},
+        {"Application": "WhatsApp", "Message_ID": "3", "Thread_ID": "T1", "Is_Revoked_Deleted": 0,
+         "Forensic_Provenance": "msgstore.db :: Page_1 :: Offset=0x3000 :: State=CARVED_FREELIST"},
+    ]))
+    counts = store.get_pa_project_tree_counts()
+    node = counts["chats_whatsapp"] if "chats_whatsapp" in counts else next(iter(counts.values()))
+    flat = {k: v for k, v in counts.items()}
+    # Find the WhatsApp node regardless of its key name
+    wa = [v for k, v in flat.items() if "whatsapp" in k.lower() and isinstance(v, dict) and v.get("total") == 3]
+    assert wa, flat
+    assert wa[0]["wal_and_carved"] == 2 and wa[0]["active"] == 1, wa[0]
