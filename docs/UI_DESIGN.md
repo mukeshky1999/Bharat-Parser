@@ -81,7 +81,7 @@ These are the parts a designer or attorney should look at. They are descriptions
 
 ## 7. What this does not do yet
 
-* The chat workspace still has its wide 28-column table (restyled to the visual system in 2026-11-12, layout unchanged). It is a candidate for the same column treatment as `RecordTable`.
+* The chat workspace (`ChatsMasterWorkspace`, `UPIMasterLedgerView`, the link graph, the SQLite wizard and the other older views) has the new themes, fonts and sizes but keeps its previous internal layout, including the wide 28-column chat table. Each is a candidate for the same treatment as `RecordTable`.
 * Rows are paged 100 at a time, not windowed.
 * There is no split view.
 * The evidence card's Links tab matches on exact UTR and VPA only.
@@ -115,15 +115,3 @@ Do not publish or demonstrate the interface publicly before taking that advice, 
 * Stage 8 is now **Report & export**. The Section 63 certificate, Section 230 bundle and NCRP freeze sheet dialogs were removed: the tool supplies facts (report, annexure, review package, audit log) and the examiner prepares any legal form.
 * Removed from the chat workspace: a "Dossier view" that showed an invented profile ("Elena, 26", "HIGH RISK SYNDICATE", sample VPAs and a made-up modus operandi) for any thread; per-app invented participant bios in the thread list, header and table; and a dead handler that built a provenance record with an invented payload.
 * The review package screen disables Build until every file has a decision, and says how many still need one.
-
-## 10. Visual system (added 2026-11-12)
-
-One accent, neutral surfaces, colour only for meaning.
-
-* **Colour:** slate for surfaces, text, icons and app names. Cyan only for the primary button, the selected row or item marker, links and focus rings. Emerald, amber and rose mean ok, warning and mismatch/error/recovered. No other hues in views.
-* **Shape and depth:** radius 4px for controls (`rounded-ctl`) and 6px for panels (`rounded-panel`). Panels are separated by 1px borders and have no shadow. Only floating layers (menus, dialogs, palette, toasts) use `shadow-float`.
-* **Type:** weights 400, 500, 600. Sentence-case headings, no uppercase tracked labels. 12px for dense tables and metadata, 13px body, 15px section titles, 18px page titles. Monospace only for identifiers, hashes and offsets.
-* **Motion:** colour transitions only; no scale or translate on hover.
-* **Copy:** plain nouns that say what is shown. Honest wording ("not recorded", "Re-hash MATCH") is unchanged.
-* **Building blocks:** `ui/renderer/components/` holds `Panel`/`PanelHeader`, `Button`, `Badge`, `KeyValue`, `EmptyState` and `Pager`. New screens use these. The tokens are in `index.css` (`@theme`).
-* **Enforced by** `ui/tests/ui_shell_test.ts`, which fails on gradients, blur, large radii, heavy weights, wide tracking, hover scale, decorative hues and surface shadows.

@@ -117,8 +117,8 @@ export function DataGrid<T>({
           {rows.length.toLocaleString()}{totalBeforeFilter !== undefined && totalBeforeFilter !== rows.length ? ` of ${totalBeforeFilter.toLocaleString()}` : ''} row{rows.length === 1 ? '' : 's'}
         </span>
         <details className="relative ml-auto">
-          <summary className="h-8 px-3 rounded-ctl border border-slate-700 text-slate-200 hover:bg-slate-800 cursor-pointer inline-flex items-center list-none">Columns</summary>
-          <div className="absolute right-0 z-20 mt-1 w-60 rounded-ctl border border-slate-700 bg-slate-900 p-2 shadow-float">
+          <summary className="h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 cursor-pointer inline-flex items-center list-none">Columns</summary>
+          <div className="absolute right-0 z-20 mt-1 w-60 rounded border border-slate-700 bg-slate-900 p-2 shadow-xl">
             {columns.map((c) => (
               <label key={c.key} className="flex items-center gap-2 py-0.5 text-slate-200">
                 <input type="checkbox" checked={!hidden.includes(c.key)} disabled={!hidden.includes(c.key) && shown.length === 1}
@@ -129,7 +129,7 @@ export function DataGrid<T>({
             <p className="mt-1 text-[0.6875rem] text-slate-400">Hiding a column only changes what is shown. Export keeps every column.</p>
           </div>
         </details>
-        <button onClick={exportCsv} disabled={rows.length === 0} className="flex items-center gap-2 h-8 px-3 rounded-ctl border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40">
+        <button onClick={exportCsv} disabled={rows.length === 0} className="flex items-center gap-2 h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40">
           <Download className="w-4 h-4" aria-hidden="true" /> Export CSV
         </button>
       </div>
@@ -175,7 +175,7 @@ export function Segmented<V extends string>({ label, value, options, onChange }:
   label: string; value: V; options: Array<{ value: V; label: string; title?: string }>; onChange: (v: V) => void;
 }): React.ReactElement {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded-ctl border border-slate-700 overflow-hidden">
+    <div role="radiogroup" aria-label={label} className="inline-flex rounded border border-slate-700 overflow-hidden">
       {options.map((o) => (
         <button key={o.value} role="radio" aria-checked={value === o.value} title={o.title} onClick={() => onChange(o.value)}
           className={`h-8 px-3 border-r border-slate-700 last:border-r-0 ${value === o.value ? 'bg-slate-700 text-slate-50' : 'text-slate-300 hover:bg-slate-800'}`}>
@@ -189,6 +189,6 @@ export function Segmented<V extends string>({ label, value, options, onChange }:
 export const FilterInput: React.FC<{ label: string; value: string; onChange: (v: string) => void; placeholder: string; width?: string }> = ({ label, value, onChange, placeholder, width = 'w-64' }) => (
   <label>
     <span className="sr-only">{label}</span>
-    <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={`h-8 ${width} px-2 rounded-ctl bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500`} />
+    <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={`h-8 ${width} px-2 rounded bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500`} />
   </label>
 );

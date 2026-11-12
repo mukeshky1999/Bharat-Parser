@@ -65,8 +65,8 @@ export const TagsView: React.FC = () => {
               <button onClick={() => setCurrent(t.tag)} aria-current={current === t.tag}
                 className={`w-full text-left rounded border px-2 py-1.5 ${current === t.tag ? 'border-cyan-600 bg-slate-800' : 'border-slate-800 hover:bg-slate-800'}`}>
                 <div className="flex justify-between text-slate-100"><span>{t.tag}</span><span>{t.count}</span></div>
-                {t.meaning && <div className="text-[0.75rem] text-slate-400">{t.meaning}</div>}
-                {t.detached > 0 && <div className="text-[0.75rem] text-amber-300">{t.detached} no longer found after reprocessing</div>}
+                {t.meaning && <div className="text-[0.6875rem] text-slate-400">{t.meaning}</div>}
+                {t.detached > 0 && <div className="text-[0.6875rem] text-amber-300">{t.detached} no longer found after reprocessing</div>}
               </button>
             </li>
           ))}

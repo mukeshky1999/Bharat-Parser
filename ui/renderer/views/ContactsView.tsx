@@ -19,19 +19,19 @@ export const ContactsView: React.FC = () => {
       {/* Header */}
       <div className="h-10 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between text-xs shrink-0 select-none">
         <div className="flex items-center space-x-2">
-          <Users className="w-4 h-4 text-slate-300" />
-          <span className="font-semibold text-slate-100">Contacts, Social Profiles & Dating Matches</span>
-          <span className="text-[0.75rem] text-slate-400 font-mono">({filteredContacts.length} Entities)</span>
+          <Users className="w-4 h-4 text-indigo-400" />
+          <span className="font-bold text-slate-100">Contacts, Social Profiles & Dating Matches</span>
+          <span className="text-[0.6875rem] text-slate-400 font-mono">({filteredContacts.length} Entities)</span>
         </div>
-        <div className="text-[0.75rem] text-slate-400 font-mono">
+        <div className="text-[0.6875rem] text-slate-400 font-mono">
           Corroborated Against Device SQLite & Cloud Cache
         </div>
       </div>
 
       {/* Grid */}
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-left text-[0.75rem] font-mono border-collapse">
-          <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 text-[0.75rem] sticky top-0 z-10">
+        <table className="w-full text-left text-[0.6875rem] font-mono border-collapse">
+          <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 uppercase text-[0.6875rem] sticky top-0 z-10">
             <tr>
               <th className="p-2 w-10">#</th>
               <th className="p-2 w-28">Source App</th>
@@ -63,17 +63,17 @@ export const ContactsView: React.FC = () => {
                   }}
                   className={`cursor-pointer transition-colors ${
                     isSelected
-                      ? 'bg-slate-800 text-slate-300 border-l-2 border-cyan-500'
+                      ? 'bg-indigo-950/40 text-indigo-100 border-l-2 border-indigo-500'
                       : 'hover:bg-slate-900/60 text-slate-300'
                   }`}
                 >
                   <td className="p-2 text-slate-500">{idx + 1}</td>
                   <td className="p-2 font-semibold">
-                    <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[0.75rem]">
+                    <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[0.6875rem]">
                       {cnt.sourceApp}
                     </span>
                   </td>
-                  <td className="p-2 font-mono text-cyan-300 font-semibold truncate max-w-[200px]" title={cnt.identifier}>
+                  <td className="p-2 font-mono text-cyan-300 font-bold truncate max-w-[200px]" title={cnt.identifier}>
                     {cnt.identifier}
                   </td>
                   <td className="p-2 font-sans font-semibold text-slate-200">
@@ -84,28 +84,28 @@ export const ContactsView: React.FC = () => {
                   </td>
                   <td className="p-2">
                     {cnt.datingMetadata ? (
-                      <div className="text-[0.75rem] space-y-0.5 font-sans">
-                        <div className="text-slate-300 font-semibold flex items-center space-x-1">
-                          <Heart className="w-3 h-3 text-slate-300" />
+                      <div className="text-[0.6875rem] space-y-0.5 font-sans">
+                        <div className="text-pink-300 font-semibold flex items-center space-x-1">
+                          <Heart className="w-3 h-3 text-pink-400" />
                           <span>Age: {cnt.datingMetadata.age} | {cnt.datingMetadata.gender}</span>
                         </div>
                         <div className="text-slate-400 flex items-center space-x-1">
-                          <MapPin className="w-2.5 h-2.5 text-slate-300" />
+                          <MapPin className="w-2.5 h-2.5 text-teal-400" />
                           <span>{cnt.datingMetadata.location} ({cnt.datingMetadata.distanceKm} km)</span>
                         </div>
                       </div>
                     ) : (
-                      <span className="text-slate-600 font-mono text-[0.75rem]">—</span>
+                      <span className="text-slate-600 font-mono text-[0.6875rem]">—</span>
                     )}
                   </td>
-                  <td className="p-2 text-slate-400 truncate text-[0.75rem]">
+                  <td className="p-2 text-slate-400 truncate text-[0.6875rem]">
                     {cnt.provenance.tableName || 'N/A'}
                   </td>
-                  <td className="p-2 text-amber-400 font-semibold text-[0.75rem]">
+                  <td className="p-2 text-amber-400 font-bold text-[0.6875rem]">
                     {hexOffset}
                   </td>
                   <td className="p-2">
-                    <span className="text-[0.75rem] bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-1.5 py-0.5 rounded font-mono">
+                    <span className="text-[0.6875rem] bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-1.5 py-0.2 rounded font-mono">
                       [ACTIVE]
                     </span>
                   </td>

@@ -28,7 +28,7 @@ const Splitter: React.FC<{ label: string; onDelta: (dx: number) => void }> = ({ 
       aria-orientation="vertical"
       aria-label={label}
       tabIndex={0}
-      className="w-px shrink-0 cursor-col-resize bg-slate-800 hover:bg-cyan-600 focus-visible:bg-cyan-600 relative before:absolute before:inset-y-0 before:-left-[3px] before:-right-[3px] before:content-['']"
+      className="w-1.5 shrink-0 cursor-col-resize bg-slate-800 hover:bg-cyan-700 focus-visible:bg-cyan-600"
       onPointerDown={(e) => { last.current = e.clientX; (e.target as HTMLElement).setPointerCapture(e.pointerId); }}
       onPointerMove={(e) => { if (last.current !== null) { onDelta(e.clientX - last.current); last.current = e.clientX; } }}
       onPointerUp={() => { last.current = null; }}

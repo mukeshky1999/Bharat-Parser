@@ -123,7 +123,7 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
       <div className={`${props.embedded ? 'min-h-8 flex-wrap gap-y-1 py-1' : 'h-8'} bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between text-xs select-none`}>
         <div className="flex items-center space-x-3">
           {/* Tab Switcher */}
-          <div className="flex items-center space-x-1 font-mono text-[0.75rem]">
+          <div className="flex items-center space-x-1 font-mono text-[0.6875rem]">
             <button
               onClick={() => {
                 if (dockState === 'COLLAPSED') setDockState('NORMAL');
@@ -131,7 +131,7 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
               }}
               className={`flex items-center space-x-1 px-2.5 py-0.5 rounded transition-colors ${
                 bottomDockTab === 'HEX' && dockState !== 'COLLAPSED'
-                  ? 'bg-cyan-950 text-cyan-300 font-semibold border border-cyan-700/80'
+                  ? 'bg-cyan-950 text-cyan-300 font-bold border border-cyan-700/80'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -145,46 +145,46 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
               }}
               className={`flex items-center space-x-1 px-2.5 py-0.5 rounded transition-colors ${
                 bottomDockTab === 'DECODED_TREE' && dockState !== 'COLLAPSED'
-                  ? 'bg-slate-800 text-slate-300 font-semibold border border-slate-700'
+                  ? 'bg-indigo-950 text-indigo-300 font-bold border border-indigo-700/80'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Code2 className="w-3.5 h-3.5 text-slate-300" />
+              <Code2 className="w-3.5 h-3.5 text-indigo-400" />
               <span>Decoded JSON / Protobuf Structure</span>
             </button>
           </div>
 
-          <span className="text-[0.75rem] text-slate-500 font-mono">
+          <span className="text-[0.6875rem] text-slate-500 font-mono">
             @ 0x{targetOffset.toString(16).toUpperCase()}
           </span>
           {isLoadingHex && (
-            <span className="text-[0.75rem] text-emerald-400 font-mono font-semibold">
+            <span className="text-[0.6875rem] text-emerald-400 font-mono font-semibold">
               [STREAMING 4KB MMAP CHUNK...]
             </span>
           )}
           {hexWindow?.fileSize ? (
-            <span className="text-[0.75rem] text-slate-500 font-mono hidden lg:inline">
+            <span className="text-[0.6875rem] text-slate-500 font-mono hidden lg:inline">
               [FILE: {hexWindow.fileSize.toLocaleString()} B]
             </span>
           ) : null}
           {hexWindow?.isEof && (
-            <span className="text-[0.75rem] text-amber-400 font-mono font-semibold">
+            <span className="text-[0.6875rem] text-amber-400 font-mono font-semibold">
               [EOF REACHED]
             </span>
           )}
         </div>
 
-        <div className="flex items-center space-x-4 text-[0.75rem] font-mono">
+        <div className="flex items-center space-x-4 text-[0.6875rem] font-mono">
           <div className="flex items-center space-x-1 hidden sm:flex">
             <span className="text-slate-500">Physical Offset:</span>
-            <span className="text-amber-400 font-semibold">
+            <span className="text-amber-400 font-bold">
               {offsetRecorded ? `0x${targetOffset.toString(16).toUpperCase().padStart(8, '0')}` : 'not recorded'}
             </span>
           </div>
 
           <div className="flex items-center space-x-1 hidden md:flex">
             <span className="text-slate-500">Target Span:</span>
-            <span className="text-emerald-400 font-semibold">{targetLength} bytes</span>
+            <span className="text-emerald-400 font-bold">{targetLength} bytes</span>
           </div>
 
           {bottomDockTab === 'HEX' ? (
@@ -199,7 +199,7 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
           ) : (
             <button
               onClick={handleCopyRaw}
-              className="text-slate-300 hover:text-slate-300 flex items-center space-x-0.5 font-mono cursor-pointer"
+              className="text-indigo-400 hover:text-indigo-300 flex items-center space-x-0.5 font-mono cursor-pointer"
             >
               {copiedRaw ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
               <span>{copiedRaw ? 'Copied' : 'Copy Payload'}</span>
@@ -243,7 +243,7 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
             <div
               ref={containerRef}
               onScroll={handleScroll}
-              className="flex-1 overflow-auto p-2 font-mono text-[0.75rem] leading-snug select-text scroll-smooth bg-slate-950"
+              className="flex-1 overflow-auto p-2 font-mono text-[0.6875rem] leading-snug select-text scroll-smooth bg-slate-950"
             >
               {rows.length > 0 ? (
                 <div style={{ height: totalHeight, position: 'relative' }} className="min-w-full">
@@ -265,7 +265,7 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
                           {/* 1. Address Column */}
                           <div
                             className={`select-none w-20 shrink-0 font-semibold ${
-                              hasHighlightedByte ? 'text-amber-400 font-semibold' : 'text-slate-500'
+                              hasHighlightedByte ? 'text-amber-400 font-bold' : 'text-slate-500'
                             }`}
                           >
                             {row.addressHex}:
@@ -280,9 +280,9 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
                                   onClick={() => setSelection({ start: actualRowIndex * 16 + i, len: 1 })}
                                   className={`inline-block w-5 text-center transition-all cursor-pointer ${
                                     inSelection(actualRowIndex * 16 + i)
-                                      ? 'bg-cyan-500 text-slate-950 font-semibold rounded-sm'
+                                      ? 'bg-cyan-500 text-slate-950 font-bold rounded-sm'
                                       : b.isHighlighted
-                                      ? 'bg-amber-400 text-slate-950 font-semibold rounded-sm  scale-105'
+                                      ? 'bg-amber-400 text-slate-950 font-bold rounded-sm shadow-sm scale-105'
                                       : 'text-slate-300'
                                   }`}
                                 >
@@ -298,9 +298,9 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
                                   onClick={() => setSelection({ start: actualRowIndex * 16 + i + 8, len: 1 })}
                                   className={`inline-block w-5 text-center transition-all cursor-pointer ${
                                     inSelection(actualRowIndex * 16 + i + 8)
-                                      ? 'bg-cyan-500 text-slate-950 font-semibold rounded-sm'
+                                      ? 'bg-cyan-500 text-slate-950 font-bold rounded-sm'
                                       : b.isHighlighted
-                                      ? 'bg-amber-400 text-slate-950 font-semibold rounded-sm  scale-105'
+                                      ? 'bg-amber-400 text-slate-950 font-bold rounded-sm shadow-sm scale-105'
                                       : 'text-slate-300'
                                   }`}
                                 >
@@ -316,7 +316,7 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
                               <span
                                 key={i}
                                 className={`inline-block w-2.5 text-center ${
-                                  inSelection(actualRowIndex * 16 + i) ? 'bg-cyan-500/60 text-slate-50 rounded-sm' : a.isHighlighted ? 'bg-amber-500/40 text-amber-300 font-semibold rounded-sm' : ''
+                                  inSelection(actualRowIndex * 16 + i) ? 'bg-cyan-500/60 text-slate-50 rounded-sm' : a.isHighlighted ? 'bg-amber-500/40 text-amber-300 font-bold rounded-sm' : ''
                                 }`}
                               >
                                 {a.char}
@@ -345,12 +345,12 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
           ) : (
             /* Raw Decoded JSON / Protobuf Tree Tab */
             <div className="flex-1 overflow-y-auto p-3 font-mono text-xs select-text bg-slate-950">
-              <div className="bg-slate-900 rounded-panel border border-slate-800 p-3 leading-relaxed">
-                <div className="text-[0.75rem] text-slate-300 font-semibold mb-2 flex items-center space-x-2">
+              <div className="bg-slate-900 rounded-lg border border-slate-800 p-3 leading-relaxed">
+                <div className="text-[0.6875rem] text-indigo-400 font-bold mb-2 uppercase tracking-wide flex items-center space-x-2">
                   <Code2 className="w-3.5 h-3.5" />
                   <span>Decoded Artifact Tree & Wire Payload Structure</span>
                 </div>
-                <pre className="text-emerald-300 text-[0.75rem] font-mono overflow-x-auto whitespace-pre-wrap">
+                <pre className="text-emerald-300 text-[0.6875rem] font-mono overflow-x-auto whitespace-pre-wrap">
                   {JSON.stringify(
                     storeArtifact?.rawData || {
                       artifact_id: storeArtifact?.id || 'NO_SELECTION',

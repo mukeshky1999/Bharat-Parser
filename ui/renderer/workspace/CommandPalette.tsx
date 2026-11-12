@@ -85,7 +85,7 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/60 flex items-start justify-center pt-[12vh] p-4" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div role="dialog" aria-modal="true" aria-label="Search and commands" className="w-full max-w-xl rounded-ctl-panel border border-slate-700 bg-slate-900 shadow-float overflow-hidden">
+      <div role="dialog" aria-modal="true" aria-label="Search and commands" className="w-full max-w-xl rounded-lg border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
         <input
           ref={inputRef}
           value={q}

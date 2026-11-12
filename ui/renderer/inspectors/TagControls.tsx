@@ -11,7 +11,7 @@ const btn = 'h-7 px-2 rounded border border-slate-700 text-slate-200 hover:bg-sl
 export const TagPills: React.FC<{ tags: string[] }> = ({ tags }) => (
   <>
     {tags.map((t) => (
-      <span key={t} className="inline-flex items-center gap-1 rounded-full border border-cyan-700 bg-cyan-950/50 px-2 py-0.5 text-[0.75rem] text-cyan-200">
+      <span key={t} className="inline-flex items-center gap-1 rounded-full border border-cyan-700 bg-cyan-950/50 px-2 py-0.5 text-[0.6875rem] text-cyan-200">
         <Tag className="w-3 h-3" aria-hidden="true" />{t}
       </span>
     ))}

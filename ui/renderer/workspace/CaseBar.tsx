@@ -87,13 +87,13 @@ export const CaseBar: React.FC<CaseBarProps> = ({ onPickFile, onPickFolder }) =>
           <label className="flex items-center gap-1.5 text-slate-300">
             <span className="hidden lg:inline">Device</span>
             <select aria-label="Device the owner profile and link graph describe" value={activeDevice} onChange={(e) => void switchDevice(e.target.value)}
-              className="h-8 rounded-ctl bg-slate-950 border border-slate-700 px-2 text-slate-100" title="Records of every device stay in the case; this chooses which device the owner profile, link graph and alerts describe.">
+              className="h-8 rounded bg-slate-950 border border-slate-700 px-2 text-slate-100" title="Records of every device stay in the case; this chooses which device the owner profile, link graph and alerts describe.">
               {devices.map((d) => <option key={d.item_id} value={d.item_id}>{d.label || d.item_id}{d.model && d.model !== 'Not recorded' ? ` (${d.model})` : ''}</option>)}
             </select>
           </label>
         )}
         <span className="flex items-center gap-1.5 text-slate-300" title={`Backend: ${health.status}`}>
-          <span className={`w-2 h-2 rounded-ctl-full ${online ? 'bg-emerald-400' : checking ? 'bg-slate-500' : 'bg-rose-400'}`} aria-hidden="true" />
+          <span className={`w-2 h-2 rounded-full ${online ? 'bg-emerald-400' : checking ? 'bg-slate-500' : 'bg-rose-400'}`} aria-hidden="true" />
           {online ? 'Engine ready' : checking ? 'Engine starting' : 'Engine not reachable'}
         </span>
 
@@ -102,12 +102,12 @@ export const CaseBar: React.FC<CaseBarProps> = ({ onPickFile, onPickFolder }) =>
             onClick={() => setMenu((m) => !m)}
             aria-haspopup="menu"
             aria-expanded={menu}
-            className="flex items-center gap-1 h-8 px-3 rounded-ctl bg-cyan-600 text-slate-50 hover:bg-cyan-500 font-medium"
+            className="flex items-center gap-1 h-8 px-3 rounded bg-cyan-600 text-slate-50 hover:bg-cyan-500 font-medium"
           >
             Open evidence <ChevronDown className="w-4 h-4" />
           </button>
           {menu && (
-            <div role="menu" className="absolute right-0 mt-1 w-72 rounded-ctl border border-slate-700 bg-slate-900 shadow-float z-50 py-1">
+            <div role="menu" className="absolute right-0 mt-1 w-72 rounded border border-slate-700 bg-slate-900 shadow-xl z-50 py-1">
               <button role="menuitem" className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-800" onClick={() => { setMenu(false); onPickFile(); }}>
                 <FileArchive className="w-4 h-4 text-slate-300" /> Archive or image file…
               </button>
@@ -121,12 +121,12 @@ export const CaseBar: React.FC<CaseBarProps> = ({ onPickFile, onPickFolder }) =>
           )}
         </div>
 
-        <button onClick={() => open('PALETTE')} className="flex items-center gap-2 h-8 px-3 rounded-ctl border border-slate-700 text-slate-300 hover:bg-slate-800" title="Search and commands (Ctrl+K)">
+        <button onClick={() => open('PALETTE')} className="flex items-center gap-2 h-8 px-3 rounded border border-slate-700 text-slate-300 hover:bg-slate-800" title="Search and commands (Ctrl+K)">
           <Search className="w-4 h-4" />
           <span className="hidden lg:inline">Search or jump</span>
-          <kbd className="hidden lg:inline text-[0.6875rem] text-slate-400 border border-slate-700 rounded-ctl px-1">Ctrl K</kbd>
+          <kbd className="hidden lg:inline text-[0.6875rem] text-slate-400 border border-slate-700 rounded px-1">Ctrl K</kbd>
         </button>
-        <button onClick={() => open('SETTINGS')} className="h-8 w-8 grid place-items-center rounded-ctl border border-slate-700 text-slate-300 hover:bg-slate-800" aria-label="Display settings" title="Display settings">
+        <button onClick={() => open('SETTINGS')} className="h-8 w-8 grid place-items-center rounded border border-slate-700 text-slate-300 hover:bg-slate-800" aria-label="Display settings" title="Display settings">
           <Settings className="w-4 h-4" />
         </button>
       </div>

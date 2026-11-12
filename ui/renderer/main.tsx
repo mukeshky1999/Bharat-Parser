@@ -44,7 +44,7 @@ export class ForensicErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
     if (this.state.hasError) {
       return (
         <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-900 text-slate-50 p-6 select-text">
-          <div className="max-w-xl w-full bg-slate-800 border border-red-500/50 rounded shadow-float p-6">
+          <div className="max-w-xl w-full bg-slate-800 border border-red-500/50 rounded shadow-2xl p-6">
             <div className="flex items-center space-x-3 border-b border-slate-700 pb-4 mb-4">
               <div className="w-9 h-9 rounded bg-red-600 flex items-center justify-center font-bold text-lg font-mono">
                 !
