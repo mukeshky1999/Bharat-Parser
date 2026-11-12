@@ -23,6 +23,32 @@ logger = logging.getLogger(__name__)
 LEVELDB_MAGIC = 0xDB4775248B80FB57
 
 
+def _make_crc32c_table() -> List[int]:
+    table = []
+    for i in range(256):
+        c = i
+        for _ in range(8):
+            c = (c >> 1) ^ 0x82F63B78 if c & 1 else c >> 1
+        table.append(c)
+    return table
+
+
+_CRC32C_TABLE = _make_crc32c_table()
+
+
+def crc32c(data: bytes) -> int:
+    """CRC-32C (Castagnoli), the checksum LevelDB uses for log records and table blocks."""
+    c = 0xFFFFFFFF
+    for b in data:
+        c = _CRC32C_TABLE[(c ^ b) & 0xFF] ^ (c >> 8)
+    return c ^ 0xFFFFFFFF
+
+
+def mask_crc(crc: int) -> int:
+    """LevelDB stores a masked CRC so that a CRC of data containing CRCs stays well behaved."""
+    return ((((crc >> 15) | (crc << 17)) & 0xFFFFFFFF) + 0xA282EAD8) & 0xFFFFFFFF
+
+
 def clean_user_key(user_key_bytes: bytes) -> str:
     """Decodes user key bytes to a clean string, handling binary/UTF-8 keys."""
     try:
@@ -51,7 +77,15 @@ def infer_leveldb_value_type(val_bytes: bytes) -> Tuple[str, str]:
 
 
 class LevelDBDecoder:
-    """Parses LevelDB .log Write-Ahead Logs and .ldb/.sst tables without triggering compaction."""
+    """Parses LevelDB .log Write-Ahead Logs and .ldb/.sst tables without triggering compaction.
+
+    Every log record and table block carries a checksum. A record whose checksum does not match is still read (a
+    damaged file can hold evidence) but it is classified UNVERIFIED_FRAGMENT and counted in ``crc_failures`` (R-16).
+    """
+
+    def __init__(self) -> None:
+        self.crc_failures: List[Dict[str, Any]] = []
+        self._block_crc_ok = True
 
     def decode_leveldb_directory(
         self,
@@ -151,6 +185,8 @@ class LevelDBDecoder:
                             else ResidualConfidence.HISTORICAL_COMMITTED_RECORD
                         )
 
+                if not ver.get("crc_ok", True):
+                    classification = ResidualConfidence.UNVERIFIED_FRAGMENT
                 recovered.append(
                     KVRecoveredRecord(
                         kv_store_id=kv_store_id,
@@ -175,6 +211,7 @@ class LevelDBDecoder:
         block_size = 32768
 
         batch_fragments = bytearray()
+        batch_ok = True
         cursor = 0
 
         while cursor < file_len:
@@ -183,6 +220,8 @@ class LevelDBDecoder:
                 cursor += block_rem
                 continue
 
+            if cursor + 7 > file_len:
+                break
             chunk_start = cursor
             crc = struct.unpack("<I", data[cursor:cursor + 4])[0]
             payload_len = struct.unpack("<H", data[cursor + 4:cursor + 6])[0]
@@ -195,17 +234,27 @@ class LevelDBDecoder:
             chunk_payload = data[cursor:cursor + payload_len]
             cursor += payload_len
 
+            rec_ok = True
+            if chunk_type in (1, 2, 3, 4):
+                # the record checksum covers the type byte and the payload
+                rec_ok = mask_crc(crc32c(bytes([chunk_type]) + chunk_payload)) == crc
+                if not rec_ok:
+                    self.crc_failures.append({"file": log_path.name, "offset": chunk_start, "what": "log record"})
+                    logger.warning("LevelDB log record at %d in %s fails its checksum", chunk_start, log_path.name)
+
             if chunk_type == 1:  # FULL
                 batch_fragments = bytearray(chunk_payload)
-                self._decode_write_batch(bytes(batch_fragments), log_path.name, chunk_start, entries)
+                self._decode_write_batch(bytes(batch_fragments), log_path.name, chunk_start, entries, rec_ok)
                 batch_fragments.clear()
             elif chunk_type == 2:  # FIRST
                 batch_fragments = bytearray(chunk_payload)
+                batch_ok = rec_ok
             elif chunk_type == 3:  # MIDDLE
                 batch_fragments.extend(chunk_payload)
+                batch_ok = batch_ok and rec_ok
             elif chunk_type == 4:  # LAST
                 batch_fragments.extend(chunk_payload)
-                self._decode_write_batch(bytes(batch_fragments), log_path.name, chunk_start, entries)
+                self._decode_write_batch(bytes(batch_fragments), log_path.name, chunk_start, entries, batch_ok and rec_ok)
                 batch_fragments.clear()
 
         return entries
@@ -215,7 +264,8 @@ class LevelDBDecoder:
         batch_buf: bytes,
         source_name: str,
         base_offset: int,
-        out_list: List[Dict[str, Any]]
+        out_list: List[Dict[str, Any]],
+        crc_ok: bool = True,
     ) -> None:
         """Decodes records from a reassembled LevelDB WriteBatch."""
         if len(batch_buf) < 12:
@@ -252,6 +302,7 @@ class LevelDBDecoder:
                     "val_bytes": val_bytes,
                     "source_file": source_name,
                     "source_byte_offset": entry_offset,
+                    "crc_ok": crc_ok,
                 })
             elif vtype == 0x00:  # Delete Tombstone
                 k_len, k_var_len = decode_le_varint(batch_buf, pos)
@@ -266,6 +317,7 @@ class LevelDBDecoder:
                     "val_bytes": b"",
                     "source_file": source_name,
                     "source_byte_offset": entry_offset,
+                    "crc_ok": crc_ok,
                 })
 
     def _parse_ldb_file(self, ldb_path: Path) -> List[Dict[str, Any]]:
@@ -297,6 +349,7 @@ class LevelDBDecoder:
         idx_block = self._read_and_decompress_block(data, index_off, index_size)
         if not idx_block:
             return entries
+        index_ok = self._note_block_crc(ldb_path.name, index_off, "index block")
 
         # 3. Parse Data Block Handles from Index Block
         data_block_handles = self._parse_index_block_entries(idx_block)
@@ -305,7 +358,10 @@ class LevelDBDecoder:
         for d_off, d_sz in data_block_handles:
             data_block = self._read_and_decompress_block(data, d_off, d_sz)
             if data_block:
+                block_ok = self._note_block_crc(ldb_path.name, d_off, "data block") and index_ok
                 block_entries = self._decode_data_block_entries(data_block, ldb_path.name, d_off)
+                for e in block_entries:
+                    e["crc_ok"] = block_ok
                 entries.extend(block_entries)
 
         return entries
@@ -317,6 +373,8 @@ class LevelDBDecoder:
 
         payload = file_data[block_off:block_off + block_sz]
         comp_type = file_data[block_off + block_sz]  # 1 byte trailer
+        stored = struct.unpack("<I", file_data[block_off + block_sz + 1:block_off + block_sz + 5])[0]
+        self._block_crc_ok = mask_crc(crc32c(payload + bytes([comp_type]))) == stored
 
         if comp_type == 0x00:
             return payload
@@ -336,6 +394,12 @@ class LevelDBDecoder:
                 return b""
 
         return payload
+
+    def _note_block_crc(self, file_name: str, offset: int, what: str) -> bool:
+        if not self._block_crc_ok:
+            self.crc_failures.append({"file": file_name, "offset": offset, "what": what})
+            logger.warning("LevelDB %s at %d in %s fails its checksum", what, offset, file_name)
+        return self._block_crc_ok
 
     def _parse_index_block_entries(self, index_buf: bytes) -> List[Tuple[int, int]]:
         """Parses data block offset and size tuples from index block."""

@@ -232,7 +232,7 @@ def test_leveldb_snappy_trailer_and_tombstone_recovery(tmp_nonsqlite_dir):
     # Compress Data Block with Snappy
     snappy_payload = snappy_compress_raw(bytes(data_block_raw))
     # Block Trailer: 1 byte compression (0x01=Snappy) + 4 bytes crc32c
-    data_block_full = snappy_payload + b"\x01\x00\x00\x00\x00"
+    data_block_full = snappy_payload + bytes([1]) + _block_crc(snappy_payload, 1)
     data_block_size = len(snappy_payload)
 
     # Build Index Block pointing to Data Block at offset 0
@@ -247,7 +247,7 @@ def test_leveldb_snappy_trailer_and_tombstone_recovery(tmp_nonsqlite_dir):
     index_block_raw.extend(index_val)
     index_block_raw.extend(struct.pack("<II", 0, 1))
 
-    index_block_full = bytes(index_block_raw) + b"\x00\x00\x00\x00\x00"  # uncompressed (0x00)
+    index_block_full = bytes(index_block_raw) + bytes([0]) + _block_crc(bytes(index_block_raw), 0)  # uncompressed (0x00)
     index_block_offset = len(data_block_full)
     index_block_size = len(index_block_raw)
 
@@ -275,7 +275,7 @@ def test_leveldb_snappy_trailer_and_tombstone_recovery(tmp_nonsqlite_dir):
     batch_205.extend(write_le_varint(len(val_205)) + val_205)
 
     # Chunk 1 (FULL = 1): 7-byte header (crc 4b, len 2b, type 1b) + payload
-    chunk_1 = struct.pack("<IHB", 0, len(batch_205), 1) + bytes(batch_205)
+    chunk_1 = _log_chunk(bytes(batch_205))
 
     # WriteBatch 2: seq=310, value_type=0x00 (Tombstone)
     batch_310 = bytearray()
@@ -283,7 +283,7 @@ def test_leveldb_snappy_trailer_and_tombstone_recovery(tmp_nonsqlite_dir):
     batch_310.append(0x00)  # value_type=0x00 (Deletion Tombstone)
     batch_310.extend(write_le_varint(len(user_k)) + user_k)
 
-    chunk_2 = struct.pack("<IHB", 0, len(batch_310), 1) + bytes(batch_310)
+    chunk_2 = _log_chunk(bytes(batch_310))
 
     with open(log_file, "wb") as f:
         f.write(chunk_1 + chunk_2)
@@ -562,3 +562,38 @@ def test_nonsqlite_engine_master_ledger_export(tmp_nonsqlite_dir):
     assert "biome_stream_name" in segb_cols
     assert "segb_write_utc_iso" in segb_cols
     con.close()
+
+
+def _block_crc(payload: bytes, comp_type: int) -> bytes:
+    from src.nonsqlite.leveldb import crc32c, mask_crc
+    return struct.pack("<I", mask_crc(crc32c(payload + bytes([comp_type]))))
+
+
+def _log_chunk(batch: bytes, chunk_type: int = 1, good: bool = True) -> bytes:
+    from src.nonsqlite.leveldb import crc32c, mask_crc
+    crc = mask_crc(crc32c(bytes([chunk_type]) + batch))
+    if not good:
+        crc ^= 0xFFFF
+    return struct.pack("<IHB", crc, len(batch), chunk_type) + batch
+
+
+def test_leveldb_crc32c_known_answer():
+    from src.nonsqlite.leveldb import crc32c
+    assert crc32c(b"123456789") == 0xE3069283
+
+
+def test_leveldb_bad_checksum_is_kept_but_unverified(tmp_path):
+    from src.nonsqlite.leveldb import LevelDBDecoder
+    key = b"k1"
+    def batch(seq, val):
+        b = bytearray(struct.pack("<QI", seq, 1)); b.append(1)
+        b += write_le_varint(len(key)) + key + write_le_varint(len(val)) + val
+        return bytes(b)
+    d = tmp_path / "ldb"; d.mkdir()
+    (d / "000001.log").write_bytes(_log_chunk(batch(1, b"good-value")) + _log_chunk(batch(2, b"damaged-value"), good=False))
+    dec = LevelDBDecoder()
+    recs = dec.decode_leveldb_directory(d)
+    by_val = {r.decoded_value_text_or_json: r for r in recs}
+    assert by_val["damaged-value"].recovery_classification == "UNVERIFIED_FRAGMENT"
+    assert by_val["good-value"].recovery_classification != "UNVERIFIED_FRAGMENT"
+    assert len(dec.crc_failures) == 1 and dec.crc_failures[0]["what"] == "log record"
