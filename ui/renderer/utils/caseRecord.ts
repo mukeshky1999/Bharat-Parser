@@ -9,7 +9,7 @@ export function caseRecordOf(artifactId: string | undefined, itemType?: string):
   if (!artifactId) return null;
   const row = (s: string): number | null => (/^\d+$/.test(s) && Number(s) > 0 ? Number(s) : null);
   const prefixed: Array<[RegExp, string]> = [
-    [/^TX_(\d+)$/, 'transactions'], [/^CNT_(\d+)$/, 'contacts'], [/^CALL_(\d+)$/, 'calls'],
+    [/^ALERT_(\d+)$/, 'bank_alerts'], [/^TX_(\d+)$/, 'transactions'], [/^CNT_(\d+)$/, 'contacts'], [/^CALL_(\d+)$/, 'calls'],
     [/^CRYPTO_custodial_wallets_(\d+)$/, 'custodial_wallets'], [/^CRYPTO_p2p_orders_(\d+)$/, 'p2p_orders'],
     [/^CRYPTO_fiat_crypto_bridge_(\d+)$/, 'fiat_crypto_bridge'], [/^CRYPTO_crypto_addresses_(\d+)$/, 'crypto_addresses'],
   ];

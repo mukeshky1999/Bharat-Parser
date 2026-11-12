@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { forensicClient, SavedFilter } from '../api/forensicClient';
 
-export type FilterScope = 'upi_ledger' | 'calls' | 'search' | 'timeline' | 'crypto_custodial' | 'crypto_p2p' | 'crypto_bridge' | 'crypto_addresses';
+export type FilterScope = 'upi_ledger' | 'calls' | 'search' | 'timeline' | 'crypto_custodial' | 'crypto_p2p' | 'crypto_bridge' | 'crypto_addresses' | 'bank_alerts';
 
 /**
  * Saves the filter choices on this screen under a name, and applies a saved set again. Saved filters are kept in the

@@ -3,6 +3,7 @@ import { useWorkbenchStore } from '../state/workbenchStore';
 import { usePreferences } from '../state/preferencesStore';
 import { UnifiedUPITransaction } from '../../shared/forensic-types';
 import { formatOffset } from '../utils/csv';
+import { caseRecordOf } from '../utils/caseRecord';
 import { DataGrid, FilterInput, GridColumn, Segmented, Unset } from '../workspace/DataGrid';
 import { SavedFilters } from '../workspace/SavedFilters';
 
@@ -151,6 +152,7 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
 
   return (
     <DataGrid<UnifiedUPITransaction>
+      tags={{ table: 'transactions', idOf: (t) => caseRecordOf(t.id, 'Financial Transaction')?.id ?? null }}
       tableId="upi_ledger" title="UPI ledger" columns={columns} rows={rows} totalBeforeFilter={rawTransactions.length}
       rowKey={(t, i) => t.id || t.appTransactionId || `row-${i}`}
       selectedKey={selectedTxId ?? null} onSelect={select} toolbar={toolbar} exportName="upi_ledger.csv"

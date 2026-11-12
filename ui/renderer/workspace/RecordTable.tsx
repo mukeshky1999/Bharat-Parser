@@ -3,6 +3,9 @@ import { ChevronLeft, ChevronRight, Download, Search } from 'lucide-react';
 import { useWorkbenchStore } from '../state/workbenchStore';
 import { usePreferences } from '../state/preferencesStore';
 import { csvCell, downloadCsv } from '../utils/csv';
+import { useTagIndex } from './useTagIndex';
+import { TagPills } from '../inspectors/TagControls';
+import { caseRecordOf } from '../utils/caseRecord';
 import type { ForensicProvenance, TimestampTriplet } from '../../shared/forensic-types';
 
 export interface RecordTableProps {
@@ -87,7 +90,9 @@ export const RecordTable: React.FC<RecordTableProps> = ({ title, category }) => 
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  const allCols = COLUMNS[category];
+  const tagIndex = useTagIndex(category === 'CONTACTS' ? 'contacts' : 'calls');
+  const tagsOfRow = (id: string): string[] => { const n = caseRecordOf(id)?.id; return n ? tagIndex[n] ?? [] : []; };
+  const allCols = [...COLUMNS[category], { key: 'tags', label: 'Tags', width: '11rem' } as Column];
   const hiddenCols = usePreferences((s) => s.hiddenColumns[category]) ?? [];
   const setPrefs = usePreferences((s) => s.set);
   const allHidden = usePreferences((s) => s.hiddenColumns);
@@ -173,7 +178,7 @@ export const RecordTable: React.FC<RecordTableProps> = ({ title, category }) => 
     downloadCsv(`${category.toLowerCase()}.csv`, [
       [...(category === 'CALLS' ? ['Time'] : []), ...allCols.filter((c) => c.key !== 'time').map((c) => c.label)].map(csvCell).join(','),
       ...filtered.map((r) =>
-        [...(category === 'CALLS' ? [fmtTime(r.timestamp)] : []), ...allCols.filter((c) => c.key !== 'time').map((c) => r.cells[c.key] ?? '')].map(csvCell).join(',')
+        [...(category === 'CALLS' ? [fmtTime(r.timestamp)] : []), ...allCols.filter((c) => c.key !== 'time').map((c) => (c.key === 'tags' ? tagsOfRow(r.id).join('; ') : r.cells[c.key] ?? ''))].map(csvCell).join(',')
       ),
     ]);
 
@@ -245,6 +250,10 @@ export const RecordTable: React.FC<RecordTableProps> = ({ title, category }) => 
               >
                 <span role="gridcell" className="text-right text-slate-500">{(safePage - 1) * PAGE_SIZE + i + 1}</span>
                 {cols.map((c) => {
+                  if (c.key === 'tags') {
+                    const t = tagsOfRow(r.id);
+                    return <span key="tags" role="gridcell" className="flex gap-1 overflow-hidden">{t.length ? <TagPills tags={t} /> : <span className="text-slate-600">none</span>}</span>;
+                  }
                   const v = c.key === 'time' ? fmtTime(r.timestamp) : r.cells[c.key] ?? '';
                   return (
                     <span key={c.key} role="gridcell" title={v} className={`truncate ${c.align === 'right' ? 'text-right' : ''} ${v === NOT_RECORDED ? 'text-slate-500 italic' : ''} ${c.key === 'recovery' && r.recovered ? 'text-amber-300' : ''}`}>

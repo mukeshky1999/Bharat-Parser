@@ -1,7 +1,8 @@
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
 import { useWorkbenchStore } from '../state/workbenchStore';
-import { stageForTab, viewLabel, BANK_ALERTS_NOTICE } from './stages';
+import { stageForTab, viewLabel } from './stages';
+import { BankAlertsView } from '../views/BankAlertsView';
 import { ExtractionSummaryTab } from '../views/ExtractionSummaryTab';
 import { RecordTable } from './RecordTable';
 import { ChatsMasterWorkspace } from '../views/ChatsMasterWorkspace';
@@ -63,7 +64,7 @@ export const Workspace: React.FC = () => {
         {activeTab === 'SEARCH' && <SearchView />}
         {activeTab === 'TAGS' && <TagsView />}
         {activeTab === 'MEDIA' && <MediaLibraryView />}
-        {activeTab === 'BANK_ALERTS' && <div className="flex-1 p-10 text-center text-slate-400">{BANK_ALERTS_NOTICE}</div>}
+        {activeTab === 'BANK_ALERTS' && <BankAlertsView />}
         {activeTab === 'TIMELINE' && <TimelineView />}
       </div>
     </main>

@@ -26,7 +26,7 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
   const commands: Command[] = useMemo(() => {
     const go: Command[] = STAGES.flatMap((st) =>
       st.views.map((v) => ({
-        id: `go-${v.tab}`, label: `Go to ${v.label}`, hint: v.unavailable ? 'Not available yet' : `Stage ${st.no}: ${st.label}`,
+        id: `go-${v.tab}`, label: `Go to ${v.label}`, hint: v.unavailable ? 'Not available yet' : v.inTesting ? `In testing · Stage ${st.no}: ${st.label}` : `Stage ${st.no}: ${st.label}`,
         run: () => (v.unavailable ? addToast({ type: 'info', title: `${v.label}: not available yet`, message: v.unavailable }) : setActiveTab(v.tab)),
       }))
     );

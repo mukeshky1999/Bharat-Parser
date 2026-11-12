@@ -2,7 +2,8 @@
 Bank alerts (IN TESTING): bank and SMS notices read from a phone's SMS database.
 
 What it reads
-* Android: a database with an ``sms`` table (``mmssms.db``, a Messages-app copy). Received messages only (type 1).
+* Android: a database with an ``sms`` table (``mmssms.db``, a Messages-app copy). Received messages only (type 1); when the
+  table has no ``type`` column every message is read and the record says sent and received were not told apart.
 * iOS: ``sms.db`` (``message`` joined to ``handle``). Received messages only. When ``text`` is empty the message body
   is unpacked from ``attributedBody``.
 Found by what the database contains, not by its file name.
@@ -113,7 +114,7 @@ def sms_database_kind(path: str) -> Optional[str]:
         return None
     finally:
         conn.close()
-    if "sms" in t and {"address", "body", "type"} <= set(t["sms"]):
+    if "sms" in t and {"address", "body"} <= set(t["sms"]):
         return "android"
     if "message" in t and "handle" in t and {"handle_id", "is_from_me"} <= set(t["message"]):
         return "ios"
@@ -160,7 +161,9 @@ def read_alerts(path: str, vfs_path: str) -> Tuple[pd.DataFrame, Dict[str, int]]
     try:
         if kind == "android":
             cols = set(_tables(conn)["sms"])
-            for r in conn.execute("SELECT * FROM sms WHERE type = 1 ORDER BY _id"):
+            has_type = "type" in cols      # without it, sent and received messages cannot be told apart: all are read, and the record says so
+            source_label = "Android sms table" if has_type else "Android sms table (no type column: sent and received not distinguished)"
+            for r in conn.execute("SELECT * FROM sms" + (" WHERE type = 1" if has_type else "") + " ORDER BY " + ("_id" if "_id" in cols else "rowid")):
                 body = str(r["body"]) if r["body"] else ""
                 if not body.strip():
                     continue
@@ -173,7 +176,7 @@ def read_alerts(path: str, vfs_path: str) -> Tuple[pd.DataFrame, Dict[str, int]]
                     spoof = 1 if _header.detect_smsc_spoof(service_center=smsc, creator=creator, msg_type=1) else 0
                 sub_id = int(r["sub_id"]) if "sub_id" in cols and r["sub_id"] is not None else None
                 row = _row(vfs_path, "sms", r["_id"] if "_id" in cols else None, str(r["address"] or ""), body,
-                           r["date"] if "date" in cols else None, "unix_ms", "Android sms table", "SMS (Android)", smsc, sub_id, spoof)
+                           r["date"] if "date" in cols else None, "unix_ms", source_label, "SMS (Android)", smsc, sub_id, spoof)
                 _collect(row, rows, stats)
         else:
             for r in conn.execute("SELECT m.ROWID AS rid, h.id AS sender, m.text, m.attributedBody, m.date FROM message m "

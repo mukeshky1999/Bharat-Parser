@@ -1574,6 +1574,11 @@ class ForensicClient {
     return this.fetchApi('/api/case/filters/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scope, name }) });
   }
 
+  /** Tags of every tagged record in one table, by record id (for tag pills on a table). */
+  public async getTagIndex(table: string): Promise<{ data: { table: string; tags: Record<string, string[]> } | null; error: string | null }> {
+    return this.fetchApi(`/api/case/tags/index?table=${encodeURIComponent(table)}`);
+  }
+
   /** Runs the known-answer checks on scratch inputs; the open case is left alone. */
   public async runValidation(): Promise<{ data: { report: Record<string, unknown>; html: string } | null; error: string | null }> {
     return this.fetchApi('/api/validation/run', { method: 'POST' });

@@ -11,11 +11,13 @@ export interface StageView {
   label: string;
   /** When set, the view is shown greyed out and opens nothing; this text is shown instead. */
   unavailable?: string;
+  /** When true, the view works and is marked "in testing" wherever it is listed and on its own screen. */
+  inTesting?: boolean;
 }
 
-/** Said when someone clicks the bank alerts entry. */
+/** Shown on the bank alerts screen. */
 export const BANK_ALERTS_NOTICE =
-  'Bank alerts (bank and SMS notices such as sender, freeze or lien notices and one-time codes) are not available yet. The reader is written but has not been tested on real bank and SMS data, so it is switched off.';
+  'Bank alerts (bank and SMS notices such as debits, credits, freeze or lien notices and one-time codes) are read with rules that have been run on made-up data only. They have not yet been tested on real bank and SMS data, so treat them as leads.';
 
 export interface Stage {
   id: StageId;
@@ -41,7 +43,7 @@ export const STAGES: Stage[] = [
       { tab: 'CALL_LOGS', label: 'Bank and call records' },
       { tab: 'CRYPTO', label: 'Crypto wallets' },
       { tab: 'MULE_GRAPH', label: 'Link graph (leads)' },
-      { tab: 'BANK_ALERTS', label: 'Bank alerts', unavailable: BANK_ALERTS_NOTICE },
+      { tab: 'BANK_ALERTS', label: 'Bank alerts', inTesting: true },
     ] },
   { id: 'messages', no: 5, label: 'Messages', hint: 'Chats and system traces', icon: MessagesSquare,
     views: [{ tab: 'CHATS', label: 'Chats' }, { tab: 'OS_SPILLOVER', label: 'System traces' }] },

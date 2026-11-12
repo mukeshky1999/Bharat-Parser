@@ -1884,6 +1884,17 @@ def case_tags_remove(body: TagRequest):
     return res
 
 
+@app.get("/api/case/tags/index")
+def case_tags_index(table: str = Query(...)):
+    """Tags of every tagged record in one table, keyed by record id. For showing tag pills on a table."""
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=412, detail="No case is loaded.")
+    try:
+        return {"table": table.lower().strip(), "tags": {str(k): v for k, v in _active_store.tag_index(table).items()}}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
 @app.get("/api/case/tags/records")
 def case_tags_records(tag: str = Query(...), tables: Optional[str] = Query(None), evidence_item: Optional[str] = Query(None),
                       limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0)):

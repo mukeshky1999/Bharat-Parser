@@ -115,3 +115,14 @@ def test_processing_the_device_again_does_not_duplicate_alerts(case, tmp_path):
     assert again["success"]
     n = client.get("/api/artifacts/query", params={"category": "bank_alerts"}).json()["total"]
     assert n == 3                                                                                  # the same device again replaces its records, none doubled
+
+
+def test_sms_table_without_a_type_column_is_read_and_says_so(tmp_path):
+    p = tmp_path / "mmssms.db"
+    c = sqlite3.connect(p)
+    c.execute("CREATE TABLE sms (_id INTEGER PRIMARY KEY, address TEXT, date INTEGER, body TEXT)")
+    c.execute("INSERT INTO sms VALUES (1, 'VM-HDFCBK', 1760446860000, 'Rs. 12,500.00 debited from A/c XX8821 on 14-10-26 to VPA mule.hub@okaxis (UPI Ref No 428755667788).')")
+    c.commit(); c.close()
+    df, st = bank_alerts.read_alerts(str(p), "f")
+    assert st["kept"] == 1 and "not distinguished" in df.iloc[0]["Source_Db"] and df.iloc[0]["UTR"] == "428755667788"
+    assert pd.isna(df.iloc[0]["Spoof_Indicator"])

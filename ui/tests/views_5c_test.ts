@@ -80,13 +80,17 @@ for (const f of ['UPIMasterLedgerView.tsx', 'BankCdrFusionView.tsx']) ok(/DataGr
 ok(/Leads, not findings/.test(view('MuleLinkGraphTab.tsx')), 'the link graph says its content is leads');
 ok(!/byteOffset: 0/.test(view('BankCdrFusionView.tsx')), 'fusion rows do not invent a byte offset of 0');
 
-// bank alerts: shown greyed out, opens nothing, says why
+// bank alerts: works, and is marked as in testing wherever it is listed and on its own screen
 const bank = STAGES.flatMap((st) => st.views).find((v) => v.tab === 'BANK_ALERTS');
-ok(!!bank && !!bank.unavailable && /not been tested on real/.test(bank.unavailable) && bank.unavailable === BANK_ALERTS_NOTICE, 'bank alerts is listed as unavailable and says it needs real-data testing');
-ok(STAGES.flatMap((st) => st.views).filter((v) => v.unavailable).length === 1, 'only bank alerts is switched off');
+ok(!!bank && bank.inTesting === true && !bank.unavailable, 'bank alerts is enabled and marked in testing');
+ok(/made-up data only/.test(BANK_ALERTS_NOTICE) && /not yet been tested on real/.test(BANK_ALERTS_NOTICE), 'the notice says it has only been run on made-up data');
 const nav = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace', 'StageNavigator.tsx'), 'utf8');
-ok(/v\.unavailable\s*\?\s*addToast/.test(nav) && /aria-disabled/.test(nav) && /cursor-not-allowed/.test(nav), 'clicking an unavailable view shows a notice, is marked disabled, and is greyed');
-ok(/v\.unavailable \? addToast/.test(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace', 'CommandPalette.tsx'), 'utf8')), 'the command palette shows the notice too');
+ok(/v\.inTesting && <span/.test(nav) && /in testing/.test(nav), 'the navigator shows an "in testing" tag');
+ok(/v\.unavailable\s*\?\s*addToast/.test(nav) && /cursor-not-allowed/.test(nav), 'a view can still be switched off: greyed out, with a notice on click');
+ok(/inTesting/.test(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace', 'CommandPalette.tsx'), 'utf8')), 'the command palette says it is in testing');
+const alerts = view('BankAlertsView.tsx');
+ok(/In testing\./.test(alerts) && /DataGrid/.test(alerts) && /indicator, not proof/.test(alerts) && /cannot tell/.test(alerts), 'the alerts screen says in testing, uses the grid, and calls the spoofing sign an indicator');
+ok(eq(caseRecordOf('ALERT_9'), { table: 'bank_alerts', id: 9 }), 'alerts can be tagged from the card');
 // crypto and calls are on the shared grid and carry no invented labels
 for (const f of ['CryptoWalletView.tsx', 'CallLogsView.tsx']) ok(/DataGrid/.test(view(f)), `${f} is built on the shared grid`);
 ok(!/15 Custodial|P2P \/ ON-RAMP|'USDT'|\|\| 0\)/.test(view('CryptoWalletView.tsx')), 'crypto view has no hard-coded wallet count, row type, default asset or default offset');
@@ -96,8 +100,17 @@ ok(eq(caseRecordOf('CRYPTO_p2p_orders_5'), { table: 'p2p_orders', id: 5 }) && eq
 ok(/getSavedFilters/.test(view('../workspace/SavedFilters.tsx')) && !/localStorage|sessionStorage|indexedDB/.test(view('../workspace/SavedFilters.tsx')), 'saved filters are kept in the case file');
 ok(/not records/.test(view('../workspace/SavedFilters.tsx')), 'saved filters say they hold choices, not records');
 
+// tag pills show on tables, read live, and show only what the examiner tagged
+const dg = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace', 'DataGrid.tsx'), 'utf8');
+ok(/useTagIndex/.test(dg) && /tags\?\.idOf/.test(dg) && /tagsOf\(r\)\.join/.test(dg), 'the grid has a Tags column that is also in the CSV');
+const hook = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace', 'useTagIndex.ts'), 'utf8');
+ok(/tagsVersion/.test(hook) && /getTagIndex/.test(hook) && !/localStorage|sessionStorage|indexedDB/.test(hook), 'tag pills are read from the case again whenever a tag changes');
+for (const f of ['UPIMasterLedgerView.tsx', 'CallLogsView.tsx', 'CryptoWalletView.tsx', 'BankAlertsView.tsx']) ok(/tags=\{\{/.test(view(f)), `${f} shows tag pills`);
+for (const f of ['ChatsMasterWorkspace.tsx']) ok(/useTagIndex\('chats'\)/.test(view(f)), 'chat messages show tag pills');
+ok(/bumpTags/.test(insp('TagControls.tsx')) && /bumpTags/.test(insp('BulkTagBar.tsx')) && /bumpTags/.test(view('TagsView.tsx')), 'every place that changes a tag refreshes the pills');
+
 // none of the new screens keeps case data in browser storage
-for (const f of ['ReviewerMarksCard.tsx', 'ValidationCard.tsx', 'SearchView.tsx', 'TimelineView.tsx', 'TagsView.tsx', 'MediaLibraryView.tsx', 'IngestProgressPanel.tsx']) {
+for (const f of ['BankAlertsView.tsx', 'ReviewerMarksCard.tsx', 'ValidationCard.tsx', 'SearchView.tsx', 'TimelineView.tsx', 'TagsView.tsx', 'MediaLibraryView.tsx', 'IngestProgressPanel.tsx']) {
   ok(!/localStorage|sessionStorage|indexedDB/.test(view(f)), `${f} does not use browser storage`);
 }
 ok(!/localStorage|sessionStorage|indexedDB/.test(insp('RecordDetail.tsx') + insp('TagControls.tsx') + insp('BulkTagBar.tsx')), 'RecordDetail does not use browser storage');

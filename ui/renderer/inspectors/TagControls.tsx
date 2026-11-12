@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Tag } from 'lucide-react';
 import { forensicClient, TagSummary } from '../api/forensicClient';
+import { useUi } from '../state/uiStore';
 
 export interface RecordRef { table: string; id: number }
 
@@ -30,6 +31,7 @@ export const TagControls: React.FC<{
   const [custom, setCustom] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const bumpTags = useUi((s) => s.bumpTags);
 
   const load = useCallback(async () => {
     const res = await forensicClient.getRecord(record.table, record.id);
@@ -47,6 +49,7 @@ export const TagControls: React.FC<{
     setBusy(false);
     if (res.error) { setError(res.error); return; }
     await load();
+    bumpTags();
     onChanged?.();
   };
 

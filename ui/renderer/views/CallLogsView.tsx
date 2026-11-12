@@ -3,6 +3,7 @@ import { useWorkbenchStore } from '../state/workbenchStore';
 import { usePreferences } from '../state/preferencesStore';
 import { CallLogArtifact, TimestampTriplet } from '../../shared/forensic-types';
 import { formatOffset } from '../utils/csv';
+import { caseRecordOf } from '../utils/caseRecord';
 import { DataGrid, FilterInput, GridColumn, Segmented, Unset } from '../workspace/DataGrid';
 import { SavedFilters } from '../workspace/SavedFilters';
 
@@ -64,6 +65,7 @@ export const CallLogsView: React.FC = () => {
 
   return (
     <DataGrid<CallLogArtifact>
+      tags={{ table: 'calls', idOf: (c) => caseRecordOf(c.id)?.id ?? null }}
       tableId="calls" title="Calls on the device" columns={columns} rows={rows} totalBeforeFilter={callLogs.length}
       rowKey={(c) => c.id} selectedKey={selected?.id ?? null} exportName="calls.csv"
       onSelect={(c) => void setSelectedArtifact({ id: c.id, provenance: c.provenance, timestamp: c.timestamp, itemType: 'Call record', rawData: c })}

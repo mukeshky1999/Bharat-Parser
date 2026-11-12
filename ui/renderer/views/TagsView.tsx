@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { forensicClient, TagSummary, TaggedRecord } from '../api/forensicClient';
 import { RecordDetail, RecordRef } from '../inspectors/RecordDetail';
+import { useUi } from '../state/uiStore';
 
 const PAGE = 100;
 
@@ -17,6 +18,7 @@ export const TagsView: React.FC = () => {
   const [offset, setOffset] = useState(0);
   const [error, setError] = useState('');
   const [open, setOpen] = useState<RecordRef | null>(null);
+  const bumpTags = useUi((s) => s.bumpTags);
 
   const loadTags = useCallback(async () => {
     const res = await forensicClient.getTags();
@@ -43,6 +45,7 @@ export const TagsView: React.FC = () => {
     if (res.error) { setError(res.error); return; }
     await loadTags();
     await loadRecords(current, offset);
+    bumpTags();
   };
 
   const changed = () => { void loadTags(); void loadRecords(current, offset); };

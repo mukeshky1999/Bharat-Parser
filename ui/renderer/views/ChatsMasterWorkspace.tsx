@@ -5,6 +5,9 @@ import {
 } from '../../shared/forensic-types';
 import { useWorkbenchStore, RecoveryPillFilter, EphemeralPillFilter, ChatWorkspaceMode } from '../state/workbenchStore';
 import { csvCell, downloadCsv, formatOffset } from '../utils/csv';
+import { useTagIndex } from '../workspace/useTagIndex';
+import { TagPills } from '../inspectors/TagControls';
+import { caseRecordOf } from '../utils/caseRecord';
 import {
   MessageSquare,
   ArrowUpRight,
@@ -55,6 +58,8 @@ interface AudioPlayerState {
 }
 
 export const ChatsMasterWorkspace: React.FC = () => {
+  const chatTags = useTagIndex('chats');
+  const tagsOfMsg = (id: string): string[] => { const n = caseRecordOf(id, 'CHAT_MESSAGE')?.id; return n ? chatTags[n] ?? [] : []; };
   const {
     chats,
     chatViewMode,
@@ -827,6 +832,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
                       <td className="p-2 text-center">{getStatusIcon(msg.messageStatus)}</td>
                       <td className="p-2">
                         <div className="font-sans text-xs text-slate-100 line-clamp-2">{msg.body}</div>
+                        {tagsOfMsg(msg.id).length > 0 && <div className="mt-1 flex flex-wrap gap-1"><TagPills tags={tagsOfMsg(msg.id)} /></div>}
                         {msg.paymentAttachment && (
                           <div className="mt-1 text-[0.6875rem] text-emerald-400 font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40 inline-block">
                             ₹{msg.paymentAttachment.amountInr.toLocaleString('en-IN')} (UTR: {msg.paymentAttachment.utrNumber})
@@ -1018,6 +1024,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
                       <div className="text-xs leading-relaxed select-text font-sans break-words py-1 text-slate-100">
                         {msg.body}
                       </div>
+                      {tagsOfMsg(msg.id).length > 0 && <div className="mt-1 flex flex-wrap gap-1"><TagPills tags={tagsOfMsg(msg.id)} /></div>}
 
                       {/* INLINE UPI PAYMENT EVIDENCE CARD */}
                       {paymentEv && (

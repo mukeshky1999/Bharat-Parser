@@ -600,6 +600,20 @@ class CaseUIPaginatorStore:
         finally:
             conn.close()
 
+    def tag_index(self, table: str) -> Dict[int, List[str]]:
+        """The tags of every tagged record of one table, so a table can show tag pills (detached tags are not included)."""
+        tbl = table.lower().strip()
+        if tbl not in ALLOWED_TABLES:
+            raise ValueError(f"Not a table of the case store: {table}")
+        conn = self._get_connection()
+        try:
+            out: Dict[int, List[str]] = {}
+            for rid, tag in conn.execute("SELECT Record_Id, Tag FROM tags WHERE Tbl = ? AND Detached = 0 ORDER BY Tag", (tbl,)):
+                out.setdefault(int(rid), []).append(tag)
+            return out
+        finally:
+            conn.close()
+
     def record_tags(self, table: str, record_id: int) -> List[str]:
         """The tags on one record (detached tags are not included)."""
         from parsers import case_tags

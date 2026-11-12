@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download } from 'lucide-react';
 import { usePreferences } from '../state/preferencesStore';
 import { csvCell, downloadCsv } from '../utils/csv';
+import { useTagIndex } from './useTagIndex';
+import { TagPills } from '../inspectors/TagControls';
 
 /**
  * The one table pattern for the money views: a header row, fixed-height rows that are drawn only while they are in
@@ -42,11 +44,20 @@ interface DataGridProps<T> {
   rowClass?: (row: T) => string;
   /** Total before filtering, for "n of m" */
   totalBeforeFilter?: number;
+  /** Adds a Tags column: the case-store table the rows belong to, and which record id a row is (null when it is not one). */
+  tags?: { table: string; idOf: (row: T) => number | null };
 }
 
 export function DataGrid<T>({
-  tableId, title, columns, rows, rowKey, selectedKey, onSelect, toolbar, empty, exportName, rowHeight = 40, rowClass, totalBeforeFilter,
+  tableId, title, columns: baseColumns, rows, rowKey, selectedKey, onSelect, toolbar, empty, exportName, rowHeight = 40, rowClass, totalBeforeFilter, tags,
 }: DataGridProps<T>): React.ReactElement {
+  const tagIndex = useTagIndex(tags?.table ?? '');
+  const tagsOf = (r: T): string[] => { const id = tags?.idOf(r); return id ? tagIndex[id] ?? [] : []; };
+  const columns: GridColumn<T>[] = useMemo(() => (tags ? [{
+    key: 'tags', label: 'Tags', width: '11rem',
+    cell: (r: T) => { const t = tagsOf(r); return t.length ? <span className="flex gap-1 overflow-hidden"><TagPills tags={t} /></span> : <span className="text-slate-600">none</span>; },
+    text: (r: T) => tagsOf(r).join('; '),
+  }, ...baseColumns] : baseColumns), [baseColumns, tags, tagIndex]); // eslint-disable-line react-hooks/exhaustive-deps
   const hidden = usePreferences((s) => s.hiddenColumns[tableId]) ?? [];
   const allHidden = usePreferences((s) => s.hiddenColumns);
   const setPrefs = usePreferences((s) => s.set);

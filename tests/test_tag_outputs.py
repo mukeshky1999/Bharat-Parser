@@ -159,3 +159,25 @@ def test_package_refuses_included_file_with_keep_out_records_unless_acknowledged
     # an untagged file is unaffected
     plain = rp.build_package("C1", [rp.PackageItem(source_path=str(f), disposition=rp.INCLUDE)], str(tmp_path / "p4"))
     assert json.loads(open(plain.manifest_path, encoding="utf-8").read())["tag_warning_acknowledged"] is False
+
+
+def test_tag_index_lists_tags_per_record_for_one_table(tmp_path, monkeypatch):
+    from parsers import api_server
+    from fastapi.testclient import TestClient
+    monkeypatch.setattr(api_server, "_case_state", dict(api_server._case_state))
+    monkeypatch.setattr(api_server, "DEFAULT_WORKSPACE_ROOT", str(tmp_path / "cases"))
+    ev = tmp_path / "ev"; ev.mkdir()
+    c = sqlite3.connect(ev / "p.db")
+    c.execute('CREATE TABLE "Transaction" (id TEXT, amount REAL, sender_vpa TEXT, receiver_vpa TEXT, utr TEXT, timestamp TEXT)')
+    for i in range(2):
+        c.execute('INSERT INTO "Transaction" VALUES (?,?,?,?,?,?)', (f"t{i}", 10.0 + i, "a@ybl", "b@ybl", f"10000000001{i}", "2026-02-01 09:00:00"))
+    c.commit(); c.close()
+    client = TestClient(api_server.app)
+    assert client.post("/api/case/ingest", json={"evidence_path": str(ev), "case_id": "TI-1"}).json()["success"]
+    ids = [r["id"] for r in client.get("/api/artifacts/query", params={"category": "upi_transactions"}).json()["rows"]]
+    client.post("/api/case/tags", json={"tag": "of_interest", "records": [{"table": "transactions", "id": ids[0]}]})
+    client.post("/api/case/tags", json={"tag": "relied_upon", "records": [{"table": "transactions", "id": ids[0]}]})
+    idx = client.get("/api/case/tags/index", params={"table": "transactions"}).json()
+    assert idx["tags"] == {str(ids[0]): ["of_interest", "relied_upon"]}                       # only tagged records appear
+    assert client.get("/api/case/tags/index", params={"table": "chats"}).json()["tags"] == {}
+    assert client.get("/api/case/tags/index", params={"table": "sqlite_master"}).status_code == 422

@@ -3,6 +3,7 @@ import { forensicClient } from '../api/forensicClient';
 import { useWorkbenchStore, parseProvenance } from '../state/workbenchStore';
 import { usePreferences } from '../state/preferencesStore';
 import { formatOffset } from '../utils/csv';
+import { fetchAllRows } from '../utils/artifactRows';
 import { DataGrid, FilterInput, GridColumn, Unset } from '../workspace/DataGrid';
 import { SavedFilters, FilterScope } from '../workspace/SavedFilters';
 import type { CryptoWalletTransaction } from '../../shared/forensic-types';
@@ -63,18 +64,6 @@ const COLUMNS: Record<Tab, Array<GridColumn<Row>>> = {
 
 const EXPORT_NAME: Record<Tab, string> = { custodial_wallets: 'wallet_accounts.csv', p2p_orders: 'p2p_orders.csv', fiat_crypto_bridge: 'rupee_crypto_links.csv', crypto_addresses: 'crypto_addresses.csv' };
 
-async function fetchAll(category: string, signal: AbortSignal): Promise<Row[]> {
-  const out: Row[] = [];
-  const PAGE = 500;
-  for (let offset = 0; offset < 1_000_000; offset += PAGE) {
-    const res: any = await forensicClient.queryArtifacts(category, undefined, undefined, undefined, undefined, PAGE, offset, undefined, false, signal);
-    const rows: Row[] = Array.isArray(res?.rows) ? res.rows : [];
-    out.push(...rows);
-    if (rows.length < PAGE) break;
-  }
-  return out;
-}
-
 /**
  * What the evidence holds about crypto: accounts, peer-to-peer orders, links between rupee payments and orders, and
  * addresses found as text. Each kind has its own columns. Nothing is labelled beyond what was recorded.
@@ -96,7 +85,7 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = () => {
     setLoading(true); setError('');
     (async () => {
       try {
-        const [a, b, c, d] = await Promise.all(TABS.map((t) => fetchAll(t.id, ctl.signal)));
+        const [a, b, c, d] = await Promise.all(TABS.map((t) => fetchAllRows(t.id, ctl.signal)));
         setData({ custodial_wallets: a, p2p_orders: b, fiat_crypto_bridge: c, crypto_addresses: d });
       } catch (e: any) {
         if (e?.name !== 'AbortError') setError(e?.message || 'The crypto records could not be loaded.');
@@ -139,7 +128,7 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = () => {
       {error && <p className="shrink-0 px-4 pt-2 text-rose-300">{error}</p>}
       {loading ? <div className="flex-1 p-10 text-center text-slate-400" role="status">Loading crypto records…</div> : (
         <DataGrid<Row>
-          key={tab} tableId={`crypto_${tab}`} title={meta.title} columns={COLUMNS[tab]} rows={rows} totalBeforeFilter={data[tab].length}
+          key={tab} tags={{ table: tab, idOf: (r) => (Number.isFinite(Number(r.id)) ? Number(r.id) : null) }} tableId={`crypto_${tab}`} title={meta.title} columns={COLUMNS[tab]} rows={rows} totalBeforeFilter={data[tab].length}
           rowKey={(r, i) => `${tab}-${r.id ?? i}`} selectedKey={selected?.id?.startsWith(`CRYPTO_${tab}_`) ? `${tab}-${selected.id.split('_').pop()}` : null}
           onSelect={select} exportName={EXPORT_NAME[tab]}
           toolbar={(

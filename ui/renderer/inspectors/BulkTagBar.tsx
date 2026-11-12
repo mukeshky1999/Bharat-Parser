@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { forensicClient, TagSummary } from '../api/forensicClient';
 import type { RecordRef } from './TagControls';
+import { useUi } from '../state/uiStore';
 
 const btn = 'h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 text-xs disabled:opacity-40';
 
@@ -20,6 +21,7 @@ export const BulkTagBar: React.FC<{
   const [custom, setCustom] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const bumpTags = useUi((s) => s.bumpTags);
 
   useEffect(() => { void forensicClient.getTags().then((r) => setKnown(r.data?.tags ?? [])); }, []);
 
@@ -33,6 +35,7 @@ export const BulkTagBar: React.FC<{
     setMsg(apply
       ? `${d.applied ?? 0} tagged “${chosen}”, ${d.already_tagged ?? 0} already had it${d.missing?.length ? `, ${d.missing.length} not found` : ''}.`
       : `${d.removed ?? 0} had “${chosen}” removed.`);
+    bumpTags();
     onDone();
   };
 

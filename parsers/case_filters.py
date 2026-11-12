@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 SCOPES = frozenset({
-    "upi_ledger", "calls", "search", "timeline", "crypto_custodial", "crypto_p2p", "crypto_bridge", "crypto_addresses",
+    "upi_ledger", "calls", "search", "timeline", "crypto_custodial", "crypto_p2p", "crypto_bridge", "crypto_addresses", "bank_alerts",
 })
 MAX_PER_SCOPE = 100
 MAX_NAME = 60

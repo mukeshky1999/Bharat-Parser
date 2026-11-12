@@ -97,6 +97,7 @@ export const StageNavigator: React.FC = () => {
                         >
                           <span className="truncate">{v.label}</span>
                           {v.unavailable && <span className="text-[0.6875rem] text-slate-500">not tested</span>}
+                          {v.inTesting && <span className="text-[0.6875rem] text-amber-300">in testing</span>}
                           {n !== null && n > 0 && <span className="text-slate-400">{n.toLocaleString()}</span>}
                         </button>
                       </li>
