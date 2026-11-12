@@ -70,7 +70,6 @@ The merged **BharatAnalyzer Sovereign Forensics Suite** combines two complementa
 |  [Phase 8-10 Workbench]  entity_and_timeline (DSU/50M) | zero_omission_and_fts5 | legal_and_bsa     |
 |                          dossier_and_exhibits | chat_reconstructor_and_redline | workstation_shell  |
 |                          financial_graph_and_storyboard | geospatial_media_and_tamper | unk_triage  |
-|                          workstation_app (Standalone diagnostic server Port 8765)                   |
 +=====================================================================================================+
 ```
 
@@ -259,7 +258,7 @@ When `POST /api/case/ingest` runs (`_execute_ingestion_pipeline`), data flows th
 7. **Syndicate Link Graph & Mule Decomposition (`graph_intelligence.py`):** Constructs NetworkX MultiDiGraph, scores `Mule_Velocity_Flag`, `Smurfing_Burst`, and role (`Victim`, `Mule Layer-1`, `Aggregator`, `Master Kingpin`), extracts charge-sheet paths, and renders interactive PyVis HTML + 5-Stage SVG Sankey flows.
 8. **Chunked Commit to SQLite + FTS5:** Commits all 12 tables to `bharat_case_store.db` and serves sub-10ms live tree counts and paginated grids to React/Electron.
 
-*(In parallel, all 40 specialized domain engines under `src/` provide deep programmatic extraction & analysis across FinTech, SIM Binding, Web3/SeedHunter, High-OpSec, iOS/Android Telemetry, Geolocation/Hyperlocal, Anti-Forensics, Media/C2PA/OCR, Visual Residuals, and Legal Dossiers — also exposed via the standalone `src/workstation_app/dashboard_server.py` diagnostic server on Port 8765.)*
+*(In parallel, all 40 specialized domain engines under `src/` provide deep programmatic extraction & analysis across FinTech, SIM Binding, Web3/SeedHunter, High-OpSec, iOS/Android Telemetry, Geolocation/Hyperlocal, Anti-Forensics, Media/C2PA/OCR, Visual Residuals, and Legal Dossiers.) Note: most of these engines are not yet called by the product (see docs/REVIEW_FINDINGS.md S-01).*
 
 ---
 

@@ -1,7 +1,7 @@
 """
 Acceptance Test Suite for Phase 10:
 Codebase Remediation, Bilingual Hindi-English (hin+eng) OCR,
-Hybrid Online/Offline Map Geocoder & Unified main.py Workstation Launcher.
+Hybrid Online/Offline Map Geocoder.
 """
 
 import io
@@ -15,7 +15,6 @@ import zlib
 
 import pytest
 
-from main import run_self_test
 from src.core.sqlite_manager import connect_forensic_sqlite
 from src.geospatial_media_and_tamper.bilingual_ocr_engine import (
     BilingualOcrEngine,
@@ -25,7 +24,6 @@ from src.geospatial_media_and_tamper.hybrid_map_geocoder import (
     HybridReverseGeocoder,
     INDIAN_GAZETTEER_HUBS,
 )
-from src.workstation_app.dashboard_server import ForensicDashboardHandler
 
 
 def test_thread_safe_sqlite_concurrency(tmp_path):
@@ -190,132 +188,15 @@ def test_hybrid_online_and_offline_reverse_geocoder(tmp_path):
     assert "tactical-grid-overlay" in html_map
 
 
-def _dispatch_mock_request(method: str, path: str, body: dict = None) -> tuple[int, dict, str]:
-    """Helper to dispatch HTTP requests directly to ForensicDashboardHandler in-memory."""
-    class MockSocket:
-        def __init__(self, data: bytes):
-            self.r = io.BytesIO(data)
-            self.w = io.BytesIO()
-
-        def makefile(self, mode: str, bufsize: int = -1):
-            if "r" in mode:
-                return self.r
-            return self.w
-
-        def sendall(self, data):
-            self.w.write(data)
-
-    body_bytes = json.dumps(body).encode("utf-8") if body is not None else b""
-    req_lines = [
-        f"{method} {path} HTTP/1.1",
-        "Host: 127.0.0.1",
-        f"Content-Length: {len(body_bytes)}",
-        "Content-Type: application/json",
-        "",
-        "",
-    ]
-    raw_req = "\r\n".join(req_lines).encode("utf-8") + body_bytes
-
-    sock = MockSocket(raw_req)
-    mock_server = MagicMock()
-    handler = ForensicDashboardHandler(sock, ("127.0.0.1", 8765), mock_server)
-
-    raw_resp = sock.w.getvalue().decode("utf-8", errors="replace")
-    status_code = 200 if "200 OK" in raw_resp else (404 if "404" in raw_resp else 500)
-
-    # Extract JSON or HTML payload
-    parts = raw_resp.split("\r\n\r\n", 1)
-    body_str = parts[1] if len(parts) > 1 else ""
-    try:
-        json_data = json.loads(body_str)
-    except Exception:
-        json_data = {}
-
-    return status_code, json_data, body_str
-
-
-def test_unified_main_and_workstation_api():
+def test_zero_banned_words_audit_across_src():
     """
-    Runs self-test diagnostic from main.py and tests all API endpoints
-    for HTTP 200 and schema validity using in-memory request processing.
-    """
-    # 1. Run CLI Self-Test diagnostic
-    exit_code = run_self_test()
-    assert exit_code == 0, "run_self_test() must exit with 0"
-
-    # 2. Test GET /
-    status, _, html_text = _dispatch_mock_request("GET", "/")
-    assert status == 200
-    assert "Bharat Analyzer" in html_text
-    assert "3-Pane Hex" in html_text
-
-    # 3. Test GET /api/status
-    status, data, _ = _dispatch_mock_request("GET", "/api/status")
-    assert status == 200
-    assert data["status"] == "HEALTHY"
-    assert data["active_modules_count"] >= 41
-
-    # 4. Test GET /api/hex-demo
-    status, hex_data, _ = _dispatch_mock_request("GET", "/api/hex-demo")
-    assert status == 200
-    assert "hex_view" in hex_data
-
-    # 5. Test POST /api/chat-redline
-    status, diff_data, _ = _dispatch_mock_request(
-        "POST",
-        "/api/chat-redline",
-        {"original_text": "Bhai 50k send karo", "edited_text": "Bhai 150k hawala send karo"},
-    )
-    assert status == 200
-    assert "<ins>" in diff_data["html_rendered_diff"]
-    assert diff_data["insertions_count"] > 0
-
-    # 6. Test GET /api/financial-sankey
-    status, sankey_data, _ = _dispatch_mock_request("GET", "/api/financial-sankey")
-    assert status == 200
-    assert "<svg" in sankey_data["svg_markup"]
-
-    # 7. Test POST /api/map/resolve
-    status, map_data, _ = _dispatch_mock_request(
-        "POST",
-        "/api/map/resolve",
-        {"lat": 25.3176, "lon": 82.9739, "force_offline": True},
-    )
-    assert status == 200
-    assert map_data["city_or_district"] == "Varanasi"
-
-    # 8. Test POST /api/ocr/analyze
-    status, ocr_data, _ = _dispatch_mock_request(
-        "POST",
-        "/api/ocr/analyze",
-        {"text": "भुगतान सफल! रु. ९५,००० यूपीआई संदर्भ: ६३१०१४८९२०११ IFSC: SBIN0001234"},
-    )
-    assert status == 200
-    assert "631014892011" in ocr_data["extracted_utrs"]
-
-    # 9. Test POST /api/bsa/generate
-    status, bsa_data, _ = _dispatch_mock_request("POST", "/api/bsa/generate", {})
-    assert status == 200
-    assert "COURT MASTER COPY" in bsa_data["master_court_preview_html"]
-    assert "DEFENSE DISCLOSURE COPY" in bsa_data["defense_redacted_preview_html"]
-
-
-def test_zero_banned_words_audit_across_src_and_main():
-    """
-    Scans main.py and all Python files in src/ to verify that zero banned tokens
+    Scans all Python files in src/ to verify that zero banned tokens
     (TODO, FIXME, pass as skeleton statement, NotImplemented, or the literal HTML hint word) exist.
     """
     banned_word_pattern = re.compile(r"\b(TODO|FIXME|NotImplemented|placeholder)\b", re.IGNORECASE)
     banned_pass_pattern = re.compile(r"^\s*pass\s*(#.*)?$")
 
     violations: list[str] = []
-
-    # Check main.py
-    main_path = Path("main.py")
-    if main_path.exists():
-        for i, line in enumerate(main_path.read_text(encoding="utf-8").splitlines(), 1):
-            if banned_word_pattern.search(line) or banned_pass_pattern.search(line):
-                violations.append(f"main.py:{i}: {line.strip()}")
 
     # Check all src files
     src_dir = Path("src")

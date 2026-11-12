@@ -9,7 +9,6 @@ import pytest
 from parsers import api_server
 from parsers.api_server import compute_hashes_streaming
 from parsers.enterprise_1tb_chat_and_container_engine import TerabyteForensicContainerEngine
-from src.workstation_app.ingestion_pipeline import LiveForensicIngestEngine
 
 
 def _snapshot(folder):
@@ -56,13 +55,6 @@ def wal_folder(tmp_path):
 
 def test_wal_folder_present(wal_folder):
     assert (wal_folder / "msgstore.db-wal").exists()
-
-
-def test_legacy_ingest_does_not_modify_evidence(wal_folder, tmp_path):
-    before = _snapshot(wal_folder)
-    engine = LiveForensicIngestEngine(workspace_tmp=str(tmp_path / "tmp"))
-    engine.ingest_local_path(wal_folder)
-    assert _snapshot(wal_folder) == before
 
 
 def test_api_ingest_does_not_modify_evidence_and_reports_post_hash(wal_folder, tmp_path, monkeypatch):

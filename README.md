@@ -19,12 +19,14 @@ Nothing in this repository loads code from the archive.
 | `electron/` | Electron shell (`main.cjs`, `preload.cjs`). Spawns `python -m parsers.api_server`. |
 | `ui/renderer/` | React 19 + TypeScript desktop UI (built by Vite into `dist/`). |
 | `ui/main/`, `ui/shared/` | TypeScript engines. Partly used by the UI (`case_manager/case_db`, `reporting/sec63_bsa_generator`); the rest is only exercised by `ui/tests/`. |
-| `main.py` | Second, separate launcher: the Bharart Analyzer web dashboard (`src/workstation_app`) and `--self-test`. |
 | `tests/` | Python tests (pytest) plus `tests/e2e/runner.py` and `tests/test_forensic_client.ts`. |
 | `ui/tests/` | TypeScript tests (run with `jiti`). |
 | `test_evidence/` | Test fixtures (synthetic extraction ZIP, WhatsApp DB with WAL, Paisa DB, 50 MB disk image). |
 | `scripts/` | `start_all.py`, `build_desktop_exe.ps1`, OCR model setup, fixture generators. |
 | `docs/` | Architecture/abilities/command docs, original specs (`docs/specs/`), merge history. |
+
+> The legacy web dashboard (`main.py`, `src/workstation_app`) was retired: it carried sample data and a second,
+> unverified ingest path. The desktop app (Electron + `parsers/api_server.py`) is the only product.
 
 ## Setup
 
@@ -40,7 +42,6 @@ npm install
 npm run desktop:dev        # Electron desktop app (spawns the Python backend)
 npm run dev                # Vite UI dev server only (port 3000)
 npm run backend            # FastAPI backend only
-.venv\Scripts\python main.py --self-test   # legacy dashboard diagnostics
 ```
 
 ## Test
@@ -61,7 +62,6 @@ npm run test:ts
 | `npx tsc --noEmit` | 0 errors |
 | `npm run test:ts` | 92 passed, 0 failed |
 | `npx vite build` | builds (one chunk > 500 kB warning) |
-| `main.py --self-test` | 7 / 7 passed |
 | Electron desktop launch | not re-verified after the merge cleanup |
 
 Passing tests are not, on their own, evidence of forensic correctness or court admissibility.
