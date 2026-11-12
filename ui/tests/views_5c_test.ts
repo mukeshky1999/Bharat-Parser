@@ -4,6 +4,7 @@ import * as path from 'path';
 import { STAGES } from '../renderer/workspace/stages';
 import { shownValue, NOT_RECORDED } from '../renderer/utils/recordText';
 import { caseRecordOf } from '../renderer/utils/caseRecord';
+import { interpret, parseOffset } from '../renderer/utils/byteInterpreter';
 
 let failures = 0;
 function ok(cond: boolean, msg: string) {
@@ -53,6 +54,22 @@ ok(/cannot say how much is left/.test(prog) && /fraction === null/.test(prog), '
 const marksCard = view('ReviewerMarksCard.tsx');
 ok(/never become tags|not a tag|apart from your tags/.test(marksCard + fs.readFileSync(path.join(__dirname, '..', '..', 'parsers', 'review_marks.py'), 'utf8')), 'reviewer marks are kept apart from tags');
 ok(/not touched/.test(view('ValidationCard.tsx')) && /does not show the tool is right/.test(view('ValidationCard.tsx')), 'validation says it leaves the case alone and what it does not show');
+
+// the hex data interpreter: readings, not findings
+const rd = (b: number[]) => Object.fromEntries(interpret(Uint8Array.from(b)).map((r) => [r.label, r.value]));
+const u32 = rd([0x00, 0xf1, 0x53, 0x65, 0, 0, 0, 0]);          // 1700000000 little-endian
+ok(u32['Unsigned 32-bit, little-endian'] === '1700000000', 'unsigned 32-bit little-endian');
+ok(u32['As Unix seconds (32-bit, little-endian)'] === '2023-11-14T22:13:20Z UTC', 'a plausible Unix time is shown as a reading');
+ok(rd([1, 0])['Unsigned 16-bit, little-endian'] === '1' && rd([1, 0])['Unsigned 16-bit, big-endian'] === '256', 'both byte orders');
+const ms = new DataView(new ArrayBuffer(8)); ms.setBigUint64(0, 1700000000000n, true);
+ok(rd([...new Uint8Array(ms.buffer)])['As Unix milliseconds (64-bit, little-endian)'] === '2023-11-14T22:13:20Z UTC', 'Unix milliseconds');
+const wk = new DataView(new ArrayBuffer(8)); wk.setBigUint64(0, (1700000000000n + 11644473600000n) * 1000n, true);
+ok(rd([...new Uint8Array(wk.buffer)])['As WebKit microseconds since 1601 (64-bit)'] === '2023-11-14T22:13:20Z UTC', 'WebKit time');
+ok(!('As Unix seconds (32-bit, little-endian)' in rd([0xff, 0xff, 0xff, 0xff])) && !('As Unix seconds (32-bit, little-endian)' in rd([1, 0, 0, 0])),
+  'a value outside 2000-2100 is not offered as a time');
+ok(interpret(Uint8Array.from([])).length === 0 && !('Unsigned 32-bit, little-endian' in rd([1, 2, 3])), 'too few bytes give no reading that needs more');
+ok(parseOffset('0x1F4') === 500 && parseOffset('500') === 500 && parseOffset('1f4') === 500 && parseOffset('zz') === null && parseOffset('') === null, 'offsets parse as hex or decimal, or not at all');
+ok(/readings, not findings/.test(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'inspectors', 'DataInterpreter.tsx'), 'utf8')), 'the interpreter says its values are readings');
 
 // none of the new screens keeps case data in browser storage
 for (const f of ['ReviewerMarksCard.tsx', 'ValidationCard.tsx', 'SearchView.tsx', 'TimelineView.tsx', 'TagsView.tsx', 'MediaLibraryView.tsx', 'IngestProgressPanel.tsx']) {

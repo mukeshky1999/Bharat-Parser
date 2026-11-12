@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useWorkbenchStore } from '../state/workbenchStore';
 import { ForensicProvenance } from '../../shared/forensic-types';
+import { DataInterpreter, ByteSelection } from './DataInterpreter';
 
 interface SyncedHexViewerProps {
   provenance?: ForensicProvenance | null;
@@ -38,6 +39,23 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
   const [viewportHeight, setViewportHeight] = useState(200);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [selection, setSelection] = useState<ByteSelection | null>(null);
+  // the bytes of the loaded window as numbers, so they can be read as values
+  const flat = React.useMemo(() => {
+    const list: number[] = [];
+    for (const r of hexWindow?.rows || []) for (const b of r.bytes) list.push(parseInt(b.hex, 16) || 0);
+    return Uint8Array.from(list);
+  }, [hexWindow]);
+  const windowStart = hexWindow?.startOffset ?? 0;
+  React.useEffect(() => { setSelection(null); }, [hexWindow]);
+  const inSelection = (idx: number) => !!selection && idx >= selection.start && idx < selection.start + selection.len;
+  const jumpTo = (fileOffset: number): string | null => {
+    const idx = fileOffset - windowStart;
+    if (idx < 0 || idx >= flat.length) return `Offset ${fileOffset} is outside the loaded bytes (${windowStart} to ${windowStart + flat.length - 1}).`;
+    setSelection({ start: idx, len: 1 });
+    if (containerRef.current) containerRef.current.scrollTop = Math.max(0, Math.floor(idx / 16) * ROW_HEIGHT - 40);
+    return null;
+  };
 
   const prov = props.provenance || storeArtifact?.provenance;
   const targetOffset = prov && prov.byteOffset >= 0 ? prov.byteOffset : 0;
@@ -220,7 +238,8 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
       {dockState !== 'COLLAPSED' && (
         <div className="flex-1 overflow-hidden flex flex-col">
           {bottomDockTab === 'HEX' ? (
-            /* Virtualized 16-Byte Hex + ASCII Stream Grid */
+            /* Virtualized 16-Byte Hex + ASCII Stream Grid, with the data interpreter under it */
+            <>
             <div
               ref={containerRef}
               onScroll={handleScroll}
@@ -258,8 +277,11 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
                               {row.bytes.slice(0, 8).map((b, i) => (
                                 <span
                                   key={i}
-                                  className={`inline-block w-5 text-center transition-all ${
-                                    b.isHighlighted
+                                  onClick={() => setSelection({ start: actualRowIndex * 16 + i, len: 1 })}
+                                  className={`inline-block w-5 text-center transition-all cursor-pointer ${
+                                    inSelection(actualRowIndex * 16 + i)
+                                      ? 'bg-cyan-500 text-slate-950 font-bold rounded-sm'
+                                      : b.isHighlighted
                                       ? 'bg-amber-400 text-slate-950 font-bold rounded-sm shadow-sm scale-105'
                                       : 'text-slate-300'
                                   }`}
@@ -273,8 +295,11 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
                               {row.bytes.slice(8, 16).map((b, i) => (
                                 <span
                                   key={i + 8}
-                                  className={`inline-block w-5 text-center transition-all ${
-                                    b.isHighlighted
+                                  onClick={() => setSelection({ start: actualRowIndex * 16 + i + 8, len: 1 })}
+                                  className={`inline-block w-5 text-center transition-all cursor-pointer ${
+                                    inSelection(actualRowIndex * 16 + i + 8)
+                                      ? 'bg-cyan-500 text-slate-950 font-bold rounded-sm'
+                                      : b.isHighlighted
                                       ? 'bg-amber-400 text-slate-950 font-bold rounded-sm shadow-sm scale-105'
                                       : 'text-slate-300'
                                   }`}
@@ -291,7 +316,7 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
                               <span
                                 key={i}
                                 className={`inline-block w-2.5 text-center ${
-                                  a.isHighlighted ? 'bg-amber-500/40 text-amber-300 font-bold rounded-sm' : ''
+                                  inSelection(actualRowIndex * 16 + i) ? 'bg-cyan-500/60 text-slate-50 rounded-sm' : a.isHighlighted ? 'bg-amber-500/40 text-amber-300 font-bold rounded-sm' : ''
                                 }`}
                               >
                                 {a.char}
@@ -315,6 +340,8 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
                 </div>
               )}
             </div>
+            {rows.length > 0 && <DataInterpreter bytes={flat} windowStart={windowStart} selection={selection} onSelect={setSelection} onJump={jumpTo} />}
+            </>
           ) : (
             /* Raw Decoded JSON / Protobuf Tree Tab */
             <div className="flex-1 overflow-y-auto p-3 font-mono text-xs select-text bg-slate-950">
