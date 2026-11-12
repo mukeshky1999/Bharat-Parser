@@ -194,8 +194,8 @@ class IngestCaseRequest(BaseModel):
     evidence_path: str
     case_id: Optional[str] = None
     case_name: Optional[str] = None
-    examiner_name: Optional[str] = "Forensic Examiner"
-    agency_name: Optional[str] = "State Cyber Crime Investigation Division"
+    examiner_name: Optional[str] = ""   # supplied by the examiner; never a placeholder name
+    agency_name: Optional[str] = ""
 
 
 class BenchmarkRequest(BaseModel):
@@ -421,6 +421,12 @@ def _resolve_case_file(requested: str, *, for_sqlite: bool = False) -> str:
     ev = _case_state.get("evidence_path") if _case_state.get("loaded") else None
 
     candidates = [os.path.abspath(requested), os.path.abspath(os.path.join(ws, requested))]
+    # Parsers record paths relative to the evidence root ("data/data/com.whatsapp/databases/msgstore.db"):
+    # try the case working copy, then the evidence folder itself.
+    if ".." not in re.split(r"[\\/]+", requested) and not os.path.isabs(requested):
+        candidates.append(os.path.abspath(os.path.join(ws, "working_copy", requested)))
+        if ev and os.path.isdir(ev):
+            candidates.append(os.path.abspath(os.path.join(ev, requested)))
     allowed_missing = False
     for cand in candidates:
         in_ws = _is_within(cand, ws)
@@ -442,7 +448,7 @@ def _resolve_case_file(requested: str, *, for_sqlite: bool = False) -> str:
         raise HTTPException(status_code=404, detail=f"File not found: {requested}")
     raise HTTPException(
         status_code=403,
-        detail="Access denied: path is outside the active case workspace and evidence source.",
+        detail="Access Denied: Requested file path is outside the active case workspace and evidence container.",
     )
 
 
@@ -778,6 +784,12 @@ def _execute_ingestion_pipeline(
     pyvis_html = generate_pyvis_network_html(g, mule_alerts, roles_df)
 
     # 8. Commit All Data to SQLite+FTS5 Case Store
+    # Opening the same case id again must not add the records a second time: start from an empty store.
+    # (The findings file is separate and is kept.)
+    for suffix in ("", "-wal", "-shm"):
+        stale = os.path.join(workspace_dir, "bharat_case_store.db" + suffix)
+        if os.path.isfile(stale):
+            os.remove(stale)
     store = CaseUIPaginatorStore(workspace_dir, db_name="bharat_case_store.db")
 
     if all_chats_list:
@@ -953,6 +965,82 @@ def get_case_state():
     }
 
 
+# ---------------------------------------------------------------------------
+# Findings: records the examiner pinned, each with their own note. Stored beside the case database in a
+# separate file so that re-ingesting the evidence does not erase them. A finding stores a pointer to the
+# record (its source file, table, row, offset) and the examiner's words; the record itself stays in the case.
+# ---------------------------------------------------------------------------
+class FindingIn(BaseModel):
+    kind: str
+    record_id: str
+    title: str
+    note: str = ""
+    source: Dict[str, Any] = {}
+
+
+def _findings_db() -> sqlite3.Connection:
+    path = os.path.join(os.path.dirname(os.path.abspath(_active_store.db_path)), "findings.sqlite")
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS findings ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, case_id TEXT NOT NULL, kind TEXT NOT NULL, record_id TEXT NOT NULL,"
+        "title TEXT NOT NULL, note TEXT NOT NULL, source_json TEXT NOT NULL, pinned_at_utc TEXT NOT NULL,"
+        "UNIQUE(case_id, kind, record_id))"
+    )
+    return conn
+
+
+@app.get("/api/case/findings")
+def list_findings():
+    if not _case_state["loaded"]:
+        return {"findings": []}
+    conn = _findings_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, kind, record_id, title, note, source_json, pinned_at_utc FROM findings WHERE case_id=? ORDER BY id",
+            (str(_case_state["case_id"]),),
+        ).fetchall()
+    finally:
+        conn.close()
+    return {"findings": [
+        {"id": r[0], "kind": r[1], "record_id": r[2], "title": r[3], "note": r[4],
+         "source": json.loads(r[5]), "pinned_at_utc": r[6]} for r in rows
+    ]}
+
+
+@app.post("/api/case/findings")
+def pin_finding(body: FindingIn):
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=409, detail="No case is loaded.")
+    if not body.record_id.strip() or not body.title.strip():
+        raise HTTPException(status_code=422, detail="record_id and title are required.")
+    conn = _findings_db()
+    try:
+        with conn:
+            conn.execute(
+                "INSERT INTO findings(case_id, kind, record_id, title, note, source_json, pinned_at_utc) VALUES (?,?,?,?,?,?,?) "
+                "ON CONFLICT(case_id, kind, record_id) DO UPDATE SET title=excluded.title, note=excluded.note, source_json=excluded.source_json",
+                (str(_case_state["case_id"]), body.kind[:40], body.record_id[:200], body.title[:300], body.note[:4000],
+                 json.dumps(body.source, sort_keys=True)[:20000], datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")),
+            )
+    finally:
+        conn.close()
+    return list_findings()
+
+
+@app.delete("/api/case/findings/{finding_id}")
+def unpin_finding(finding_id: int):
+    if not _case_state["loaded"]:
+        raise HTTPException(status_code=409, detail="No case is loaded.")
+    conn = _findings_db()
+    try:
+        with conn:
+            conn.execute("DELETE FROM findings WHERE id=? AND case_id=?", (finding_id, str(_case_state["case_id"])))
+    finally:
+        conn.close()
+    return list_findings()
+
+
 @app.get("/api/case/summary")
 def get_case_summary():
     """Returns active case metadata, pre/post verification hashes, owner dossier, mule alerts, and category counts."""
@@ -974,8 +1062,8 @@ def get_case_summary():
         "case_id": _case_state["case_id"],
         "case_name": _case_state["case_name"],
         "evidence_path": _case_state["evidence_path"],
-        "examiner_name": _case_state.get("examiner_name", "Forensic Examiner"),
-        "agency_name": _case_state.get("agency_name", "Cyber Crime Investigation Division"),
+        "examiner_name": _case_state.get("examiner_name", ""),
+        "agency_name": _case_state.get("agency_name", ""),
         "hashes": _case_state["hashes"],
         "owner_dossier": _case_state["owner_dossier"],
         "device_metadata": _case_state["device_metadata"],
@@ -1022,8 +1110,8 @@ async def ingest_evidence_case(req: IngestCaseRequest):
 
     case_id = req.case_id or f"CASE_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
     case_name = req.case_name or os.path.splitext(os.path.basename(req.evidence_path))[0]
-    examiner = req.examiner_name or "Forensic Examiner"
-    agency = req.agency_name or "State Cyber Crime Investigation Division"
+    examiner = req.examiner_name or ""
+    agency = req.agency_name or ""
 
     loop = asyncio.get_running_loop()
     try:
@@ -2184,8 +2272,8 @@ async def open_case_workspace(req: CaseOpenRequest):
             "case_id": recovered_case_id,
             "case_name": recovered_case_name,
             "evidence_path": evidence_path,
-            "examiner_name": meta.get("examiner_name", "Forensic Examiner"),
-            "agency_name": meta.get("agency_name", "Cyber Crime Unit"),
+            "examiner_name": meta.get("examiner_name", ""),
+            "agency_name": meta.get("agency_name", ""),
             "extractions": [{"evidenceId": recovered_case_id, "sourcePath": evidence_path}],
             "counts": _active_store.get_pa_project_tree_counts(),
             "owner_dossier": json.loads(meta.get("owner_dossier", "{}")),
@@ -2320,28 +2408,8 @@ async def get_hex_window(
             detail="Precondition Failed: No forensic case is currently loaded.",
         )
 
-    # Resolve and sandbox file path
-    ws = _active_store.case_workspace
-    ev = _case_state.get("evidence_path")
-    abs_target = os.path.abspath(file_path)
-
-    # Path traversal guard: must be inside evidence_path or workspace
-    is_in_ws = abs_target.startswith(ws + os.sep) or abs_target == ws
-    is_in_ev = ev and (abs_target.startswith(ev + os.sep) or abs_target == ev)
-
-    if not (is_in_ws or is_in_ev):
-        # Check relative resolution inside workspace
-        cand = os.path.abspath(os.path.join(ws, file_path))
-        if cand.startswith(ws + os.sep) and os.path.exists(cand):
-            abs_target = cand
-        else:
-            raise HTTPException(
-                status_code=403,
-                detail="Access Denied: Requested file path is outside the active case workspace and evidence container.",
-            )
-
-    if not os.path.isfile(abs_target):
-        raise HTTPException(status_code=404, detail=f"Target file not found: {abs_target}")
+    # Resolve and sandbox file path (same rules as every other endpoint: case workspace or evidence source only)
+    abs_target = _resolve_case_file(file_path)
 
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(

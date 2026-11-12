@@ -669,3 +669,52 @@ def test_bip39_seed_uses_nfkd_and_scrypt_large_n_is_accepted():
     assert ok is False and "MAC" in meta.get("error", "")  # reached the MAC check instead of failing on memory
     ks["crypto"]["kdfparams"]["n"] = 1 << 30
     assert "Refusing" in unwrap_web3_keystore_v3(json.dumps(ks), "pw")[2]["error"]
+
+
+def test_findings_round_trip_survives_and_is_per_case(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import parsers.api_server as api
+
+    class _Store:
+        db_path = str(tmp_path / "case.db")
+
+    monkeypatch.setattr(api, "_active_store", _Store())
+    monkeypatch.setitem(api._case_state, "loaded", True)
+    monkeypatch.setitem(api._case_state, "case_id", "CASE-A")
+    c = TestClient(api.app)
+    assert c.get("/api/case/findings").json()["findings"] == []
+    body = {"kind": "upi", "record_id": "tx-1", "title": "Rs 40,000 to VPA x@ybl", "note": "matches victim complaint",
+            "source": {"file": "phonepe.db", "table": "txn", "rowid": 7, "offset": None}}
+    r = c.post("/api/case/findings", json=body).json()["findings"]
+    assert len(r) == 1 and r[0]["note"] == "matches victim complaint" and r[0]["source"]["offset"] is None
+    body["note"] = "edited"
+    assert c.post("/api/case/findings", json=body).json()["findings"][0]["note"] == "edited"  # same record: updated, not duplicated
+    assert len(c.get("/api/case/findings").json()["findings"]) == 1
+    api._case_state["case_id"] = "CASE-B"
+    assert c.get("/api/case/findings").json()["findings"] == []  # another case does not see them
+    api._case_state["case_id"] = "CASE-A"
+    fid = c.get("/api/case/findings").json()["findings"][0]["id"]
+    assert c.delete(f"/api/case/findings/{fid}").json()["findings"] == []
+    assert c.post("/api/case/findings", json={**body, "title": " "}).status_code == 422
+
+
+def test_reingesting_the_same_case_id_does_not_duplicate_records(tmp_path, monkeypatch):
+    import sqlite3
+    from fastapi.testclient import TestClient
+    import parsers.api_server as api
+    ev = tmp_path / "ev"
+    ev.mkdir()
+    db = ev / "app.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE contacts (_id INTEGER PRIMARY KEY, display_name TEXT, number TEXT)")
+    con.execute("INSERT INTO contacts VALUES (1, 'Asha', '9876543210')")
+    con.commit(); con.close()
+    monkeypatch.setattr(api, "DEFAULT_WORKSPACE_ROOT", str(tmp_path / "ws"))
+    c = TestClient(api.app)
+    body = {"evidence_path": str(ev), "case_id": "DUP-1"}
+    counts = []
+    for _ in range(2):
+        assert c.post("/api/case/ingest", json=body).json()["success"] is True
+        counts.append(c.get("/api/case/state").json()["counts"])
+    assert counts[0] == counts[1], counts
+    assert any(v for v in counts[0].values()), counts  # something was ingested at all

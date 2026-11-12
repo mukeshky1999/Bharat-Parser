@@ -110,3 +110,8 @@ Open: X-13, U-01..U-06 (redesign), Q-1 amount unit, R-16 block CRC, L-08, X-12. 
 
 ### Phase 1d: unread modules (2026-11-12). See `REVIEW_FINDINGS_2.md` section 7
 Fixed with regression tests: R-20a..R-20f. Python: 515 passed. Open: Hive box format unverified, Telegram date 0 in `telegram_decoder.py`.
+
+### Phase 3: interface redesign (2026-11-12). See `UI_DESIGN.md` and `REVIEW_FINDINGS_2.md` section 8
+Done: eight-stage shell, three themes with a contrast test, preferences (theme, density, text size, time zone, rest reminder), evidence card with source bytes and pinning (`/api/case/findings`), command palette, Court output page, RecordTable; U-01..U-06, U-09..U-11, X-15..X-17 fixed; old shell, APK and remote-access views, duplicate chat bubble view removed; `cellebrite-alternative` keyword removed.
+Python 517 passed; `npm run test:ts` passes (adds contrast and shell tests); `tsc` clean; `vite build` OK; looked at in Electron in all three themes.
+Open: older views not redesigned (chat table, ledger, graph, wizard); generators do not read findings; Phase 4 (wire `src/`, X-13).

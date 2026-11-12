@@ -330,7 +330,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
       return {
         badge: 'bg-emerald-950 text-emerald-300 border-emerald-700/60',
         incoming: 'bg-emerald-950/80 border-emerald-800/80 text-emerald-50',
-        outgoing: 'bg-emerald-900/90 border-emerald-700 text-white',
+        outgoing: 'bg-emerald-900/90 border-emerald-700 text-slate-50',
         accent: 'text-emerald-400',
         nameColor: 'text-emerald-300'
       };
@@ -339,7 +339,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
       return {
         badge: 'bg-sky-950 text-sky-300 border-sky-700/60',
         incoming: 'bg-sky-950/80 border-sky-800/80 text-sky-50',
-        outgoing: 'bg-sky-900/90 border-sky-700 text-white',
+        outgoing: 'bg-sky-900/90 border-sky-700 text-slate-50',
         accent: 'text-sky-400',
         nameColor: 'text-sky-300'
       };
@@ -348,7 +348,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
       return {
         badge: 'bg-purple-950 text-purple-300 border-purple-700/60',
         incoming: 'bg-purple-950/80 border-purple-800/80 text-purple-50',
-        outgoing: 'bg-purple-900/90 border-purple-700 text-white',
+        outgoing: 'bg-purple-900/90 border-purple-700 text-slate-50',
         accent: 'text-purple-400',
         nameColor: 'text-purple-300'
       };
@@ -357,7 +357,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
       return {
         badge: 'bg-orange-950 text-orange-300 border-orange-700/60',
         incoming: 'bg-orange-950/80 border-orange-800/80 text-orange-50',
-        outgoing: 'bg-orange-900/90 border-orange-700 text-white',
+        outgoing: 'bg-orange-900/90 border-orange-700 text-slate-50',
         accent: 'text-orange-400',
         nameColor: 'text-orange-300'
       };
@@ -366,7 +366,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
       return {
         badge: 'bg-yellow-950 text-yellow-300 border-yellow-700/60',
         incoming: 'bg-yellow-950/80 border-yellow-800/80 text-yellow-50',
-        outgoing: 'bg-yellow-900/90 border-yellow-700 text-white',
+        outgoing: 'bg-yellow-900/90 border-yellow-700 text-slate-50',
         accent: 'text-yellow-400',
         nameColor: 'text-yellow-300'
       };
@@ -375,7 +375,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
       return {
         badge: 'bg-rose-950 text-rose-300 border-rose-700/60',
         incoming: 'bg-rose-950/80 border-rose-800/80 text-rose-50',
-        outgoing: 'bg-rose-900/90 border-rose-700 text-white',
+        outgoing: 'bg-rose-900/90 border-rose-700 text-slate-50',
         accent: 'text-rose-400',
         nameColor: 'text-rose-300'
       };
@@ -384,7 +384,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
       return {
         badge: 'bg-teal-950 text-teal-300 border-teal-700/60',
         incoming: 'bg-teal-950/80 border-teal-800/80 text-teal-50',
-        outgoing: 'bg-teal-900/90 border-teal-700 text-white',
+        outgoing: 'bg-teal-900/90 border-teal-700 text-slate-50',
         accent: 'text-teal-400',
         nameColor: 'text-teal-300'
       };
@@ -393,7 +393,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
       return {
         badge: 'bg-cyan-950 text-cyan-300 border-cyan-700/60',
         incoming: 'bg-cyan-950/80 border-cyan-800/80 text-cyan-50',
-        outgoing: 'bg-cyan-900/90 border-cyan-700 text-white',
+        outgoing: 'bg-cyan-900/90 border-cyan-700 text-slate-50',
         accent: 'text-cyan-400',
         nameColor: 'text-cyan-300'
       };
@@ -401,7 +401,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
     return {
       badge: 'bg-slate-900 text-slate-300 border-slate-700',
       incoming: 'bg-slate-900/90 border-slate-800 text-slate-100',
-      outgoing: 'bg-slate-800/90 border-slate-700 text-white',
+      outgoing: 'bg-slate-800/90 border-slate-700 text-slate-50',
       accent: 'text-slate-400',
       nameColor: 'text-slate-300'
     };
@@ -423,27 +423,27 @@ export const ChatsMasterWorkspace: React.FC = () => {
   const getStateBadge = (state: RecoveryState, isDeleted?: boolean) => {
     if (state === 'WAL_RECOVERED') {
       return (
-        <span className="text-[9px] bg-amber-950 text-amber-300 border border-amber-700/80 px-1.5 py-0.2 rounded font-bold font-mono">
+        <span className="text-[0.6875rem] bg-amber-950 text-amber-300 border border-amber-700/80 px-1.5 py-0.2 rounded font-bold font-mono">
           [WAL]
         </span>
       );
     }
     if (state === 'CARVED_UNALLOCATED' || isDeleted) {
       return (
-        <span className="text-[9px] bg-red-950 text-red-300 border border-red-700/80 px-1.5 py-0.2 rounded font-bold font-mono">
+        <span className="text-[0.6875rem] bg-red-950 text-red-300 border border-red-700/80 px-1.5 py-0.2 rounded font-bold font-mono">
           [CARVED]
         </span>
       );
     }
     if (state === 'OS_SPILLOVER') {
       return (
-        <span className="text-[9px] bg-purple-950 text-purple-300 border border-purple-700/80 px-1.5 py-0.2 rounded font-bold font-mono">
+        <span className="text-[0.6875rem] bg-purple-950 text-purple-300 border border-purple-700/80 px-1.5 py-0.2 rounded font-bold font-mono">
           [SPILLOVER]
         </span>
       );
     }
     return (
-      <span className="text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-700/60 px-1.5 py-0.2 rounded font-mono">
+      <span className="text-[0.6875rem] bg-emerald-950 text-emerald-300 border border-emerald-700/60 px-1.5 py-0.2 rounded font-mono">
         [ACTIVE]
       </span>
     );
@@ -474,7 +474,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
                 Threads & Matches
               </span>
             </div>
-            <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.2 rounded">
+            <span className="text-[0.6875rem] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.2 rounded">
               {filteredThreads.length}
             </span>
           </div>
@@ -507,11 +507,11 @@ export const ChatsMasterWorkspace: React.FC = () => {
                 <LayoutGrid className="w-3.5 h-3.5 text-cyan-400" />
                 <span>All Indexed Messages</span>
               </span>
-              <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950 px-1.5 rounded">
+              <span className="text-[0.6875rem] font-mono text-cyan-400 bg-cyan-950 px-1.5 rounded">
                 {chats.length}
               </span>
             </div>
-            <div className="text-[10.5px] text-slate-500 font-sans">
+            <div className="text-[0.6875rem] text-slate-500 font-sans">
               Global virtualized view across all 10 social & chat engines
             </div>
           </div>
@@ -535,27 +535,27 @@ export const ChatsMasterWorkspace: React.FC = () => {
                   <div className="font-semibold text-xs truncate max-w-[150px] text-slate-100 font-sans">
                     {thread.threadTitle}
                   </div>
-                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono border ${theme.badge}`}>
+                  <span className={`text-[0.6875rem] px-1.5 py-0.2 rounded font-mono border ${theme.badge}`}>
                     {thread.sourceApp}
                   </span>
                 </div>
 
                 {/* Participant Bio Meta Tag if present */}
                 {thread.participantBioMeta && (
-                  <div className="text-[10px] text-pink-300 font-sans truncate">
+                  <div className="text-[0.6875rem] text-pink-300 font-sans truncate">
                     {thread.participantBioMeta}
                   </div>
                 )}
 
                 {/* Last Message Snippet */}
-                <div className="text-[11px] text-slate-400 truncate font-sans">
+                <div className="text-[0.6875rem] text-slate-400 truncate font-sans">
                   {thread.lastMessage.isFromMe && <span className="text-emerald-400 mr-1 font-mono">You:</span>}
                   {thread.lastMessage.body}
                 </div>
 
                 {/* Badges: Active & Carved */}
                 <div className="flex items-center justify-between pt-1">
-                  <div className="flex items-center space-x-1.5 text-[9.5px] font-mono">
+                  <div className="flex items-center space-x-1.5 text-[0.6875rem] font-mono">
                     <span className="text-slate-400">{thread.messages.length} msgs</span>
                     {thread.carvedCount > 0 && (
                       <span className="bg-red-950 text-red-300 border border-red-800/70 px-1 py-0.2 rounded font-bold">
@@ -564,7 +564,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
                     )}
                   </div>
                   {thread.lastMessage.ephemeralDuration && (
-                    <span className="text-orange-400 text-[9px] flex items-center space-x-0.5">
+                    <span className="text-orange-400 text-[0.6875rem] flex items-center space-x-0.5">
                       <Flame className="w-2.5 h-2.5" />
                       <span>{thread.lastMessage.ephemeralDuration}s</span>
                     </span>
@@ -588,30 +588,30 @@ export const ChatsMasterWorkspace: React.FC = () => {
                 ? 'All Indexed Messages'
                 : activeThread?.threadTitle || 'Conversation'}
             </span>
-            <span className="text-[11px] font-mono text-cyan-400 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800/60 font-semibold">
+            <span className="text-[0.6875rem] font-mono text-cyan-400 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800/60 font-semibold">
               {totalMatching} Records
             </span>
           </div>
 
           {/* 3-Mode View Toggle Button Group */}
           <div className="flex items-center space-x-2">
-            <div className="flex items-center bg-slate-950 border border-slate-800 rounded p-0.5 font-mono text-[11px]">
+            <div className="flex items-center bg-slate-950 border border-slate-800 rounded p-0.5 font-mono text-[0.6875rem]">
               <button
                 onClick={() => setChatViewMode('GRID')}
                 className={`flex items-center space-x-1 px-2.5 py-1 rounded transition-colors ${
                   chatViewMode === 'GRID'
-                    ? 'bg-emerald-600 text-white font-bold'
+                    ? 'bg-emerald-600 text-slate-50 font-bold'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
-                <span>PA Table Grid</span>
+                <span>Table</span>
               </button>
               <button
                 onClick={() => setChatViewMode('BUBBLE')}
                 className={`flex items-center space-x-1 px-2.5 py-1 rounded transition-colors ${
                   chatViewMode === 'BUBBLE'
-                    ? 'bg-emerald-600 text-white font-bold'
+                    ? 'bg-emerald-600 text-slate-50 font-bold'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -622,7 +622,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
                 onClick={() => setChatViewMode('DOSSIER')}
                 className={`flex items-center space-x-1 px-2.5 py-1 rounded transition-colors ${
                   chatViewMode === 'DOSSIER'
-                    ? 'bg-emerald-600 text-white font-bold'
+                    ? 'bg-emerald-600 text-slate-50 font-bold'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -633,8 +633,8 @@ export const ChatsMasterWorkspace: React.FC = () => {
 
             <button
               onClick={handleExportCsv}
-              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded font-mono text-[11px] border border-slate-700 flex items-center space-x-1.5 transition-colors"
-              title="Export filtered chat records to court-admissible CSV"
+              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded font-mono text-[0.6875rem] border border-slate-700 flex items-center space-x-1.5 transition-colors"
+              title="Export the filtered chat records as CSV"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
               <span>Export CSV</span>
@@ -657,13 +657,13 @@ export const ChatsMasterWorkspace: React.FC = () => {
                   setMessageSearchQuery(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="w-full bg-slate-900 border border-slate-800 rounded pl-7 pr-2 py-1 text-[11px] text-slate-200 placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-500"
+                className="w-full bg-slate-900 border border-slate-800 rounded pl-7 pr-2 py-1 text-[0.6875rem] text-slate-200 placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-500"
               />
             </div>
 
             {/* Recovery State Filter Pills */}
-            <div className="flex items-center space-x-1 font-mono text-[10.5px]">
-              <span className="text-slate-500 text-[10px] uppercase font-sans mr-1">State:</span>
+            <div className="flex items-center space-x-1 font-mono text-[0.6875rem]">
+              <span className="text-slate-500 text-[0.6875rem] uppercase font-sans mr-1">State:</span>
               {(['ALL', 'ACTIVE', 'WAL', 'CARVED', 'SPILLOVER'] as RecoveryPillFilter[]).map((pill) => {
                 const isActive = recoveryPillFilter === pill;
                 let activeStyle = 'bg-slate-800 text-slate-200 border-slate-700';
@@ -694,10 +694,10 @@ export const ChatsMasterWorkspace: React.FC = () => {
           </div>
 
           {/* Row 2: Ephemeral Filters + Server-Side Pagination Bar */}
-          <div className="flex items-center justify-between gap-2 overflow-x-auto text-[10.5px] font-mono">
+          <div className="flex items-center justify-between gap-2 overflow-x-auto text-[0.6875rem] font-mono">
             {/* Ephemeral Filter Pills */}
             <div className="flex items-center space-x-1">
-              <span className="text-slate-500 text-[10px] uppercase font-sans mr-1">Privacy:</span>
+              <span className="text-slate-500 text-[0.6875rem] uppercase font-sans mr-1">Privacy:</span>
               {(['ALL', 'VIEW_ONCE', 'DISAPPEARING', 'REVOKED', 'ATTACHMENTS'] as EphemeralPillFilter[]).map((pill) => {
                 const isActive = ephemeralFilter === pill;
                 return (
@@ -745,7 +745,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
-                <span className="px-2 text-slate-300 font-bold text-[10px]">
+                <span className="px-2 text-slate-300 font-bold text-[0.6875rem]">
                   Page {validPage} of {totalPages}
                 </span>
                 <button
@@ -775,30 +775,9 @@ export const ChatsMasterWorkspace: React.FC = () => {
              VIEW A: Complete 28-Column Categorized Forensic Grid
              ===================================================================== */
           <div className="flex-1 overflow-auto select-text font-mono">
-            <table className="w-full text-left text-[11px] border-collapse">
-              {/* Category Group Super-Header */}
-              <thead className="bg-slate-950 border-b border-slate-800 text-[9px] uppercase font-bold sticky top-0 z-20">
-                <tr className="border-b border-slate-800/80">
-                  <th colSpan={10} className="p-1 text-center bg-cyan-950/40 text-cyan-300 border-r border-slate-800">
-                    Category 1: Message & Artifact Details
-                  </th>
-                  <th colSpan={5} className="p-1 text-center bg-indigo-950/40 text-indigo-300 border-r border-slate-800">
-                    Category 2: Party & Participants
-                  </th>
-                  <th colSpan={3} className="p-1 text-center bg-orange-950/40 text-orange-300 border-r border-slate-800">
-                    Category 3: Privacy & Ephemeral Flags
-                  </th>
-                  <th colSpan={4} className="p-1 text-center bg-emerald-950/40 text-emerald-300 border-r border-slate-800">
-                    Category 4: Timestamps (Court Triplet)
-                  </th>
-                  <th colSpan={3} className="p-1 text-center bg-teal-950/40 text-teal-300 border-r border-slate-800">
-                    Category 5: Attachments & Geolocation
-                  </th>
-                  <th colSpan={3} className="p-1 text-center bg-amber-950/40 text-amber-300">
-                    Category 6: Forensic Provenance
-                  </th>
-                </tr>
-                <tr className="bg-slate-900 border-b border-slate-800 text-slate-400 text-[9.5px]">
+            <table className="w-full text-left text-[0.6875rem] border-collapse">
+              <thead className="bg-slate-950 border-b border-slate-800 text-[0.6875rem] uppercase font-bold sticky top-0 z-20">
+                <tr className="bg-slate-900 border-b border-slate-800 text-slate-400 text-[0.6875rem]">
                   <th className="p-2 w-10">#</th>
                   <th className="p-2 w-28">Source App</th>
                   <th className="p-2 w-24">Chat Type</th>
@@ -854,25 +833,25 @@ export const ChatsMasterWorkspace: React.FC = () => {
                     >
                       <td className="p-2 text-slate-500">{offset + idx + 1}</td>
                       <td className="p-2 font-semibold">
-                        <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px]">
+                        <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[0.6875rem]">
                           {msg.sourceApp}
                         </span>
                       </td>
-                      <td className="p-2 text-[10px] text-slate-400">
+                      <td className="p-2 text-[0.6875rem] text-slate-400">
                         {msg.chatType || 'DIRECT_1ON1'}
                       </td>
                       <td className="p-2">
                         {msg.isFromMe ? (
-                          <span className="flex items-center text-emerald-400 font-bold text-[10px]">
+                          <span className="flex items-center text-emerald-400 font-bold text-[0.6875rem]">
                             <ArrowUpRight className="w-3 h-3 mr-0.5" /> OUT
                           </span>
                         ) : (
-                          <span className="flex items-center text-sky-400 font-bold text-[10px]">
+                          <span className="flex items-center text-sky-400 font-bold text-[0.6875rem]">
                             <ArrowDownLeft className="w-3 h-3 mr-0.5" /> IN
                           </span>
                         )}
                       </td>
-                      <td className="p-2 text-[10px] text-slate-300">
+                      <td className="p-2 text-[0.6875rem] text-slate-300">
                         {msg.isViewOnce ? (
                           <span className="text-orange-400 font-bold">[VIEW ONCE]</span>
                         ) : (
@@ -883,41 +862,41 @@ export const ChatsMasterWorkspace: React.FC = () => {
                       <td className="p-2">
                         <div className="font-sans text-xs text-slate-100 line-clamp-2">{msg.body}</div>
                         {msg.paymentAttachment && (
-                          <div className="mt-1 text-[10px] text-emerald-400 font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40 inline-block">
+                          <div className="mt-1 text-[0.6875rem] text-emerald-400 font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40 inline-block">
                             ₹{msg.paymentAttachment.amountInr.toLocaleString('en-IN')} (UTR: {msg.paymentAttachment.utrNumber})
                           </div>
                         )}
                       </td>
-                      <td className="p-2 text-slate-400 text-[10px] truncate max-w-[100px]">{msg.replyToId || '—'}</td>
-                      <td className="p-2 text-slate-400 text-[10px] truncate max-w-[140px] italic">{msg.quotedMessageText || '—'}</td>
-                      <td className="p-2 text-center text-[10px]">
+                      <td className="p-2 text-slate-400 text-[0.6875rem] truncate max-w-[100px]">{msg.replyToId || '—'}</td>
+                      <td className="p-2 text-slate-400 text-[0.6875rem] truncate max-w-[140px] italic">{msg.quotedMessageText || '—'}</td>
+                      <td className="p-2 text-center text-[0.6875rem]">
                         {msg.forwardingScore ? <span className="text-cyan-400 font-bold">+{msg.forwardingScore}</span> : '0'}
                       </td>
 
-                      <td className="p-2 truncate max-w-[150px] text-[10px] text-slate-400" title={msg.threadId}>
+                      <td className="p-2 truncate max-w-[150px] text-[0.6875rem] text-slate-400" title={msg.threadId}>
                         {msg.threadId}
                       </td>
-                      <td className="p-2 truncate max-w-[150px] text-[10px] text-slate-300">
+                      <td className="p-2 truncate max-w-[150px] text-[0.6875rem] text-slate-300">
                         {msg.threadTitle || '—'}
                       </td>
                       <td className="p-2 truncate max-w-[170px]">
                         <div className="font-sans font-semibold text-slate-200 truncate">{msg.senderName}</div>
-                        <div className="text-[9.5px] text-slate-500 truncate">{msg.senderJid}</div>
+                        <div className="text-[0.6875rem] text-slate-500 truncate">{msg.senderJid}</div>
                       </td>
                       <td className="p-2 truncate max-w-[170px]">
                         <div className="font-sans font-semibold text-slate-300 truncate">
                           {msg.recipientName || 'Recipient'}
                         </div>
-                        <div className="text-[9.5px] text-slate-500 truncate">{msg.recipientJid || 'N/A'}</div>
+                        <div className="text-[0.6875rem] text-slate-500 truncate">{msg.recipientJid || 'N/A'}</div>
                       </td>
-                      <td className="p-2 text-[10px] text-pink-300 truncate max-w-[160px]">
+                      <td className="p-2 text-[0.6875rem] text-pink-300 truncate max-w-[160px]">
                         {msg.sourceApp.includes('Tinder') ? 'Elena, 26 :: 4.2 km' : '—'}
                       </td>
 
-                      <td className="p-2 text-center text-[10px]">
+                      <td className="p-2 text-center text-[0.6875rem]">
                         {msg.isViewOnce ? <span className="text-red-400 font-bold">YES</span> : '—'}
                       </td>
-                      <td className="p-2 text-[10px]">
+                      <td className="p-2 text-[0.6875rem]">
                         {msg.ephemeralDuration ? (
                           <span className="text-orange-400 flex items-center space-x-0.5 font-bold">
                             <Flame className="w-3 h-3" />
@@ -931,25 +910,25 @@ export const ChatsMasterWorkspace: React.FC = () => {
                         {isDel ? <Trash2 className="w-3 h-3 text-red-400 inline" /> : '—'}
                       </td>
 
-                      <td className="p-2 text-slate-400 text-[10px] truncate">{msg.timestamp.rawValue}</td>
-                      <td className="p-2 text-slate-400 text-[10px] whitespace-nowrap">{msg.timestamp.utcIso}</td>
-                      <td className="p-2 text-slate-200 text-[10px] whitespace-nowrap font-bold">
+                      <td className="p-2 text-slate-400 text-[0.6875rem] truncate">{msg.timestamp.rawValue}</td>
+                      <td className="p-2 text-slate-400 text-[0.6875rem] whitespace-nowrap">{msg.timestamp.utcIso}</td>
+                      <td className="p-2 text-slate-200 text-[0.6875rem] whitespace-nowrap font-bold">
                         {msg.timestamp.istFormatted}
                       </td>
-                      <td className="p-2 text-slate-400 text-[10px]">{msg.editTimestamp?.istFormatted || '—'}</td>
+                      <td className="p-2 text-slate-400 text-[0.6875rem]">{msg.editTimestamp?.istFormatted || '—'}</td>
 
-                      <td className="p-2 text-slate-400 text-[10px] truncate max-w-[150px]" title={msg.mediaPath}>
+                      <td className="p-2 text-slate-400 text-[0.6875rem] truncate max-w-[150px]" title={msg.mediaPath}>
                         {msg.mediaPath || '—'}
                       </td>
-                      <td className="p-2 text-slate-400 text-[10px]">{msg.mediaMimeType || '—'}</td>
-                      <td className="p-2 text-slate-400 text-[10px] truncate max-w-[140px]" title={msg.locationName}>
+                      <td className="p-2 text-slate-400 text-[0.6875rem]">{msg.mediaMimeType || '—'}</td>
+                      <td className="p-2 text-slate-400 text-[0.6875rem] truncate max-w-[140px]" title={msg.locationName}>
                         {msg.locationName || '—'}
                       </td>
 
-                      <td className="p-2 text-slate-400 text-[10px] truncate max-w-[150px]" title={msg.provenance.vfsInternalPath}>
+                      <td className="p-2 text-slate-400 text-[0.6875rem] truncate max-w-[150px]" title={msg.provenance.vfsInternalPath}>
                         {msg.provenance.vfsInternalPath.split('/').pop()} :: {msg.provenance.tableName || 'db'}
                       </td>
-                      <td className="p-2 text-amber-400 font-bold text-[10.5px]">{hexOffset}</td>
+                      <td className="p-2 text-amber-400 font-bold text-[0.6875rem]">{hexOffset}</td>
                       <td className="p-2">{getStateBadge(msg.provenance.recoveryState, msg.isDeleted)}</td>
                     </tr>
                   );
@@ -974,12 +953,12 @@ export const ChatsMasterWorkspace: React.FC = () => {
                   <div>
                     <div className="text-xs font-bold text-slate-100 flex items-center space-x-2">
                       <span>{activeThread.threadTitle}</span>
-                      <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/80 px-1.5 rounded border border-cyan-800/60">
+                      <span className="text-[0.6875rem] font-mono text-cyan-400 bg-cyan-950/80 px-1.5 rounded border border-cyan-800/60">
                         {activeThread.sourceApp}
                       </span>
                     </div>
                     {activeThread.participantBioMeta && (
-                      <div className="text-[11px] text-pink-300 font-sans mt-0.5 flex items-center space-x-1.5">
+                      <div className="text-[0.6875rem] text-pink-300 font-sans mt-0.5 flex items-center space-x-1.5">
                         <User className="w-3 h-3 text-pink-400" />
                         <span>{activeThread.participantBioMeta}</span>
                       </div>
@@ -987,7 +966,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-3 font-mono text-[10px]">
+                <div className="flex items-center space-x-3 font-mono text-[0.6875rem]">
                   <div className="text-slate-400">
                     Active: <strong className="text-emerald-400">{activeThread.activeCount}</strong> | Deleted:{' '}
                     <strong className="text-red-400">{activeThread.carvedCount}</strong>
@@ -1029,12 +1008,12 @@ export const ChatsMasterWorkspace: React.FC = () => {
                       }`}
                     >
                       {/* Header: Sender, App & Forensic Recovery Badges */}
-                      <div className="flex items-center justify-between space-x-3 mb-1.5 text-[11px] pb-1 border-b border-white/10">
+                      <div className="flex items-center justify-between space-x-3 mb-1.5 text-[0.6875rem] pb-1 border-b border-white/10">
                         <div className="flex items-center space-x-1.5 truncate">
                           <span className={`font-bold font-sans ${theme.nameColor} truncate`}>
                             {msg.senderName}
                           </span>
-                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono border ${theme.badge}`}>
+                          <span className={`text-[0.6875rem] px-1.5 py-0.2 rounded font-mono border ${theme.badge}`}>
                             {msg.sourceApp}
                           </span>
                         </div>
@@ -1042,19 +1021,19 @@ export const ChatsMasterWorkspace: React.FC = () => {
                         <div className="flex items-center space-x-1.5 shrink-0">
                           {msg.isStarred && <Star className="w-3 h-3 text-amber-400 fill-amber-400" />}
                           {msg.forwardingScore ? (
-                            <span className="flex items-center space-x-0.5 text-[9px] text-cyan-300 font-mono">
+                            <span className="flex items-center space-x-0.5 text-[0.6875rem] text-cyan-300 font-mono">
                               <CornerUpRight className="w-2.5 h-2.5" />
                               <span>+{msg.forwardingScore}</span>
                             </span>
                           ) : null}
                           {msg.ephemeralDuration ? (
-                            <span className="flex items-center space-x-0.5 text-[9px] text-orange-400 bg-orange-950/90 px-1 rounded font-mono font-bold">
+                            <span className="flex items-center space-x-0.5 text-[0.6875rem] text-orange-400 bg-orange-950/90 px-1 rounded font-mono font-bold">
                               <Flame className="w-2.5 h-2.5" />
                               <span>TTL: {msg.ephemeralDuration}s</span>
                             </span>
                           ) : null}
                           {msg.isViewOnce && (
-                            <span className="text-[9px] text-amber-400 bg-amber-950/90 px-1.5 py-0.2 rounded font-mono font-bold border border-amber-700/60">
+                            <span className="text-[0.6875rem] text-amber-400 bg-amber-950/90 px-1.5 py-0.2 rounded font-mono font-bold border border-amber-700/60">
                               View-Once Media
                             </span>
                           )}
@@ -1064,7 +1043,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
 
                       {/* Deleted / WAL Header Banner */}
                       {isDel && (
-                        <div className="mb-2 bg-red-950/90 border border-red-700/80 rounded px-2 py-1 text-[10px] text-red-200 font-mono flex items-center space-x-1.5 font-bold">
+                        <div className="mb-2 bg-red-950/90 border border-red-700/80 rounded px-2 py-1 text-[0.6875rem] text-red-200 font-mono flex items-center space-x-1.5 font-bold">
                           <Trash2 className="w-3 h-3 text-red-400 shrink-0" />
                           <span>[RECOVERED FROM WAL / FREELIST]</span>
                         </div>
@@ -1073,8 +1052,8 @@ export const ChatsMasterWorkspace: React.FC = () => {
                       {/* Quoted Message Card */}
                       {msg.quotedMessageText && (
                         <div className="mb-2 p-2 rounded bg-black/40 border-l-2 border-cyan-400 text-xs font-sans text-slate-300">
-                          <div className="text-[10px] text-cyan-400 font-bold mb-0.5">Quoted Message:</div>
-                          <div className="italic text-[11px] text-slate-300">{msg.quotedMessageText}</div>
+                          <div className="text-[0.6875rem] text-cyan-400 font-bold mb-0.5">Quoted Message:</div>
+                          <div className="italic text-[0.6875rem] text-slate-300">{msg.quotedMessageText}</div>
                         </div>
                       )}
 
@@ -1086,27 +1065,27 @@ export const ChatsMasterWorkspace: React.FC = () => {
                       {/* INLINE UPI PAYMENT EVIDENCE CARD */}
                       {paymentEv && (
                         <div className="mt-2.5 p-2.5 rounded-lg bg-emerald-950/90 border border-emerald-600/80 shadow-lg font-sans">
-                          <div className="flex items-center justify-between text-[10.5px] pb-1.5 border-b border-emerald-700/60 mb-2">
+                          <div className="flex items-center justify-between text-[0.6875rem] pb-1.5 border-b border-emerald-700/60 mb-2">
                             <div className="flex items-center space-x-1.5 text-emerald-300 font-bold tracking-wide">
                               <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
                               <span>UPI PAYMENT EVIDENCE</span>
                             </div>
-                            <span className="font-mono text-[9px] bg-emerald-900/80 text-emerald-200 px-1.5 py-0.2 rounded border border-emerald-600/50">
+                            <span className="font-mono text-[0.6875rem] bg-emerald-900/80 text-emerald-200 px-1.5 py-0.2 rounded border border-emerald-600/50">
                               CORROBORATED
                             </span>
                           </div>
-                          <div className="grid grid-cols-2 gap-2 text-[11px]">
+                          <div className="grid grid-cols-2 gap-2 text-[0.6875rem]">
                             {paymentEv.amount && (
                               <div>
-                                <span className="text-emerald-400/80 text-[10px] block font-sans">Amount:</span>
-                                <span className="text-white font-bold font-mono text-xs">
+                                <span className="text-emerald-400/80 text-[0.6875rem] block font-sans">Amount:</span>
+                                <span className="text-slate-50 font-bold font-mono text-xs">
                                   ₹{paymentEv.amount.toLocaleString('en-IN')}
                                 </span>
                               </div>
                             )}
                             {paymentEv.utr && (
                               <div>
-                                <span className="text-emerald-400/80 text-[10px] block font-sans">NPCI UTR:</span>
+                                <span className="text-emerald-400/80 text-[0.6875rem] block font-sans">NPCI UTR:</span>
                                 <span className="text-cyan-300 font-bold font-mono text-xs select-all">
                                   {paymentEv.utr}
                                 </span>
@@ -1114,8 +1093,8 @@ export const ChatsMasterWorkspace: React.FC = () => {
                             )}
                             {paymentEv.vpa && (
                               <div className="col-span-2">
-                                <span className="text-emerald-400/80 text-[10px] block font-sans">Counterparty VPA:</span>
-                                <span className="text-white font-mono text-[11px] select-all">
+                                <span className="text-emerald-400/80 text-[0.6875rem] block font-sans">Counterparty VPA:</span>
+                                <span className="text-slate-50 font-mono text-[0.6875rem] select-all">
                                   {paymentEv.vpa}
                                 </span>
                               </div>
@@ -1127,7 +1106,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
                                 e.stopPropagation();
                                 setActiveTab('UPI_LEDGER');
                               }}
-                              className="text-[10px] text-cyan-300 hover:text-cyan-200 font-mono font-semibold flex items-center gap-1 cursor-pointer"
+                              className="text-[0.6875rem] text-cyan-300 hover:text-cyan-200 font-mono font-semibold flex items-center gap-1 cursor-pointer"
                             >
                               <span>View in UPI Ledger</span>
                               <ExternalLink className="w-2.5 h-2.5" />
@@ -1139,12 +1118,12 @@ export const ChatsMasterWorkspace: React.FC = () => {
                       {/* Voice Note / .opus Audio Player Component */}
                       {msg.mediaType === 'VOICE_NOTE' && (
                         <div className="mt-2 bg-slate-950/90 border border-slate-700/80 rounded-lg p-2.5 text-xs font-mono">
-                          <div className="flex items-center justify-between text-[10.5px] text-cyan-300 mb-1.5">
+                          <div className="flex items-center justify-between text-[0.6875rem] text-cyan-300 mb-1.5">
                             <span className="flex items-center space-x-1 font-bold">
                               <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
                               <span>VOICE NOTE (.OPUS CODEC)</span>
                             </span>
-                            <span className="text-[9.5px] text-slate-400">0:14 / 0:45</span>
+                            <span className="text-[0.6875rem] text-slate-400">0:14 / 0:45</span>
                           </div>
 
                           <div className="flex items-center space-x-3">
@@ -1169,9 +1148,8 @@ export const ChatsMasterWorkspace: React.FC = () => {
                                   style={{ width: `${audioState.progress}%` }}
                                 />
                               </div>
-                              <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono">
+                              <div className="flex items-center justify-between text-[0.6875rem] text-slate-500 font-mono">
                                 <span>Voice Note Payload</span>
-                                <span>SHA-256 Verified</span>
                               </div>
                             </div>
                           </div>
@@ -1181,7 +1159,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
                       {/* Image / Media Preview with On-Demand VFS Extraction */}
                       {msg.mediaPath && msg.mediaType !== 'VOICE_NOTE' && (
                         <div className="mt-2 p-2 bg-slate-950/80 rounded border border-slate-800 space-y-1">
-                          <div className="flex items-center justify-between text-[10.5px]">
+                          <div className="flex items-center justify-between text-[0.6875rem]">
                             <span className="flex items-center space-x-1 text-teal-300 font-mono">
                               <ImageIcon className="w-3 h-3 text-teal-400" />
                               <span>{msg.mediaPath.split('/').pop()}</span>
@@ -1191,12 +1169,12 @@ export const ChatsMasterWorkspace: React.FC = () => {
                                 e.stopPropagation();
                                 setActiveImageModal(msg.mediaPath || 'preview.jpg');
                               }}
-                              className="text-[9.5px] bg-cyan-950 text-cyan-300 border border-cyan-800/80 px-2 py-0.5 rounded font-mono font-semibold hover:bg-cyan-900"
+                              className="text-[0.6875rem] bg-cyan-950 text-cyan-300 border border-cyan-800/80 px-2 py-0.5 rounded font-mono font-semibold hover:bg-cyan-900"
                             >
                               [Extract & Preview Media from VFS]
                             </button>
                           </div>
-                          <div className="text-[9.5px] text-slate-500 font-mono truncate">
+                          <div className="text-[0.6875rem] text-slate-500 font-mono truncate">
                             MIME: {msg.mediaMimeType || 'image/jpeg'} | Physical: {hexOffset}
                           </div>
                         </div>
@@ -1209,14 +1187,14 @@ export const ChatsMasterWorkspace: React.FC = () => {
                             <MapPin className="w-3.5 h-3.5 text-teal-400 shrink-0" />
                             <span>Location: {msg.locationName}</span>
                           </div>
-                          <div className="text-[10px] text-slate-400 font-mono">
+                          <div className="text-[0.6875rem] text-slate-400 font-mono">
                             Coordinates: {msg.latitude?.toFixed(5)}, {msg.longitude?.toFixed(5)}
                           </div>
                         </div>
                       )}
 
                       {/* Footer: Multi-Format Timestamps & Provenance Offset */}
-                      <div className="flex items-center justify-between space-x-4 mt-2 pt-1 border-t border-white/10 text-[9.5px] font-mono text-slate-400">
+                      <div className="flex items-center justify-between space-x-4 mt-2 pt-1 border-t border-white/10 text-[0.6875rem] font-mono text-slate-400">
                         <div className="flex items-center space-x-1">
                           <Clock className="w-2.5 h-2.5 text-slate-400" />
                           <span className="text-slate-200 font-semibold">{msg.timestamp.istFormatted}</span>
@@ -1263,7 +1241,7 @@ export const ChatsMasterWorkspace: React.FC = () => {
                     <h2 className="text-base font-bold text-slate-100">
                       {activeThread?.threadTitle || 'Primary Cybercrime & Romance Lead Dossier'}
                     </h2>
-                    <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 text-[10px] font-mono font-bold border border-rose-800/80">
+                    <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 text-[0.6875rem] font-mono font-bold border border-rose-800/80">
                       HIGH RISK SYNDICATE
                     </span>
                   </div>
@@ -1276,21 +1254,21 @@ export const ChatsMasterWorkspace: React.FC = () => {
               {/* Dossier Grid Details */}
               <div className="grid grid-cols-3 gap-3 pt-3 text-xs font-mono">
                 <div className="bg-slate-950 p-2.5 rounded border border-slate-800">
-                  <div className="text-[10px] text-slate-500 uppercase font-sans">Identified Phone / JID</div>
+                  <div className="text-[0.6875rem] text-slate-500 uppercase font-sans">Identified Phone / JID</div>
                   <div className="text-cyan-300 font-bold mt-0.5">
                     {activeThread?.lastMessage?.senderJid || '+919876543210'}
                   </div>
                 </div>
 
                 <div className="bg-slate-950 p-2.5 rounded border border-slate-800">
-                  <div className="text-[10px] text-slate-500 uppercase font-sans">UPI VPA Off-Ramp</div>
+                  <div className="text-[0.6875rem] text-slate-500 uppercase font-sans">UPI VPA Off-Ramp</div>
                   <div className="text-emerald-400 font-bold mt-0.5">
                     victim@okhdfcbank / mule@paytm
                   </div>
                 </div>
 
                 <div className="bg-slate-950 p-2.5 rounded border border-slate-800">
-                  <div className="text-[10px] text-slate-500 uppercase font-sans">Cryptocurrency Bridge</div>
+                  <div className="text-[0.6875rem] text-slate-500 uppercase font-sans">Cryptocurrency Bridge</div>
                   <div className="text-amber-400 font-bold mt-0.5">
                     TRC-20 USDT (Binance Escrow)
                   </div>
@@ -1299,11 +1277,11 @@ export const ChatsMasterWorkspace: React.FC = () => {
 
               {/* Crime Vector Summary */}
               <div className="mt-3 p-3 bg-slate-950 rounded border border-slate-800 space-y-1.5 text-xs">
-                <div className="font-bold text-slate-200 uppercase tracking-wide text-[11px] flex items-center space-x-1.5">
+                <div className="font-bold text-slate-200 uppercase tracking-wide text-[0.6875rem] flex items-center space-x-1.5">
                   <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
                   <span>Modus Operandi & Forensic Corroboration</span>
                 </div>
-                <p className="text-slate-300 leading-relaxed text-[11.5px] font-sans">
+                <p className="text-slate-300 leading-relaxed text-[0.75rem] font-sans">
                   The subject established initial contact on <strong>Tinder</strong> utilizing pig-butchering romance grooming tactics, before steering communications onto <strong>Telegram Secret Chats</strong> and <strong>Zangi Private Messenger</strong>. Recovered SQLite write-ahead log frames reveal automated forwarding to AnyDesk remote-access controllers and instant ₹12,500 UPI off-ramps corroborating Section 63 BSA audit standards.
                 </p>
               </div>
@@ -1324,14 +1302,14 @@ export const ChatsMasterWorkspace: React.FC = () => {
           >
             <div className="flex items-center justify-between text-xs font-mono text-slate-300 pb-2 border-b border-slate-800">
               <span className="font-bold text-teal-400">Extracted VFS Media Attachment Preview</span>
-              <button onClick={() => setActiveImageModal(null)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setActiveImageModal(null)} className="text-slate-400 hover:text-slate-50">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="bg-slate-950 rounded p-8 text-center text-slate-400 border border-slate-800 space-y-2">
-              <ImageIcon className="w-16 h-16 mx-auto text-teal-400 animate-pulse" />
+              <ImageIcon className="w-16 h-16 mx-auto text-teal-400" />
               <div className="text-xs font-mono font-semibold text-slate-200">{activeImageModal}</div>
-              <div className="text-[11px] text-slate-500 font-mono">
+              <div className="text-[0.6875rem] text-slate-500 font-mono">
                 Decrypted & verified from VFS physical stream. SHA-256 match validated.
               </div>
             </div>

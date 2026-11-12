@@ -129,9 +129,9 @@ export const Sec63BsaModal: React.FC<Sec63BsaModalProps> = ({ isOpen, onClose })
         aria-modal="true"
         aria-labelledby="sec63-title"
         tabIndex={-1}
-        className="bg-[#0b1320] border border-slate-700 rounded-xl w-full max-w-6xl h-[90vh] flex flex-col shadow-2xl overflow-hidden text-slate-100 font-sans outline-none"
+        className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-6xl h-[90vh] flex flex-col shadow-2xl overflow-hidden text-slate-100 font-sans outline-none"
       >
-        <div className="h-12 bg-[#090f1d] px-4 border-b border-[#1e293b] flex items-center justify-between shrink-0">
+        <div className="h-12 bg-slate-950 px-4 border-b border-slate-800 flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2 min-w-0">
             <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" aria-hidden="true" />
             <h2 id="sec63-title" className="font-bold text-slate-100 text-sm truncate">
@@ -141,26 +141,26 @@ export const Sec63BsaModal: React.FC<Sec63BsaModalProps> = ({ isOpen, onClose })
           <button
             onClick={onClose}
             aria-label="Close dialog"
-            className="text-slate-400 hover:text-white p-1.5 rounded hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+            className="text-slate-400 hover:text-slate-50 p-1.5 rounded hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
-          <div className="md:w-80 bg-[#080d19] md:border-r border-b md:border-b-0 border-[#1e293b] p-4 overflow-y-auto space-y-3 text-xs shrink-0 max-h-[40vh] md:max-h-none">
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
+          <div className="md:w-80 bg-slate-950 md:border-r border-b md:border-b-0 border-slate-800 p-4 overflow-y-auto space-y-3 text-xs shrink-0 max-h-[40vh] md:max-h-none">
+            <div className="text-[0.6875rem] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
               <UserCheck className="w-3.5 h-3.5 text-cyan-400" aria-hidden="true" />
               <span>Examiner &amp; case particulars</span>
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
+            <p className="text-[0.6875rem] text-slate-400 leading-relaxed">
               Hashes, device details and counts come from the processed case. Fields left empty are printed as
               “Not provided”.
             </p>
 
             {FIELDS.map((f) => (
               <div key={f.key}>
-                <label htmlFor={`s63-${f.key}`} className="text-[11px] text-slate-300 font-semibold">
+                <label htmlFor={`s63-${f.key}`} className="text-[0.6875rem] text-slate-300 font-semibold">
                   {f.label}
                 </label>
                 <input
@@ -204,7 +204,7 @@ export const Sec63BsaModal: React.FC<Sec63BsaModalProps> = ({ isOpen, onClose })
                 <div className="flex items-center gap-2 text-rose-700 font-semibold">
                   <AlertTriangle className="w-4 h-4" aria-hidden="true" /> {error}
                 </div>
-                <button onClick={() => void build()} className="px-3 py-1.5 bg-slate-800 text-white rounded text-xs flex items-center gap-1.5">
+                <button onClick={() => void build()} className="px-3 py-1.5 bg-slate-800 text-slate-50 rounded text-xs flex items-center gap-1.5">
                   <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" /> Retry
                 </button>
               </div>

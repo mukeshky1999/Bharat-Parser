@@ -153,16 +153,16 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4 select-none">
-      <div className="bg-[#1b2533] border border-[#2d4057] rounded-lg shadow-2xl w-full max-w-lg overflow-hidden text-white text-xs">
+      <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-2xl w-full max-w-lg overflow-hidden text-slate-50 text-xs">
         {/* Modal Header */}
-        <div className="h-10 px-4 bg-[#111c2d] border-b border-[#2d4057] flex items-center justify-between">
+        <div className="h-10 px-4 bg-slate-900 border-b border-slate-700 flex items-center justify-between">
           <div className="flex items-center space-x-2 font-semibold">
-            <FileArchive className="w-4 h-4 text-[#0078d4]" />
+            <FileArchive className="w-4 h-4 text-cyan-600" />
             <span>+ Add Extraction — Ingest Evidence Container</span>
           </div>
           <button
             onClick={handleClose}
-            className="text-gray-400 hover:text-white p-1 rounded transition-colors cursor-pointer"
+            className="text-slate-400 hover:text-slate-50 p-1 rounded transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -172,7 +172,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
         <div className="p-4 space-y-4">
           {/* Format Radio Selection */}
           <div>
-            <label className="block text-[11px] font-semibold text-gray-300 mb-1.5 uppercase tracking-wide">
+            <label className="block text-[0.6875rem] font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
               Extraction Container Format
             </label>
             <div className="grid grid-cols-5 gap-1.5">
@@ -187,10 +187,10 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
                   key={fmt.id}
                   type="button"
                   onClick={() => setExtractionFormat(fmt.id as 'UFDR' | 'TAR' | 'ZIP' | 'FOLDER' | 'SQLITE')}
-                  className={`p-2 rounded text-center border transition-colors cursor-pointer text-[10.5px] ${
+                  className={`p-2 rounded text-center border transition-colors cursor-pointer text-[0.6875rem] ${
                     extractionFormat === fmt.id
-                      ? 'bg-[#0078d4] border-[#0078d4] text-white font-semibold'
-                      : 'bg-[#162232] border-[#2b3c52] text-gray-300 hover:border-gray-500'
+                      ? 'bg-cyan-600 border-cyan-600 text-slate-50 font-semibold'
+                      : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-500'
                   }`}
                 >
                   {fmt.label}
@@ -201,7 +201,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
 
           {/* Path Input with Native File and Folder Dialog Buttons */}
           <div>
-            <label className="block text-[11px] font-semibold text-gray-300 mb-1.5 uppercase tracking-wide">
+            <label className="block text-[0.6875rem] font-semibold text-slate-300 mb-1.5 uppercase tracking-wide">
               Evidence Container / Workspace File Path
             </label>
             <div className="flex items-center space-x-2">
@@ -210,12 +210,12 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
                 value={containerPath}
                 onChange={(e) => setContainerPath(e.target.value)}
                 placeholder="C:/Evidence/dump.ufdr or /evidence/physical.tar"
-                className="flex-1 h-8 bg-[#0f1722] border border-[#2b3c52] rounded px-3 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#0078d4] font-mono"
+                className="flex-1 h-8 bg-slate-900 border border-slate-700 rounded px-3 text-xs text-slate-50 placeholder-slate-500 focus:outline-none focus:border-cyan-600 font-mono"
               />
               <button
                 type="button"
                 onClick={handlePickFile}
-                className="px-2.5 h-8 bg-[#223145] hover:bg-[#2c3e57] border border-[#3b4f6b] rounded flex items-center space-x-1 transition-colors cursor-pointer shrink-0"
+                className="px-2.5 h-8 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded flex items-center space-x-1 transition-colors cursor-pointer shrink-0"
                 title="Open native Windows File Explorer to select archive or database"
               >
                 <FolderOpen className="w-3.5 h-3.5 text-sky-400" />
@@ -224,7 +224,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
               <button
                 type="button"
                 onClick={handlePickFolder}
-                className="px-2.5 h-8 bg-[#223145] hover:bg-[#2c3e57] border border-[#3b4f6b] rounded flex items-center space-x-1 transition-colors cursor-pointer shrink-0"
+                className="px-2.5 h-8 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded flex items-center space-x-1 transition-colors cursor-pointer shrink-0"
                 title="Open native Windows Directory Explorer to select folder"
               >
                 <Folder className="w-3.5 h-3.5 text-amber-400" />
@@ -235,7 +235,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
 
           {/* Optional Case ID Input */}
           <div>
-            <label className="block text-[11px] font-semibold text-gray-300 mb-1 uppercase tracking-wide">
+            <label className="block text-[0.6875rem] font-semibold text-slate-300 mb-1 uppercase tracking-wide">
               Case Reference ID (Optional)
             </label>
             <input
@@ -243,15 +243,15 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
               value={caseId}
               onChange={(e) => setCaseId(e.target.value)}
               placeholder="e.g. 2026-CYB-09 (Auto-generated if left blank)"
-              className="w-full h-8 bg-[#0f1722] border border-[#2b3c52] rounded px-3 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#0078d4] font-mono"
+              className="w-full h-8 bg-slate-900 border border-slate-700 rounded px-3 text-xs text-slate-50 placeholder-slate-500 focus:outline-none focus:border-cyan-600 font-mono"
             />
           </div>
 
           {/* Forensic Ingestion Info Banner */}
-          <div className="bg-[#141e2b] border border-[#26374d] rounded p-2.5 space-y-1 text-[11px] text-gray-300">
-            <span className="text-gray-400 font-semibold block">Supported Forensic Images:</span>
-            <p className="text-[10.5px] leading-relaxed text-gray-400">
-              Universal Forensic Data Report UFDR (<span className="text-gray-300">.ufdr, .ufd</span>), Physical TAR images (<span className="text-gray-300">.tar, .tar.gz</span>), ZIP containers (<span className="text-gray-300">.zip</span>), XRY (<span className="text-gray-300">.xry</span>), Oxygen (<span className="text-gray-300">.ofb</span>), and extracted SQLite databases (<span className="text-gray-300">.db, .sqlite, -wal</span>).
+          <div className="bg-slate-900 border border-slate-700 rounded p-2.5 space-y-1 text-[0.6875rem] text-slate-300">
+            <span className="text-slate-400 font-semibold block">Supported Forensic Images:</span>
+            <p className="text-[0.6875rem] leading-relaxed text-slate-400">
+              Universal Forensic Data Report UFDR (<span className="text-slate-300">.ufdr, .ufd</span>), Physical TAR images (<span className="text-slate-300">.tar, .tar.gz</span>), ZIP containers (<span className="text-slate-300">.zip</span>), XRY (<span className="text-slate-300">.xry</span>), Oxygen (<span className="text-slate-300">.ofb</span>), and extracted SQLite databases (<span className="text-slate-300">.db, .sqlite, -wal</span>).
             </p>
           </div>
 
@@ -277,8 +277,8 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
         </div>
 
         {/* Modal Footer */}
-        <div className="h-12 px-4 bg-[#141e2b] border-t border-[#2d4057] flex items-center justify-between">
-          <div className="flex items-center space-x-1.5 text-emerald-400 font-mono text-[10.5px]">
+        <div className="h-12 px-4 bg-slate-900 border-t border-slate-700 flex items-center justify-between">
+          <div className="flex items-center space-x-1.5 text-emerald-400 font-mono text-[0.6875rem]">
             <ShieldCheck className="w-4 h-4" />
             <span>Original evidence is never modified; hashed before and after</span>
           </div>
@@ -288,7 +288,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
               type="button"
               onClick={handleClose}
               disabled={isProcessing}
-              className="px-3 py-1.5 bg-[#223145] hover:bg-[#2c3e57] text-gray-300 rounded text-xs transition-colors cursor-pointer"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -296,7 +296,7 @@ export const AddExtractionModal: React.FC<AddExtractionModalProps> = ({ isOpen, 
               type="button"
               onClick={handleIngestEvidence}
               disabled={isProcessing}
-              className="px-4 py-1.5 bg-[#0078d4] hover:bg-[#106ebe] text-white font-semibold rounded text-xs shadow transition-colors flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+              className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-600 text-slate-50 font-semibold rounded text-xs shadow transition-colors flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               <span>{isProcessing ? 'Ingesting Pipeline...' : 'Ingest & Open Extraction'}</span>

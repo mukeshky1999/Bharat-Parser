@@ -602,16 +602,15 @@ E:\v8\combined\
     │   │   ├── state/
     │   │   │   └── workbenchStore.ts               # Zustand global case/tab/inspector/toast state (1,193L)
     │   │   ├── inspectors/
-    │   │   │   ├── PAFieldInspector.tsx            # Contextual parsed field + provenance card inspector
-    │   │   │   ├── ProvenanceSidebar.tsx
-    │   │   │   └── SyncedHexViewer.tsx             # Synchronized mmap hex/ASCII byte viewer
+    │   │   │   ├── EvidenceCard.tsx                # Details / source bytes / links / pin for the selected record
+    │   │   │   └── SyncedHexViewer.tsx             # Synchronized mmap hex/ASCII byte viewer (embedded in the card)
     │   │   ├── workspace/
-    │   │   │   ├── CenterTabCanvas.tsx             # Multi-tab document strip + 13 view router
-    │   │   │   ├── LeftVerticalRail.tsx            # High-density navigation rail
-    │   │   │   ├── PATableWorkspace.tsx            # Generic virtualized PA table grid
-    │   │   │   ├── PAWorkbench.tsx                 # Main 4-quadrant workstation container
-    │   │   │   ├── ProjectTreeDock.tsx             # Live (Active / WAL+Carved) dual-badge PA project tree
-    │   │   │   └── TopRibbonBar.tsx                # Top ribbon (Ingest, Bank/CDR Fusion, Sec 63/230, 1930 NCRP)
+    │   │   │   ├── AppShell.tsx                    # Layout, resizable panes, global keys (Ctrl+K, Ctrl+B, Alt+1..8, F6)
+    │   │   │   ├── CaseBar.tsx  integrity.ts       # Case line + integrity line from recorded hashes
+    │   │   │   ├── StageNavigator.tsx  stages.ts   # The eight stages and their views
+    │   │   │   ├── Workspace.tsx                   # Breadcrumb + view router
+    │   │   │   ├── RecordTable.tsx                 # Contacts and Calls table
+    │   │   │   ├── CommandPalette.tsx  SettingsDialog.tsx  StatusLine.tsx  Toasts.tsx
     │   │   └── views/                              # 19 Specialized Forensic Investigation Views & Modals
     │   │       ├── AddExtractionModal.tsx
     │   │       ├── BankCdrFusionView.tsx           # Bank CSV + Telecom CDR (+-15 min) correlation UI

@@ -23,27 +23,27 @@ export const CallLogsView: React.FC = () => {
     switch (dir) {
       case 'INCOMING':
         return (
-          <span className="flex items-center space-x-1 text-sky-400 font-bold text-[10px]">
+          <span className="flex items-center space-x-1 text-sky-400 font-bold text-[0.6875rem]">
             <PhoneIncoming className="w-3 h-3" />
             <span>INCOMING</span>
           </span>
         );
       case 'OUTGOING':
         return (
-          <span className="flex items-center space-x-1 text-emerald-400 font-bold text-[10px]">
+          <span className="flex items-center space-x-1 text-emerald-400 font-bold text-[0.6875rem]">
             <PhoneOutgoing className="w-3 h-3" />
             <span>OUTGOING</span>
           </span>
         );
       case 'MISSED':
         return (
-          <span className="flex items-center space-x-1 text-rose-400 font-bold text-[10px]">
+          <span className="flex items-center space-x-1 text-rose-400 font-bold text-[0.6875rem]">
             <PhoneMissed className="w-3 h-3" />
             <span>MISSED</span>
           </span>
         );
       default:
-        return <span className="text-slate-400 text-[10px]">{dir}</span>;
+        return <span className="text-slate-400 text-[0.6875rem]">{dir}</span>;
     }
   };
 
@@ -54,17 +54,17 @@ export const CallLogsView: React.FC = () => {
         <div className="flex items-center space-x-2">
           <Phone className="w-4 h-4 text-blue-400" />
           <span className="font-bold text-slate-100">Call Detail Records (CDR) & VoIP Calls</span>
-          <span className="text-[11px] text-slate-400 font-mono">({filteredLogs.length} Records)</span>
+          <span className="text-[0.6875rem] text-slate-400 font-mono">({filteredLogs.length} Records)</span>
         </div>
-        <div className="text-[10px] text-slate-400 font-mono">
+        <div className="text-[0.6875rem] text-slate-400 font-mono">
           Strict Forensic Timestamp Normalization (IST +05:30)
         </div>
       </div>
 
       {/* Grid */}
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-left text-[11px] font-mono border-collapse">
-          <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 uppercase text-[9.5px] sticky top-0 z-10">
+        <table className="w-full text-left text-[0.6875rem] font-mono border-collapse">
+          <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 uppercase text-[0.6875rem] sticky top-0 z-10">
             <tr>
               <th className="p-2 w-10">#</th>
               <th className="p-2 w-28">Channel / App</th>
@@ -104,11 +104,11 @@ export const CallLogsView: React.FC = () => {
                 >
                   <td className="p-2 text-slate-500">{idx + 1}</td>
                   <td className="p-2 font-semibold">
-                    <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px]">
+                    <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[0.6875rem]">
                       {call.sourceApp}
                     </span>
                   </td>
-                  <td className="p-2 text-slate-300 text-[10px]">
+                  <td className="p-2 text-slate-300 text-[0.6875rem]">
                     {call.callType}
                   </td>
                   <td className="p-2">
@@ -116,26 +116,26 @@ export const CallLogsView: React.FC = () => {
                   </td>
                   <td className="p-2 font-sans">
                     <div className="font-semibold text-slate-200">{call.callerName || 'Unknown'}</div>
-                    <div className="text-[9.5px] font-mono text-slate-500">{call.callerNumberOrId}</div>
+                    <div className="text-[0.6875rem] font-mono text-slate-500">{call.callerNumberOrId}</div>
                   </td>
                   <td className="p-2 font-sans">
                     <div className="font-semibold text-slate-300">{call.calleeName || 'Target'}</div>
-                    <div className="text-[9.5px] font-mono text-slate-500">{call.calleeNumberOrId}</div>
+                    <div className="text-[0.6875rem] font-mono text-slate-500">{call.calleeNumberOrId}</div>
                   </td>
                   <td className="p-2 text-amber-300 font-bold">
                     {formatDuration(call.durationSeconds)}
                   </td>
-                  <td className="p-2 text-slate-300 text-[10px] whitespace-nowrap">
+                  <td className="p-2 text-slate-300 text-[0.6875rem] whitespace-nowrap">
                     {call.timestamp.istFormatted.substring(0, 19)}
                   </td>
-                  <td className="p-2 text-slate-400 truncate text-[10px]">
+                  <td className="p-2 text-slate-400 truncate text-[0.6875rem]">
                     {call.provenance.tableName || 'N/A'}
                   </td>
-                  <td className="p-2 text-amber-400 font-bold text-[10.5px]">
+                  <td className="p-2 text-amber-400 font-bold text-[0.6875rem]">
                     {hexOffset}
                   </td>
                   <td className="p-2">
-                    <span className="text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-1.5 py-0.2 rounded font-mono">
+                    <span className="text-[0.6875rem] bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-1.5 py-0.2 rounded font-mono">
                       [ACTIVE]
                     </span>
                   </td>

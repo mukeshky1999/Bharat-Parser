@@ -204,25 +204,25 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
     switch (state) {
       case 'ACTIVE':
         return (
-          <span className="text-[10px] bg-emerald-950/80 text-emerald-300 border border-emerald-600/60 px-1.5 py-0.5 rounded font-mono font-bold">
+          <span className="text-[0.6875rem] bg-emerald-950/80 text-emerald-300 border border-emerald-600/60 px-1.5 py-0.5 rounded font-mono font-bold">
             ACTIVE
           </span>
         );
       case 'WAL_RECOVERED':
         return (
-          <span className="text-[10px] bg-blue-950/80 text-blue-300 border border-blue-600/60 px-1.5 py-0.5 rounded font-mono font-bold">
+          <span className="text-[0.6875rem] bg-blue-950/80 text-blue-300 border border-blue-600/60 px-1.5 py-0.5 rounded font-mono font-bold">
             WAL
           </span>
         );
       case 'CARVED_UNALLOCATED':
         return (
-          <span className="text-[10px] bg-amber-950/80 text-amber-300 border border-amber-600/60 px-1.5 py-0.5 rounded font-mono font-bold">
+          <span className="text-[0.6875rem] bg-amber-950/80 text-amber-300 border border-amber-600/60 px-1.5 py-0.5 rounded font-mono font-bold">
             CARVED
           </span>
         );
       default:
         return (
-          <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono">
+          <span className="text-[0.6875rem] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono">
             {state || 'ACTIVE'}
           </span>
         );
@@ -230,11 +230,11 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0b1320] text-slate-100 overflow-hidden select-text font-sans">
+    <div className="flex-1 flex flex-col bg-slate-900 text-slate-100 overflow-hidden select-text font-sans">
       {/* 1. Dynamic App Filter Ribbon */}
-      <div className="h-10 bg-[#090f1d] border-b border-[#1e293b] px-3 flex items-center justify-between shrink-0 select-none overflow-x-auto text-xs">
+      <div className="h-10 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between shrink-0 select-none overflow-x-auto text-xs">
         <div className="flex items-center space-x-1.5 shrink-0">
-          <span className="text-slate-400 font-semibold text-[11px] mr-1 flex items-center gap-1">
+          <span className="text-slate-400 font-semibold text-[0.6875rem] mr-1 flex items-center gap-1">
             <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
             Apps:
           </span>
@@ -243,12 +243,12 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
             onClick={() => setSelectedApp('ALL')}
             className={`px-2.5 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer ${
               selectedApp === 'ALL'
-                ? 'bg-cyan-600 text-white font-bold shadow-sm'
+                ? 'bg-cyan-600 text-slate-50 font-bold shadow-sm'
                 : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-700/60'
             }`}
           >
             <span>All Apps</span>
-            <span className="text-[10px] opacity-80 px-1 bg-black/30 rounded-full font-mono">
+            <span className="text-[0.6875rem] opacity-80 px-1 bg-black/30 rounded-full font-mono">
               {rawTransactions.length}
             </span>
           </button>
@@ -259,12 +259,12 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
               onClick={() => setSelectedApp(app)}
               className={`px-2.5 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer ${
                 selectedApp === app
-                  ? 'bg-cyan-600 text-white font-bold shadow-sm'
+                  ? 'bg-cyan-600 text-slate-50 font-bold shadow-sm'
                   : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-700/60'
               }`}
             >
               <span>{app}</span>
-              <span className="text-[10px] opacity-80 px-1 bg-black/30 rounded-full font-mono">
+              <span className="text-[0.6875rem] opacity-80 px-1 bg-black/30 rounded-full font-mono">
                 {appCounts[app]}
               </span>
             </button>
@@ -272,16 +272,16 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
         </div>
 
         {/* Global Record Counter */}
-        <div className="text-[11px] text-slate-400 font-mono shrink-0 pl-3 hidden md:block">
+        <div className="text-[0.6875rem] text-slate-400 font-mono shrink-0 pl-3 hidden md:block">
           Showing <strong className="text-slate-200">{filtered.length}</strong> of {rawTransactions.length} records
         </div>
       </div>
 
       {/* 2. Secondary Filter & Action Toolbar */}
-      <div className="h-11 bg-[#0d1627] border-b border-[#1e293b] px-3 flex items-center justify-between shrink-0 select-none text-xs">
+      <div className="h-11 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between shrink-0 select-none text-xs">
         {/* Filter Toggle Buttons */}
         <div className="flex items-center space-x-1.5">
-          <span className="text-slate-400 font-semibold text-[11px] mr-1 flex items-center gap-1">
+          <span className="text-slate-400 font-semibold text-[0.6875rem] mr-1 flex items-center gap-1">
             <Filter className="w-3.5 h-3.5 text-slate-400" />
             Filter:
           </span>
@@ -290,7 +290,7 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
             onClick={() => setFilterType('ALL')}
             className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
               filterType === 'ALL'
-                ? 'bg-slate-700 text-white font-bold'
+                ? 'bg-slate-700 text-slate-50 font-bold'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
@@ -364,7 +364,7 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
           <button
             onClick={handleExportCsv}
             className="px-2.5 py-1 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/80 rounded font-medium text-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
-            title="Download filtered transactions table as court-admissible CSV"
+            title="Download the filtered transactions as CSV"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
             <span className="hidden sm:inline">Export CSV</span>
@@ -376,7 +376,7 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
       <div
         ref={tableContainerRef}
         onScroll={handleTableScroll}
-        className="flex-1 overflow-auto bg-[#080d1a] font-mono text-xs"
+        className="flex-1 overflow-auto bg-slate-950 font-mono text-xs"
       >
         {filtered.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-2 p-8">
@@ -390,7 +390,7 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
           </div>
         ) : (
           <table className="w-full text-left border-collapse">
-            <thead className="bg-[#0b1322] text-slate-400 text-[10.5px] uppercase tracking-wider sticky top-0 border-b border-[#1e293b] z-10 select-none shadow-sm">
+            <thead className="bg-slate-900 text-slate-400 text-[0.6875rem] uppercase tracking-wider sticky top-0 border-b border-slate-800 z-10 select-none shadow-sm">
               <tr>
                 <th className="py-2.5 px-3 w-10 text-slate-500">#</th>
                 <th className="py-2.5 px-3 w-24">State</th>
@@ -405,7 +405,7 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
                 <th className="py-2.5 px-3 w-28">Byte Offset</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#162238]">
+            <tbody className="divide-y divide-slate-800">
               {startIndex > 0 && (
                 <tr style={{ height: `${startIndex * ROW_HEIGHT}px` }}>
                   <td colSpan={11} className="p-0 border-none" />
@@ -435,12 +435,12 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
                     className={`cursor-pointer transition-colors ${
                       isSelected
                         ? 'bg-cyan-950/60 text-slate-100 font-semibold border-l-4 border-cyan-400'
-                        : 'hover:bg-[#0f1b2d] text-slate-300'
+                        : 'hover:bg-slate-900 text-slate-300'
                     }`}
                   >
                     <td className="py-2 px-3 text-slate-500">{actualIndex + 1}</td>
                     <td className="py-2 px-3">{renderStateBadge(tx.provenance?.recoveryState)}</td>
-                    <td className="py-2 px-3 text-[11px] text-slate-300">
+                    <td className="py-2 px-3 text-[0.6875rem] text-slate-300">
                       <div className="flex items-center space-x-1.5">
                         <span>{tx.timestamp?.istFormatted ? tx.timestamp.istFormatted.substring(0, 19) : '-'}</span>
                         {tx.clockTamperDetected && (
@@ -452,7 +452,7 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
                     </td>
                     <td className="py-2 px-3 text-amber-300 font-semibold">{tx.utrNumber || 'N/A'}</td>
                     <td className="py-2 px-3 text-slate-200">
-                      <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10.5px]">
+                      <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[0.6875rem]">
                         {tx.sourceApp || 'UPI'}
                       </span>
                     </td>
@@ -465,7 +465,7 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
                     </td>
                     <td className="py-2 px-3 text-center">
                       <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-bold font-mono ${
+                        className={`text-[0.6875rem] px-1.5 py-0.5 rounded font-bold font-mono ${
                           !dirKnown
                             ? 'bg-slate-900 text-slate-400 border border-slate-700'
                             : isDebit
@@ -488,14 +488,14 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
                         {(tx.corroboratedSources || ['APP_DB']).map((src) => (
                           <span
                             key={src}
-                            className="text-[9px] bg-slate-900 text-slate-400 border border-slate-800 px-1 py-0.2 rounded font-mono"
+                            className="text-[0.6875rem] bg-slate-900 text-slate-400 border border-slate-800 px-1 py-0.2 rounded font-mono"
                           >
                             {src}
                           </span>
                         ))}
                       </div>
                     </td>
-                    <td className="py-2 px-3 text-amber-400 text-[11px] font-mono hover:underline">
+                    <td className="py-2 px-3 text-amber-400 text-[0.6875rem] font-mono hover:underline">
                       {hexOffset}
                     </td>
                   </tr>

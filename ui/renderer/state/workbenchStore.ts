@@ -30,8 +30,9 @@ export type ActiveTabType =
   | 'OS_SPILLOVER'
   | 'LOCATIONS_MEDIA'
   | 'MULE_GRAPH'
-  | 'MALICIOUS_APKS'
-  | 'REMOTE_ACCESS'
+  | 'CALLS'
+  | 'FINDINGS'
+  | 'COURT_OUTPUT'
   | 'CRYPTO'
   | 'SQLITE_WIZARD'
   | 'FILE_SYSTEM'
@@ -79,6 +80,8 @@ export interface WorkbenchStoreState {
   // Case & Forensic Evidence
   caseManifest: CaseManifest | null;
   dualHashes: DualHashResult | null;
+  /** What the backend recorded about the source file's integrity. null = nothing recorded. */
+  integrity: { preSha256: string; postSha256: string; match: boolean | null } | null;
   vfsTree: VfsNode[];
   totalFilesIndexed: number;
 
@@ -214,6 +217,7 @@ function parseProvenance(prov: unknown, summary: any, fallbackTable: string, vfs
 export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
   caseManifest: null,
   dualHashes: null,
+  integrity: null,
   vfsTree: [],
   totalFilesIndexed: 0,
 
@@ -281,10 +285,9 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
   setIsBsaModalOpen: (open) => set({ isBsaModalOpen: open }),
 
   setSelectedArtifact: async (artifact) => {
-    set({ selectedArtifact: artifact });
-    if (artifact && artifact.provenance) {
-      await get().fetchHexWindowForOffset(artifact.provenance);
-    }
+    // The raw bytes are fetched when the examiner opens the "Source bytes" tab, not on every selection:
+    // reading a file window for each row clicked is slow on a large image and shows an error for rows whose file is not available.
+    set({ selectedArtifact: artifact, hexWindow: null, hexError: null });
   },
 
   fetchHexWindowForOffset: async (provenance: ForensicProvenance) => {
@@ -408,6 +411,12 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
       const summary = await forensicClient.getCaseSummary();
       if (summary && summary.loaded) {
         set({
+          integrity: summary.hashes && summary.hashes.sha256 ? {
+            preSha256: String(summary.hashes.sha256),
+            postSha256: String(summary.hashes.postIngestionSha256 || ''),
+            // the backend only sets integrityMatch after it re-hashed the source: absent = not re-checked
+            match: typeof summary.hashes.integrityMatch === 'boolean' ? summary.hashes.integrityMatch : null
+          } : null,
           dualHashes: summary.hashes ? {
             md5: summary.hashes.md5 || '',
             sha256: summary.hashes.sha256 || '',
@@ -534,6 +543,7 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
         // Reset to clean empty state when no dump is loaded
         set({
           dualHashes: null,
+          integrity: null,
           caseManifest: null,
           upiTransactions: [],
           chats: [],

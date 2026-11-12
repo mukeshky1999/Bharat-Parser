@@ -95,15 +95,15 @@ export const FileSystemExplorerTab: React.FC<FileSystemExplorerTabProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0b1320] text-slate-100 overflow-hidden select-text font-mono text-xs">
+    <div className="flex-1 flex flex-col bg-slate-900 text-slate-100 overflow-hidden select-text font-mono text-xs">
       {/* 1. Header Toolbar */}
-      <div className="h-11 bg-[#090f1d] border-b border-[#1e293b] px-3 flex items-center justify-between shrink-0 select-none text-xs">
+      <div className="h-11 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between shrink-0 select-none text-xs">
         <div className="flex items-center space-x-2">
           <HardDrive className="w-4 h-4 text-sky-400" />
           <span className="font-bold text-slate-200">
             Zero-Copy Virtual File System (VFS) Explorer
           </span>
-          <span className="text-[11px] text-slate-400 font-mono">
+          <span className="text-[0.6875rem] text-slate-400 font-mono">
             ({filteredFiles.length} Indexed Nodes)
           </span>
         </div>
@@ -116,7 +116,7 @@ export const FileSystemExplorerTab: React.FC<FileSystemExplorerTabProps> = ({
                 key={ext}
                 onClick={() => setFilterExt(ext)}
                 className={`px-2 py-0.5 rounded transition-colors ${
-                  filterExt === ext ? 'bg-cyan-600 text-white font-bold' : 'text-slate-400 hover:text-white'
+                  filterExt === ext ? 'bg-cyan-600 text-slate-50 font-bold' : 'text-slate-400 hover:text-slate-50'
                 }`}
               >
                 {ext}
@@ -137,7 +137,7 @@ export const FileSystemExplorerTab: React.FC<FileSystemExplorerTabProps> = ({
 
           <button
             onClick={fetchVfsFiles}
-            className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800"
+            className="p-1 text-slate-400 hover:text-slate-50 rounded hover:bg-slate-800"
             title="Refresh VFS Index"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
@@ -146,7 +146,7 @@ export const FileSystemExplorerTab: React.FC<FileSystemExplorerTabProps> = ({
       </div>
 
       {/* 2. Main VFS File Grid */}
-      <div className="flex-1 overflow-auto bg-[#080d1a]">
+      <div className="flex-1 overflow-auto bg-slate-950">
         {loading ? (
           <div className="h-full flex items-center justify-center text-slate-400 space-x-2">
             <span className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
@@ -164,7 +164,7 @@ export const FileSystemExplorerTab: React.FC<FileSystemExplorerTabProps> = ({
           </div>
         ) : (
           <table className="w-full text-left border-collapse">
-            <thead className="bg-[#0b1322] text-slate-400 text-[10.5px] uppercase tracking-wider sticky top-0 border-b border-[#1e293b] z-10 select-none">
+            <thead className="bg-slate-900 text-slate-400 text-[0.6875rem] uppercase tracking-wider sticky top-0 border-b border-slate-800 z-10 select-none">
               <tr>
                 <th className="py-2.5 px-3 w-10 text-slate-500">#</th>
                 <th className="py-2.5 px-3">VFS File Path</th>
@@ -174,7 +174,7 @@ export const FileSystemExplorerTab: React.FC<FileSystemExplorerTabProps> = ({
                 <th className="py-2.5 px-3 w-24 text-center">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#162238]">
+            <tbody className="divide-y divide-slate-800">
               {filteredFiles.map((f, idx) => {
                 const filePath = f.file_path || f.path || f.name || '';
                 const isSelected = selectedPath === filePath;
@@ -189,7 +189,7 @@ export const FileSystemExplorerTab: React.FC<FileSystemExplorerTabProps> = ({
                     className={`cursor-pointer transition-colors ${
                       isSelected
                         ? 'bg-sky-950/60 text-slate-100 font-semibold border-l-4 border-sky-400'
-                        : 'hover:bg-[#0f1b2d] text-slate-300'
+                        : 'hover:bg-slate-900 text-slate-300'
                     }`}
                   >
                     <td className="py-2 px-3 text-slate-500">{idx + 1}</td>
@@ -223,7 +223,7 @@ export const FileSystemExplorerTab: React.FC<FileSystemExplorerTabProps> = ({
                               onOpenInSqliteWizard(filePath);
                             }
                           }}
-                          className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-700 hover:bg-indigo-900 transition-colors"
+                          className="px-2 py-0.5 rounded text-[0.6875rem] font-bold bg-indigo-950 text-indigo-300 border border-indigo-700 hover:bg-indigo-900 transition-colors"
                           title="Open in deep SQLite B-Tree Explorer"
                         >
                           Inspect DB

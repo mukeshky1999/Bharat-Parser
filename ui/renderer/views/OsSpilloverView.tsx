@@ -30,17 +30,17 @@ export const OsSpilloverView: React.FC = () => {
         <div className="flex items-center space-x-2">
           <ShieldAlert className="w-4 h-4 text-cyan-400" />
           <span className="font-bold text-slate-100">OS-Level Privacy Spillover & Ephemeral Recovery</span>
-          <span className="text-[11px] text-slate-400 font-mono">({osSpillovers.length} Artifacts)</span>
+          <span className="text-[0.6875rem] text-slate-400 font-mono">({osSpillovers.length} Artifacts)</span>
         </div>
-        <div className="text-[10px] text-slate-400 font-mono">
+        <div className="text-[0.6875rem] text-slate-400 font-mono">
           Notification Logs • Gboard Dictionaries • App Switcher CE Snapshots • UsageStats
         </div>
       </div>
 
       {/* Grid */}
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-left text-[11px] font-mono border-collapse">
-          <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 uppercase text-[9.5px] sticky top-0 z-10">
+        <table className="w-full text-left text-[0.6875rem] font-mono border-collapse">
+          <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 uppercase text-[0.6875rem] sticky top-0 z-10">
             <tr>
               <th className="p-2 w-10">#</th>
               <th className="p-2 w-48">Spillover Vector</th>
@@ -79,31 +79,31 @@ export const OsSpilloverView: React.FC = () => {
                   <td className="p-2">
                     <div className="flex items-center space-x-1.5 font-bold text-slate-200">
                       {getCategoryIcon(spill.category)}
-                      <span className="text-[10.5px]">{spill.category}</span>
+                      <span className="text-[0.6875rem]">{spill.category}</span>
                     </div>
                   </td>
-                  <td className="p-2 font-mono text-[10px] text-slate-400 truncate max-w-[180px]" title={spill.sourceApp}>
+                  <td className="p-2 font-mono text-[0.6875rem] text-slate-400 truncate max-w-[180px]" title={spill.sourceApp}>
                     {spill.sourceApp || 'System'}
                   </td>
                   <td className="p-2 font-sans text-xs text-slate-200 leading-snug">
                     <div className="font-semibold text-slate-100">{spill.title}</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">{spill.snippet}</div>
+                    <div className="text-[0.6875rem] text-slate-400 mt-0.5">{spill.snippet}</div>
                   </td>
                   <td className="p-2">
                     {spill.targetData && (
-                      <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60 font-mono text-[10px] font-bold inline-block">
+                      <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60 font-mono text-[0.6875rem] font-bold inline-block">
                         {spill.targetData}
                       </span>
                     )}
                   </td>
-                  <td className="p-2 text-slate-300 text-[10px] whitespace-nowrap">
+                  <td className="p-2 text-slate-300 text-[0.6875rem] whitespace-nowrap">
                     {spill.timestamp.istFormatted.substring(0, 19)}
                   </td>
-                  <td className="p-2 text-amber-400 font-bold text-[10.5px]">
+                  <td className="p-2 text-amber-400 font-bold text-[0.6875rem]">
                     {hexOffset}
                   </td>
                   <td className="p-2">
-                    <span className="text-[9px] bg-purple-950 text-purple-300 border border-purple-800/60 px-1.5 py-0.2 rounded font-mono font-bold">
+                    <span className="text-[0.6875rem] bg-purple-950 text-purple-300 border border-purple-800/60 px-1.5 py-0.2 rounded font-mono font-bold">
                       [OS SPILLOVER]
                     </span>
                   </td>

@@ -123,16 +123,16 @@ export const SQLiteWizardTab: React.FC<SQLiteWizardTabProps> = ({
   const activeColumns = tables.find((t) => t.table_name === selectedTable)?.columns || (rows.length > 0 ? Object.keys(rows[0]) : []);
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0b1320] text-slate-100 overflow-hidden select-text font-sans text-xs">
+    <div className="flex-1 flex flex-col bg-slate-900 text-slate-100 overflow-hidden select-text font-sans text-xs">
       {/* 1. Header Toolbar */}
-      <div className="h-11 bg-[#090f1d] border-b border-[#1e293b] px-3 flex items-center justify-between shrink-0 select-none">
+      <div className="h-11 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between shrink-0 select-none">
         <div className="flex items-center space-x-2">
           <Database className="w-4 h-4 text-indigo-400" />
           <span className="font-bold text-slate-200">
             Raw SQLite B-Tree & Table Inspector
           </span>
           {selectedDb && (
-            <span className="text-[11px] text-slate-400 font-mono truncate max-w-xs" title={selectedDb}>
+            <span className="text-[0.6875rem] text-slate-400 font-mono truncate max-w-xs" title={selectedDb}>
               ({selectedDb})
             </span>
           )}
@@ -141,7 +141,7 @@ export const SQLiteWizardTab: React.FC<SQLiteWizardTabProps> = ({
         {/* Database Selector & Refresh */}
         <div className="flex items-center space-x-2">
           <div className="flex items-center space-x-1">
-            <span className="text-slate-400 text-[11px]">Database:</span>
+            <span className="text-slate-400 text-[0.6875rem]">Database:</span>
             <select
               value={selectedDb}
               onChange={(e) => setSelectedDb(e.target.value)}
@@ -161,7 +161,7 @@ export const SQLiteWizardTab: React.FC<SQLiteWizardTabProps> = ({
 
           <button
             onClick={() => inspectCurrentDb(selectedDb, selectedTable)}
-            className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800"
+            className="p-1 text-slate-400 hover:text-slate-50 rounded hover:bg-slate-800"
             title="Refresh Table Inspection"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-indigo-400' : ''}`} />
@@ -172,8 +172,8 @@ export const SQLiteWizardTab: React.FC<SQLiteWizardTabProps> = ({
       {/* 2. Main Two-Column View: Table Navigator (Left) + Table Grid (Right) */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Table Navigator Sidebar */}
-        <div className="w-72 bg-[#080d19] border-r border-[#1e293b] flex flex-col shrink-0 select-none">
-          <div className="p-2 border-b border-[#1e293b]">
+        <div className="w-72 bg-slate-950 border-r border-slate-800 flex flex-col shrink-0 select-none">
+          <div className="p-2 border-b border-slate-800">
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2 top-2 pointer-events-none" />
               <input
@@ -208,7 +208,7 @@ export const SQLiteWizardTab: React.FC<SQLiteWizardTabProps> = ({
                       <TableIcon className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                       <span className="truncate">{t.table_name}</span>
                     </div>
-                    <span className="text-[10px] text-slate-500 ml-2 shrink-0">
+                    <span className="text-[0.6875rem] text-slate-500 ml-2 shrink-0">
                       {t.row_count} rows
                     </span>
                   </div>
@@ -219,15 +219,15 @@ export const SQLiteWizardTab: React.FC<SQLiteWizardTabProps> = ({
         </div>
 
         {/* Right: Data View Area */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#070b14]">
+        <div className="flex-1 flex flex-col overflow-hidden bg-slate-950">
           {/* Sub-Tab Header Bar: Table Grid vs Key-Value Pairs */}
-          <div className="h-9 bg-[#0a101f] border-b border-[#1e293b] px-3 flex items-center justify-between shrink-0 select-none text-xs">
+          <div className="h-9 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between shrink-0 select-none text-xs">
             <div className="flex items-center space-x-1">
               <button
                 onClick={() => setActiveSubTab('TABLE')}
                 className={`px-3 py-1 rounded text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer ${
                   activeSubTab === 'TABLE'
-                    ? 'bg-indigo-600 text-white shadow-sm'
+                    ? 'bg-indigo-600 text-slate-50 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -239,7 +239,7 @@ export const SQLiteWizardTab: React.FC<SQLiteWizardTabProps> = ({
                 onClick={() => setActiveSubTab('KV')}
                 className={`px-3 py-1 rounded text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer ${
                   activeSubTab === 'KV'
-                    ? 'bg-indigo-600 text-white shadow-sm'
+                    ? 'bg-indigo-600 text-slate-50 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -248,7 +248,7 @@ export const SQLiteWizardTab: React.FC<SQLiteWizardTabProps> = ({
               </button>
             </div>
 
-            <div className="text-[11px] text-slate-500 font-mono">
+            <div className="text-[0.6875rem] text-slate-500 font-mono">
               Table: <strong className="text-slate-300">{selectedTable || 'None'}</strong>
             </div>
           </div>
@@ -269,7 +269,7 @@ export const SQLiteWizardTab: React.FC<SQLiteWizardTabProps> = ({
                 </div>
               ) : (
                 <table className="w-full text-left border-collapse">
-                  <thead className="bg-[#0b1322] text-slate-400 text-[10.5px] uppercase tracking-wider sticky top-0 border-b border-[#1e293b] z-10 select-none">
+                  <thead className="bg-slate-900 text-slate-400 text-[0.6875rem] uppercase tracking-wider sticky top-0 border-b border-slate-800 z-10 select-none">
                     <tr>
                       <th className="py-2 px-2.5 w-10 text-slate-500">#</th>
                       {activeColumns.map((col) => (
@@ -279,12 +279,12 @@ export const SQLiteWizardTab: React.FC<SQLiteWizardTabProps> = ({
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#162238]">
+                  <tbody className="divide-y divide-slate-800">
                     {rows.map((row, idx) => (
                       <tr
                         key={idx}
                         onClick={() => handleRowClick(row, idx)}
-                        className="cursor-pointer hover:bg-[#0f1b2d] text-slate-300 transition-colors"
+                        className="cursor-pointer hover:bg-slate-900 text-slate-300 transition-colors"
                       >
                         <td className="py-1.5 px-2.5 text-slate-500">{idx + 1}</td>
                         {activeColumns.map((col) => {
@@ -311,18 +311,18 @@ export const SQLiteWizardTab: React.FC<SQLiteWizardTabProps> = ({
                 </div>
               ) : (
                 <table className="w-full text-left border-collapse">
-                  <thead className="bg-[#0b1322] text-slate-400 text-[10.5px] uppercase tracking-wider sticky top-0 border-b border-[#1e293b] z-10 select-none">
+                  <thead className="bg-slate-900 text-slate-400 text-[0.6875rem] uppercase tracking-wider sticky top-0 border-b border-slate-800 z-10 select-none">
                     <tr>
                       <th className="py-2 px-2.5 w-10 text-slate-500">#</th>
                       <th className="py-2 px-2.5 w-64">Key</th>
                       <th className="py-2 px-2.5">Value (Decoded String / JSON)</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#162238]">
+                  <tbody className="divide-y divide-slate-800">
                     {kvPairs.map((kv, idx) => (
                       <tr
                         key={idx}
-                        className="hover:bg-[#0f1b2d] text-slate-300 transition-colors font-mono"
+                        className="hover:bg-slate-900 text-slate-300 transition-colors font-mono"
                       >
                         <td className="py-1.5 px-2.5 text-slate-500">{idx + 1}</td>
                         <td className="py-1.5 px-2.5 text-amber-300 font-bold break-all">{kv.key || kv.name || '-'}</td>

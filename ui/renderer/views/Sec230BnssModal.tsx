@@ -143,18 +143,18 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
         aria-modal="true"
         aria-labelledby="s230-title"
         tabIndex={-1}
-        className="bg-[#0b1320] border border-cyan-800/60 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh] overflow-hidden text-slate-100 font-sans outline-none"
+        className="bg-slate-900 border border-cyan-800/60 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh] overflow-hidden text-slate-100 font-sans outline-none"
       >
-        <div className="px-5 py-4 bg-[#090f1d] border-b border-slate-800 flex items-center justify-between">
+        <div className="px-5 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
             <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
               <ShieldAlert className="w-4 h-4" aria-hidden="true" />
             </div>
             <div>
-              <h2 id="s230-title" className="text-sm font-bold tracking-wide uppercase text-white">
+              <h2 id="s230-title" className="text-sm font-bold tracking-wide uppercase text-slate-50">
                 Section 230 BNSS (2023) — Defence disclosure copy
               </h2>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[0.6875rem] text-slate-400">
                 Statutory redaction gate • P. Gopalkrishnan v. State of Kerala (2019) • Sec 72 BNS 2023
               </p>
             </div>
@@ -162,7 +162,7 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
           <button
             onClick={onClose}
             aria-label="Close dialog"
-            className="text-slate-400 hover:text-white p-1.5 rounded hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+            className="text-slate-400 hover:text-slate-50 p-1.5 rounded hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
           >
             <X className="w-4 h-4" />
           </button>
@@ -174,7 +174,7 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
               <Lock className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
               <span>Examiner classifies each file</span>
             </div>
-            <p className="text-[11px] leading-relaxed text-amber-200/80">
+            <p className="text-[0.6875rem] leading-relaxed text-amber-200/80">
               The software cannot recognise sensitive imagery. Mark every file that must be withheld; those are never
               copied into the bundle and are replaced by a notice card. Hashes are computed from the actual file bytes.
             </p>
@@ -190,7 +190,7 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
                 type="text"
                 value={caseId}
                 onChange={(e) => setCaseId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white font-mono text-xs focus:border-cyan-500 focus:outline-none"
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-50 font-mono text-xs focus:border-cyan-500 focus:outline-none"
               />
             </div>
             <div>
@@ -202,7 +202,7 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
                 type="text"
                 value={victimName}
                 onChange={(e) => setVictimName(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-xs focus:border-cyan-500 focus:outline-none"
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-50 text-xs focus:border-cyan-500 focus:outline-none"
               />
             </div>
           </div>
@@ -212,7 +212,7 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
               <EyeOff className="w-4 h-4 text-cyan-400 shrink-0" aria-hidden="true" />
               <span>
                 <span className="font-bold text-slate-200 block">Section 72 BNS 2023 victim anonymisation</span>
-                <span className="text-[11px] text-slate-400">Replace the victim’s name with [VICTIM_PROTECTED_ID_01] throughout.</span>
+                <span className="text-[0.6875rem] text-slate-400">Replace the victim’s name with [VICTIM_PROTECTED_ID_01] throughout.</span>
               </span>
             </span>
             <input
@@ -225,8 +225,8 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-slate-300 font-bold uppercase tracking-wider text-[11px]">Case media</span>
-              <span className="text-[10px] text-slate-400 font-mono" aria-live="polite">
+              <span className="text-slate-300 font-bold uppercase tracking-wider text-[0.6875rem]">Case media</span>
+              <span className="text-[0.6875rem] text-slate-400 font-mono" aria-live="polite">
                 {loadingMedia ? 'Loading…' : `${media.length} found · ${chosen.length} selected · ${withheldCount} withheld`}
               </span>
             </div>
@@ -240,7 +240,7 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
               ) : media.length === 0 ? (
                 <div className="p-6 text-center text-slate-400">
                   <p className="font-semibold text-slate-300">No media files available</p>
-                  <p className="mt-1 text-[11px]">
+                  <p className="mt-1 text-[0.6875rem]">
                     Only files present on disk can be packaged. For container evidence (ZIP/TAR/UFDR) media is not
                     extracted during ingestion; extract the needed files into the case workspace first.
                   </p>
@@ -258,14 +258,14 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
                       />
                       <div className="flex-1 min-w-0">
                         <div className="text-slate-200 truncate" title={m.vfs_path}>{m.file_name}</div>
-                        <div className="text-[10px] text-slate-500 truncate font-mono">{m.vfs_path}</div>
+                        <div className="text-[0.6875rem] text-slate-500 truncate font-mono">{m.vfs_path}</div>
                       </div>
                       <select
                         aria-label={`Classification for ${m.file_name}`}
                         value={tags[m.path] ?? ''}
                         disabled={!included[m.path]}
                         onChange={(e) => setTags((s) => ({ ...s, [m.path]: e.target.value }))}
-                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] disabled:opacity-40"
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[0.6875rem] disabled:opacity-40"
                       >
                         {TAGS.map((t) => (
                           <option key={t.value} value={t.value}>{t.label}</option>
@@ -288,7 +288,7 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
                 type="text"
                 value={outputDir}
                 onChange={(e) => setOutputDir(e.target.value)}
-                className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white font-mono text-xs focus:border-cyan-500 focus:outline-none"
+                className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-50 font-mono text-xs focus:border-cyan-500 focus:outline-none"
               />
               <button
                 type="button"
@@ -307,18 +307,18 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
               className={`p-4 rounded-lg border space-y-2 ${result.success ? 'bg-emerald-950/30 border-emerald-600/50' : 'bg-rose-950/30 border-rose-600/50'}`}
             >
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <span className="font-bold text-white flex items-center gap-1.5">
+                <span className="font-bold text-slate-50 flex items-center gap-1.5">
                   {result.success ? <CheckCircle2 className="w-4 h-4 text-emerald-400" aria-hidden="true" /> : <AlertTriangle className="w-4 h-4 text-rose-400" aria-hidden="true" />}
                   {result.success ? 'Bundle generated' : 'Generation failed'}
                 </span>
                 {result.success && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  <span className="px-2 py-0.5 rounded text-[0.6875rem] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                     {result.pocso_withheld_count} withheld
                   </span>
                 )}
               </div>
               {result.success ? (
-                <div className="space-y-1 font-mono text-[11px] text-slate-300">
+                <div className="space-y-1 font-mono text-[0.6875rem] text-slate-300">
                   <div><strong>Bundle:</strong> <span className="text-slate-400 break-all">{result.bundle_path}</span></div>
                   <div><strong>Dossier:</strong> <span className="text-slate-400 break-all">{result.html_viewer_path}</span></div>
                 </div>
@@ -339,8 +339,8 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
           )}
         </div>
 
-        <div className="px-5 py-3 bg-[#090f1d] border-t border-slate-800 flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-[11px] text-slate-500" aria-live="polite">
+        <div className="px-5 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between gap-3 flex-wrap">
+          <span className="text-[0.6875rem] text-slate-500" aria-live="polite">
             {missing.length > 0 ? `Needs: ${missing.join(', ')}` : 'Ready to generate'}
           </span>
           <div className="flex space-x-2">
@@ -350,7 +350,7 @@ export const Sec230BnssModal: React.FC<Sec230BnssModalProps> = ({ isOpen, onClos
             <button
               onClick={handleGenerate}
               disabled={!canGenerate}
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded shadow-lg shadow-amber-900/30 flex items-center space-x-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-slate-50 font-bold rounded shadow-lg shadow-amber-900/30 flex items-center space-x-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <FileText className="w-3.5 h-3.5" aria-hidden="true" />}
               <span>{generating ? 'Compiling…' : 'Generate Section 230 package'}</span>

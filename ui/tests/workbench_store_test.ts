@@ -93,8 +93,11 @@ async function runWorkbenchStoreTest() {
   });
   const s = useWorkbenchStore.getState();
   assert(s.selectedArtifact?.id === chat.id, 'Artifact selected in state');
-  assert(s.hexWindow === null, 'Hex window is empty when real bytes cannot be read (never fabricated)');
-  assert(typeof s.hexError === 'string' && s.hexError.length > 0, 'Hex viewer reports why bytes are unavailable');
+  assert(s.hexWindow === null && s.hexError === null, 'Selecting a record does not read the file; bytes load when the Source bytes tab is opened');
+  await useWorkbenchStore.getState().fetchHexWindowForOffset(chat.provenance);
+  const s2 = useWorkbenchStore.getState();
+  assert(s2.hexWindow === null, 'Hex window is empty when real bytes cannot be read (never fabricated)');
+  assert(typeof s2.hexError === 'string' && s2.hexError.length > 0, 'Hex viewer reports why bytes are unavailable');
 
   console.log('\n=== ALL WORKBENCH STORE TESTS PASSED ===\n');
 }

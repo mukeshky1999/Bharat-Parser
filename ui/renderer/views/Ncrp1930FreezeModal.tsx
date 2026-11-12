@@ -167,18 +167,18 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
         aria-modal="true"
         aria-labelledby="ncrp-title"
         tabIndex={-1}
-        className="bg-[#0b1320] border border-cyan-800/60 rounded-xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden text-slate-100 font-sans outline-none"
+        className="bg-slate-900 border border-cyan-800/60 rounded-xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden text-slate-100 font-sans outline-none"
       >
-        <div className="px-5 py-4 bg-[#090f1d] border-b border-slate-800 flex items-center justify-between">
+        <div className="px-5 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
             <div className="w-8 h-8 rounded-lg bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
               <ShieldAlert className="w-4 h-4" aria-hidden="true" />
             </div>
             <div>
-              <h2 id="ncrp-title" className="text-sm font-bold tracking-wide uppercase text-white">
+              <h2 id="ncrp-title" className="text-sm font-bold tracking-wide uppercase text-slate-50">
                 1930 NCRP / I4C CFCFRMS — Bank Lien Sheet
               </h2>
-              <p className="text-[11px] text-slate-400 font-mono">
+              <p className="text-[0.6875rem] text-slate-400 font-mono">
                 14-column freeze packet • Candidates are derived from this case’s transactions
               </p>
             </div>
@@ -186,7 +186,7 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
           <button
             onClick={onClose}
             aria-label="Close dialog"
-            className="text-slate-400 hover:text-white p-1.5 rounded hover:bg-slate-800 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+            className="text-slate-400 hover:text-slate-50 p-1.5 rounded hover:bg-slate-800 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
           >
             <X className="w-4 h-4" />
           </button>
@@ -195,7 +195,7 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
         <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
           <div className="p-3 bg-emerald-950/30 border border-emerald-600/40 rounded-lg text-emerald-200/90 flex items-start space-x-2.5">
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />
-            <p className="text-[11px] leading-relaxed text-emerald-200/80">
+            <p className="text-[0.6875rem] leading-relaxed text-emerald-200/80">
               <span className="font-bold text-emerald-300">Complainant safeguard.</span> The complainant’s own account is locked
               and can never appear in the freeze list. Utility and biller accounts are unchecked by default.
               Candidates are leads from the phone data — verify each against the bank record before submitting.
@@ -213,7 +213,7 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
                 value={acknowledgementNo}
                 onChange={(e) => setAcknowledgementNo(e.target.value)}
                 placeholder="As issued by the NCRP portal"
-                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white font-mono text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500"
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-50 font-mono text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500"
               />
             </div>
             <div>
@@ -226,7 +226,7 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
                 value={complainantAccount}
                 onChange={(e) => setComplainantAccount(e.target.value)}
                 placeholder="Account number or VPA the victim paid from"
-                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white font-mono text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500"
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-50 font-mono text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500"
               />
             </div>
           </div>
@@ -235,29 +235,29 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
             <div>
               <label htmlFor="ncrp-state" className="block text-slate-300 font-semibold mb-1">State / UT</label>
               <input id="ncrp-state" type="text" value={stateUt} onChange={(e) => setStateUt(e.target.value)} placeholder="Left as NOT_PROVIDED if blank"
-                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500" />
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-50 text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500" />
             </div>
             <div>
               <label htmlFor="ncrp-ps" className="block text-slate-300 font-semibold mb-1">Police station</label>
               <input id="ncrp-ps" type="text" value={policeStation} onChange={(e) => setPoliceStation(e.target.value)} placeholder="Left as NOT_PROVIDED if blank"
-                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500" />
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-50 text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500" />
             </div>
             <div>
               <label htmlFor="ncrp-io" className="block text-slate-300 font-semibold mb-1">Investigating officer</label>
               <input id="ncrp-io" type="text" value={officer} onChange={(e) => setOfficer(e.target.value)} placeholder="Left as NOT_PROVIDED if blank"
-                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500" />
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-50 text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500" />
             </div>
             <div>
               <label htmlFor="ncrp-cat" className="block text-slate-300 font-semibold mb-1">Crime category</label>
               <input id="ncrp-cat" type="text" value={crimeCategory} onChange={(e) => setCrimeCategory(e.target.value)} placeholder="Left as NOT_PROVIDED if blank"
-                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500" />
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-50 text-xs focus:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500" />
             </div>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-slate-300 font-bold uppercase tracking-wider text-[11px]">Candidate accounts</span>
-              <span className="text-[10px] text-slate-400 font-mono" aria-live="polite">
+              <span className="text-slate-300 font-bold uppercase tracking-wider text-[0.6875rem]">Candidate accounts</span>
+              <span className="text-[0.6875rem] text-slate-400 font-mono" aria-live="polite">
                 {loading ? 'Loading…' : `${candidates.length} found · ${chosen.length} selected`}
               </span>
             </div>
@@ -274,7 +274,7 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
               ) : candidates.length === 0 ? (
                 <div className="p-8 text-center text-slate-400">
                   <p className="font-semibold text-slate-300">No candidate accounts</p>
-                  <p className="mt-1 text-[11px]">
+                  <p className="mt-1 text-[0.6875rem]">
                     This case has no successful outgoing transactions. Load a case with transaction data first;
                     nothing is generated from sample accounts.
                   </p>
@@ -291,7 +291,7 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
                       <th scope="col" className="py-2 px-3 font-semibold">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
+                  <tbody className="divide-y divide-slate-800/60 font-mono text-[0.6875rem]">
                     {candidates.map((c) => {
                       const victim = c.is_complainant_victim || c.account_no === complainantAccount.trim();
                       const util = isUtility(c);
@@ -314,8 +314,8 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
                           </td>
                           <td className="py-2 px-3 text-slate-200">
                             <div className="break-all">{c.account_no}</div>
-                            {c.vpa && c.vpa !== c.account_no && <div className="text-[10px] text-slate-400">{c.vpa}</div>}
-                            {c.counterparty_name && <div className="text-[10px] text-slate-500">{c.counterparty_name}</div>}
+                            {c.vpa && c.vpa !== c.account_no && <div className="text-[0.6875rem] text-slate-400">{c.vpa}</div>}
+                            {c.counterparty_name && <div className="text-[0.6875rem] text-slate-500">{c.counterparty_name}</div>}
                           </td>
                           <td className="py-2 px-3 text-slate-400">{c.ifsc || 'not recorded'}</td>
                           <td className="py-2 px-3 text-amber-300 font-semibold text-right">
@@ -323,15 +323,15 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
                           </td>
                           <td className="py-2 px-3">
                             {victim ? (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                              <span className="px-2 py-0.5 rounded text-[0.6875rem] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                                 COMPLAINANT — DO NOT FREEZE
                               </span>
                             ) : util ? (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                              <span className="px-2 py-0.5 rounded text-[0.6875rem] font-bold bg-slate-800 text-slate-400 border border-slate-700">
                                 UTILITY / BILLER
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/40">
+                              <span className="px-2 py-0.5 rounded text-[0.6875rem] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/40">
                                 CANDIDATE
                               </span>
                             )}
@@ -355,7 +355,7 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
                 type="text"
                 value={outputDir}
                 onChange={(e) => setOutputDir(e.target.value)}
-                className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white font-mono text-xs focus:border-cyan-500 focus:outline-none"
+                className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-50 font-mono text-xs focus:border-cyan-500 focus:outline-none"
               />
               <button
                 type="button"
@@ -378,21 +378,21 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
           {result?.success && (
             <div className="p-4 bg-emerald-950/20 border border-emerald-600/50 rounded-lg space-y-2" role="status">
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <span className="font-bold text-white flex items-center gap-1.5">
+                <span className="font-bold text-slate-50 flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" aria-hidden="true" />
                   Freeze packet exported
                 </span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                <span className="px-2 py-0.5 rounded text-[0.6875rem] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                   {result.total_freeze_targets} account(s) targeted
                 </span>
               </div>
-              <div className="space-y-1 font-mono text-[11px] text-slate-300">
+              <div className="space-y-1 font-mono text-[0.6875rem] text-slate-300">
                 <div><strong>Lien sum:</strong> <span className="text-amber-400 font-bold">₹{result.total_lien_amount_inr?.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>
                 <div><strong>CSV path:</strong> <span className="text-slate-400 break-all">{result.csv_path}</span></div>
                 <div><strong>SHA-256:</strong> <span className="text-cyan-400 break-all">{result.sha256}</span></div>
               </div>
               <div className="pt-2 flex flex-wrap gap-2">
-                <button type="button" onClick={handleDownloadCsv} className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded text-xs flex items-center space-x-1 font-bold">
+                <button type="button" onClick={handleDownloadCsv} className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-slate-50 rounded text-xs flex items-center space-x-1 font-bold">
                   <Download className="w-3.5 h-3.5" aria-hidden="true" /><span>Download CSV</span>
                 </button>
                 {result.csv_path && (
@@ -405,8 +405,8 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
           )}
         </div>
 
-        <div className="px-5 py-3 bg-[#090f1d] border-t border-slate-800 flex items-center justify-between gap-3 flex-wrap">
-          <span className="text-[11px] text-slate-500" aria-live="polite">
+        <div className="px-5 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between gap-3 flex-wrap">
+          <span className="text-[0.6875rem] text-slate-500" aria-live="polite">
             {missing.length > 0 ? `Needs: ${missing.join(', ')}` : `Lien total ₹${lienTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
           </span>
           <div className="flex space-x-2">
@@ -416,7 +416,7 @@ export const Ncrp1930FreezeModal: React.FC<Ncrp1930FreezeModalProps> = ({ isOpen
             <button
               onClick={handleExport}
               disabled={!canExport}
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded shadow-lg shadow-rose-900/30 flex items-center space-x-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-slate-50 font-bold rounded shadow-lg shadow-rose-900/30 flex items-center space-x-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <FileSpreadsheet className="w-3.5 h-3.5" aria-hidden="true" />}
               <span>{exporting ? 'Exporting…' : 'Export 1930 NCRP sheet'}</span>

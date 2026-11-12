@@ -320,3 +320,17 @@ All nine modules listed as "not read" in section 6 were then read line by line.
 | R-20f | `src/seedhunter/hd_derivator.py`, `vault_unwrapper.py` | BIP-39 input was not NFKD-normalised (wrong seed for non-ASCII passphrases); one missing RIPEMD-160 aborted every network; scrypt with real parameters (n=262144) raised on the default memory limit; the keystore set its own unbounded work factor | FIXED. Only index 0 of each account is derived, so no match does not mean no activity (documented) |
 
 Coverage: every file under `src/` that the plan listed as unread has now been read. The layout code of the React views is replaced by the redesign, not reviewed separately.
+
+## 8. Found while building and running the new interface (2026-11-12)
+
+| ID | Where | Finding | Status |
+|---|---|---|---|
+| U-01..U-06 | `ExtractionSummaryTab`, `ChatsMasterWorkspace`, `BankCdrFusionView`, old shell | Static "BIT-FOR-BIT SEAL PASS", "Air-Gapped PASS", "SHA-256 Verified" (any hash), "Verified Both", "Verified Ingest", a screenshot alert claiming a Section 63 timestamp, ingest phases advanced by `setTimeout`, two views with no data source | FIXED (see `UI_DESIGN.md` section 6) |
+| U-09 | old `PATableWorkspace` | The "Timeline Activity" chart was a hard-coded array of bar heights | FIXED (rewritten as `RecordTable`; chart is computed from records with a recorded time) |
+| U-10 | `ExtractionSummaryTab` | Crashed the whole screen (`Account_Holder_Names.join is not a function`) as soon as a real case was loaded: the backend sends a string such as "Not Found" where the view expected a list | FIXED (`dossierText`) |
+| X-15 | `/api/case/ingest` | Opening the same case id twice appended the records a second time (31 contacts became 62, in every output) | FIXED (store rebuilt on ingest; regression test) |
+| X-16 | `/api/case/hex-window`, `_resolve_case_file` | Provenance paths are relative to the evidence root, but the resolver only tried the process directory and the workspace, so the Source bytes view always answered 403 | FIXED (also tries the working copy and the evidence folder; traversal still returns 403) |
+| X-17 | `IngestCaseRequest`, `/api/case/state`, fusion endpoints | The examiner and agency defaulted to "Forensic Examiner" / "State Cyber Crime Investigation Division" (and similar) when not supplied | FIXED (empty unless supplied) |
+| U-11 | store | Selecting any row fetched a hex window, so every click on a row whose file is unavailable raised an error toast | FIXED (bytes load when the Source bytes tab is opened) |
+
+Still open from the interface work: the older views keep their internal layouts (listed in `UI_DESIGN.md` section 7); the generators do not read pinned findings.

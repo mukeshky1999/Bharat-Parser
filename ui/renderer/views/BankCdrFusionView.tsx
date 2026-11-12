@@ -177,7 +177,7 @@ export const BankCdrFusionView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0b1320] text-slate-100 overflow-hidden select-text font-sans">
+    <div className="flex-1 flex flex-col bg-slate-900 text-slate-100 overflow-hidden select-text font-sans">
       {/* Hidden File Inputs */}
       <input
         type="file"
@@ -195,13 +195,13 @@ export const BankCdrFusionView: React.FC = () => {
       />
 
       {/* 1. Sub-Tab Switcher & Primary Action Bar */}
-      <div className="h-11 bg-[#090f1d] border-b border-[#1e293b] px-3 flex items-center justify-between shrink-0 select-none text-xs">
+      <div className="h-11 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between shrink-0 select-none text-xs">
         <div className="flex items-center space-x-1.5">
           <button
             onClick={() => setActiveSubTab('BANK')}
             className={`px-3 py-1.5 rounded-md font-semibold text-xs flex items-center space-x-2 transition-colors cursor-pointer ${
               activeSubTab === 'BANK'
-                ? 'bg-cyan-600 text-white shadow-sm'
+                ? 'bg-cyan-600 text-slate-50 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
@@ -213,7 +213,7 @@ export const BankCdrFusionView: React.FC = () => {
             onClick={() => setActiveSubTab('CDR')}
             className={`px-3 py-1.5 rounded-md font-semibold text-xs flex items-center space-x-2 transition-colors cursor-pointer ${
               activeSubTab === 'CDR'
-                ? 'bg-cyan-600 text-white shadow-sm'
+                ? 'bg-cyan-600 text-slate-50 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
@@ -225,7 +225,7 @@ export const BankCdrFusionView: React.FC = () => {
             onClick={() => setActiveSubTab('CALLS')}
             className={`px-3 py-1.5 rounded-md font-semibold text-xs flex items-center space-x-2 transition-colors cursor-pointer ${
               activeSubTab === 'CALLS'
-                ? 'bg-cyan-600 text-white shadow-sm'
+                ? 'bg-cyan-600 text-slate-50 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
@@ -260,12 +260,12 @@ export const BankCdrFusionView: React.FC = () => {
 
       {/* Status Alert Notification */}
       {statusMessage && (
-        <div className="bg-[#0f1d35] border-b border-cyan-800/60 px-4 py-1.5 flex items-center justify-between text-xs text-cyan-200 font-mono select-none">
+        <div className="bg-slate-900 border-b border-cyan-800/60 px-4 py-1.5 flex items-center justify-between text-xs text-cyan-200 font-mono select-none">
           <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-cyan-400" />
             <span>{statusMessage}</span>
           </div>
-          <button onClick={() => setStatusMessage('')} className="text-slate-400 hover:text-white">
+          <button onClick={() => setStatusMessage('')} className="text-slate-400 hover:text-slate-50">
             ×
           </button>
         </div>
@@ -275,13 +275,13 @@ export const BankCdrFusionView: React.FC = () => {
       {activeSubTab === 'BANK' ? (
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Stat Cards Strip */}
-          <div className="h-14 bg-[#0d1627] border-b border-[#1e293b] px-4 flex items-center justify-between shrink-0 select-none text-xs">
+          <div className="h-14 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between shrink-0 select-none text-xs">
             <div className="flex items-center space-x-6">
               <div>
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">
+                <span className="text-[0.6875rem] text-slate-500 uppercase tracking-wider block font-semibold">
                   Total Bank Records
                 </span>
-                <span className="text-base font-extrabold text-white font-mono">
+                <span className="text-base font-extrabold text-slate-50 font-mono">
                   {bankResults?.totalRecords ?? 0}
                 </span>
               </div>
@@ -289,7 +289,7 @@ export const BankCdrFusionView: React.FC = () => {
               <div className="h-7 w-[1px] bg-slate-800" />
 
               <div>
-                <span className="text-[10px] text-emerald-400 uppercase tracking-wider block font-semibold flex items-center gap-1">
+                <span className="text-[0.6875rem] text-emerald-400 uppercase tracking-wider block font-semibold flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                   Matched by Reference
                 </span>
@@ -301,7 +301,7 @@ export const BankCdrFusionView: React.FC = () => {
               <div className="h-7 w-[1px] bg-slate-800" />
 
               <div>
-                <span className="text-[10px] text-rose-400 uppercase tracking-wider block font-semibold flex items-center gap-1">
+                <span className="text-[0.6875rem] text-rose-400 uppercase tracking-wider block font-semibold flex items-center gap-1">
                   <AlertTriangle className="w-3 h-3 text-rose-400" />
                   Not Found on Phone
                 </span>
@@ -317,7 +317,7 @@ export const BankCdrFusionView: React.FC = () => {
                 <button
                   onClick={() => setBankFilter('ALL')}
                   className={`px-2 py-0.5 rounded transition-colors ${
-                    bankFilter === 'ALL' ? 'bg-slate-700 text-white font-bold' : 'text-slate-400'
+                    bankFilter === 'ALL' ? 'bg-slate-700 text-slate-50 font-bold' : 'text-slate-400'
                   }`}
                 >
                   All
@@ -328,7 +328,7 @@ export const BankCdrFusionView: React.FC = () => {
                     bankFilter === 'MATCHED' ? 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-700' : 'text-slate-400'
                   }`}
                 >
-                  Verified Both
+                  In both
                 </button>
                 <button
                   onClick={() => setBankFilter('UNMATCHED')}
@@ -336,7 +336,7 @@ export const BankCdrFusionView: React.FC = () => {
                     bankFilter === 'UNMATCHED' ? 'bg-rose-950 text-rose-300 font-bold border border-rose-700' : 'text-slate-400'
                   }`}
                 >
-                  Bank ONLY (Wiped)
+                  Bank only (not found on device)
                 </button>
               </div>
 
@@ -354,7 +354,7 @@ export const BankCdrFusionView: React.FC = () => {
           </div>
 
           {/* Bank Reconciliation Table */}
-          <div className="flex-1 overflow-auto bg-[#080d1a] font-mono text-xs">
+          <div className="flex-1 overflow-auto bg-slate-950 font-mono text-xs">
             {!bankResults ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-3 p-8">
                 <FileSpreadsheet className="w-12 h-12 text-slate-700 stroke-[1.5]" />
@@ -378,7 +378,7 @@ export const BankCdrFusionView: React.FC = () => {
               </div>
             ) : (
               <table className="w-full text-left border-collapse">
-                <thead className="bg-[#0b1322] text-slate-400 text-[10.5px] uppercase tracking-wider sticky top-0 border-b border-[#1e293b] z-10 select-none">
+                <thead className="bg-slate-900 text-slate-400 text-[0.6875rem] uppercase tracking-wider sticky top-0 border-b border-slate-800 z-10 select-none">
                   <tr>
                     <th className="py-2.5 px-3 w-10 text-slate-500">#</th>
                     <th className="py-2.5 px-3 w-48">Reconciliation Status</th>
@@ -389,7 +389,7 @@ export const BankCdrFusionView: React.FC = () => {
                     <th className="py-2.5 px-3 w-36">Phone Evidence Match</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#162238]">
+                <tbody className="divide-y divide-slate-800">
                   {filteredBankRows.map((r, idx) => {
                     const status = String(r.Reconciliation_Status || '').toUpperCase();
                     const isMatched = status.includes('MATCH');
@@ -401,19 +401,19 @@ export const BankCdrFusionView: React.FC = () => {
                         onClick={() => handleRowClick(r, 'BANK')}
                         className={`cursor-pointer transition-colors ${
                           isMatched
-                            ? 'hover:bg-[#0d1d2b] text-slate-200'
+                            ? 'hover:bg-slate-900 text-slate-200'
                             : 'bg-rose-950/20 hover:bg-rose-950/30 text-rose-200 border-l-2 border-rose-500'
                         }`}
                       >
                         <td className="py-2 px-3 text-slate-500">{idx + 1}</td>
                         <td className="py-2 px-3">
                           {isMatched ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700/80 flex items-center gap-1 w-fit">
+                            <span className="px-2 py-0.5 rounded text-[0.6875rem] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700/80 flex items-center gap-1 w-fit">
                               <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                               VERIFIED BOTH PHONE & BANK
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-950 text-rose-300 border border-rose-700/80 flex items-center gap-1 w-fit">
+                            <span className="px-2 py-0.5 rounded text-[0.6875rem] font-bold bg-rose-950 text-rose-300 border border-rose-700/80 flex items-center gap-1 w-fit">
                               <AlertTriangle className="w-3 h-3 text-rose-400" />
                               IN BANK STATEMENT ONLY (WIPED)
                             </span>
@@ -427,7 +427,7 @@ export const BankCdrFusionView: React.FC = () => {
                         <td className="py-2 px-3 text-right font-bold text-slate-100">
                           ₹{Number(amt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="py-2 px-3 text-cyan-300 font-mono text-[11px]">
+                        <td className="py-2 px-3 text-cyan-300 font-mono text-[0.6875rem]">
                           {r.Device_Tx_ID || (isMatched ? 'Corroborated in App DB' : 'Not Found in Extracted DB')}
                         </td>
                       </tr>
@@ -442,13 +442,13 @@ export const BankCdrFusionView: React.FC = () => {
         /* CDR Temporal Correlation View */
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Stat Cards Strip */}
-          <div className="h-14 bg-[#0d1627] border-b border-[#1e293b] px-4 flex items-center justify-between shrink-0 select-none text-xs">
+          <div className="h-14 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between shrink-0 select-none text-xs">
             <div className="flex items-center space-x-6">
               <div>
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">
+                <span className="text-[0.6875rem] text-slate-500 uppercase tracking-wider block font-semibold">
                   Total CDR Calls
                 </span>
-                <span className="text-base font-extrabold text-white font-mono">
+                <span className="text-base font-extrabold text-slate-50 font-mono">
                   {cdrResults?.totalCalls ?? 0}
                 </span>
               </div>
@@ -456,7 +456,7 @@ export const BankCdrFusionView: React.FC = () => {
               <div className="h-7 w-[1px] bg-slate-800" />
 
               <div>
-                <span className="text-[10px] text-blue-400 uppercase tracking-wider block font-semibold flex items-center gap-1">
+                <span className="text-[0.6875rem] text-blue-400 uppercase tracking-wider block font-semibold flex items-center gap-1">
                   <Phone className="w-3 h-3 text-blue-400" />
                   Correlated Financial Transactions
                 </span>
@@ -472,7 +472,7 @@ export const BankCdrFusionView: React.FC = () => {
                 <button
                   onClick={() => setCdrFilter('ALL')}
                   className={`px-2 py-0.5 rounded transition-colors ${
-                    cdrFilter === 'ALL' ? 'bg-slate-700 text-white font-bold' : 'text-slate-400'
+                    cdrFilter === 'ALL' ? 'bg-slate-700 text-slate-50 font-bold' : 'text-slate-400'
                   }`}
                 >
                   All Calls
@@ -509,7 +509,7 @@ export const BankCdrFusionView: React.FC = () => {
           </div>
 
           {/* CDR Correlation Table */}
-          <div className="flex-1 overflow-auto bg-[#080d1a] font-mono text-xs">
+          <div className="flex-1 overflow-auto bg-slate-950 font-mono text-xs">
             {!cdrResults ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-3 p-8">
                 <Phone className="w-12 h-12 text-slate-700 stroke-[1.5]" />
@@ -533,7 +533,7 @@ export const BankCdrFusionView: React.FC = () => {
               </div>
             ) : (
               <table className="w-full text-left border-collapse">
-                <thead className="bg-[#0b1322] text-slate-400 text-[10.5px] uppercase tracking-wider sticky top-0 border-b border-[#1e293b] z-10 select-none">
+                <thead className="bg-slate-900 text-slate-400 text-[0.6875rem] uppercase tracking-wider sticky top-0 border-b border-slate-800 z-10 select-none">
                   <tr>
                     <th className="py-2.5 px-3 w-10 text-slate-500">#</th>
                     <th className="py-2.5 px-3 w-40">Call Timestamp</th>
@@ -545,7 +545,7 @@ export const BankCdrFusionView: React.FC = () => {
                     <th className="py-2.5 px-3">Correlation Role</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#162238]">
+                <tbody className="divide-y divide-slate-800">
                   {filteredCdrRows.map((r, idx) => {
                     const delta = Number(r.Delta_Seconds || 0);
                     const isPreTx = delta < 0;
@@ -554,7 +554,7 @@ export const BankCdrFusionView: React.FC = () => {
                       <tr
                         key={idx}
                         onClick={() => handleRowClick(r, 'CDR')}
-                        className="cursor-pointer hover:bg-[#0f1b2d] text-slate-300 transition-colors"
+                        className="cursor-pointer hover:bg-slate-900 text-slate-300 transition-colors"
                       >
                         <td className="py-2 px-3 text-slate-500">{idx + 1}</td>
                         <td className="py-2 px-3 text-slate-200">{r.Call_Timestamp || r.Timestamp || '-'}</td>
@@ -563,10 +563,10 @@ export const BankCdrFusionView: React.FC = () => {
                         <td className="py-2 px-3 text-right font-mono text-slate-300">
                           {r.Duration_Seconds ? `${r.Duration_Seconds}s` : '-'}
                         </td>
-                        <td className="py-2 px-3 text-cyan-300 font-mono text-[11px]">{r.Correlated_Tx_ID || r.TxID || '-'}</td>
+                        <td className="py-2 px-3 text-cyan-300 font-mono text-[0.6875rem]">{r.Correlated_Tx_ID || r.TxID || '-'}</td>
                         <td className="py-2 px-3 text-center">
                           <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-mono ${
+                            className={`px-1.5 py-0.5 rounded text-[0.6875rem] font-bold font-mono ${
                               isPreTx
                                 ? 'bg-amber-950 text-amber-300 border border-amber-700/80'
                                 : 'bg-emerald-950 text-emerald-300 border border-emerald-700/80'

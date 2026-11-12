@@ -8,7 +8,7 @@
 
 The merged **BharatAnalyzer Sovereign Forensics Suite** combines two complementary software systems into a single end-to-end platform:
 1. **The High-Throughput Workstation Stack (`parsers/`, `electron/`, `bharat-pa-forensics/src/renderer/`, `bharat-pa-forensics/src/main/`):**
-   - Delivers an interactive **Electron 45 + React 19 + Tailwind CSS v4 + Zustand** Cellebrite Physical Analyzer-grade workbench connected over localhost HTTP (`127.0.0.1:8000`) to a **31-endpoint FastAPI REST server** and a **1 TB+ SQLite FTS5 Paginated Case Store** (`CaseUIPaginatorStore`).
+   - Delivers an interactive **Electron 45 + React 19 + Tailwind CSS v4 + Zustand** workflow-stage investigation workbench (see `docs/UI_DESIGN.md`) connected over localhost HTTP (`127.0.0.1:8000`) to a **31-endpoint FastAPI REST server** and a **1 TB+ SQLite FTS5 Paginated Case Store** (`CaseUIPaginatorStore`).
    - Also provides a native **Node.js / TypeScript** offline processing layer (`bharat-pa-forensics/src/main/`) for direct Electron IPC VFS streaming, Dalvik DEX scanning, and SQLite carving.
 2. **The Deep Forensic Kernel (`src/` — 40 Domain Sub-Packages, 286 Python Modules):**
    - Delivers deep binary/cryptographic decoders, Indian financial/telecom/KYC/anti-forensics engines, 5-Dimensional Evidentiary State tracking, 18-Group canonical classification (`G01`–`G18`), Myers $O(ND)$ grapheme redline diffing, SVG Sankey visualizations, bilingual Hindi+English OCR, <3-second incremental key-broker DAG hot-patching, 1930 NCRP victim safeguard locks, and **Section 63 BSA 2023 / Section 230 BNSS 2023** courtroom dossier compilation.
@@ -21,10 +21,10 @@ The merged **BharatAnalyzer Sovereign Forensics Suite** combines two complementa
 |   - Context-isolated preload.cjs -> window.electronAPI + TypeScript IPC (vfs:open-dump, byte-range)|
 |                                                                                                     |
 |  React 19 + Tailwind v4 + Zustand Store (bharat-pa-forensics/src/renderer/)                         |
-|   - PAWorkbench -> TopRibbonBar | LeftVerticalRail | ProjectTreeDock (Active / WAL+Carved badges)   |
-|   - CenterTabCanvas (13 Tabs): Summary, Chats (28-col/Bubble/Myers), UPI Ledger, Bank+CDR Fusion,   |
-|     Crypto Wallets, Mule Link Graph (PyVis + SVG Sankey), SQLite Wizard, VFS Explorer, Malicious APK|
-|   - Right Inspectors: PAFieldInspector | ProvenanceSidebar | SyncedHexViewer (mmap byte seeker)     |
+|   - AppShell -> CaseBar | StageNavigator (8 stages) | Workspace | EvidenceCard | StatusLine           |
+|   - Workspace views: Summary, Chats, UPI Ledger, Bank+CDR Fusion, Crypto, Link Graph, SQLite Wizard,  |
+|     VFS Explorer, Contacts, Calls, Findings, Court output                                           |
+|   - Right: EvidenceCard (details / source bytes / links) with SyncedHexViewer                         |
 |   - Statutory Modals: Sec63BsaModal | Sec230BnssModal | Ncrp1930FreezeModal | AddExtractionModal    |
 +=====================================================================================================+
                                     | HTTP/JSON (127.0.0.1:8000) & Electron IPC
@@ -116,25 +116,18 @@ The merged **BharatAnalyzer Sovereign Forensics Suite** combines two complementa
 
 Built on **React 19**, **Tailwind CSS v4**, **Vite 8**, **Lucide Icons**, and **Zustand v5**:
 
-1. **4-Zone Workstation Layout (`workspace/PAWorkbench.tsx`):**
-   - **Top Zone (`TopRibbonBar.tsx`):** Case actions (Add Extraction, Pick File/Folder, Bank/CDR Fusion, Sec 63 BSA Certificate, Sec 230 BNSS Disclosure, 1930 NCRP Bank Freeze), active search, timezone display toggle (UTC vs IST `+05:30`), and server health indicator.
-   - **Far-Left Rail (`LeftVerticalRail.tsx`):** Vertical workflow switcher (`Analyzed Data`, etc.).
-   - **Left Project Tree (`ProjectTreeDock.tsx`):** Polls `/api/case/tree-counts` every 6s to display Cellebrite-style dual badges: slate badge (`Active` allocated count) and crimson badge (`WAL + Carved / Deleted` recovered count) across expandable tree categories (`UPI & Banking Ledger`, `Chats & Social Comms`, `Crypto & P2P Layering`, `Bank & CDR Fusion`, `Syndicate Link Graph`, `Raw SQLite & B-Tree Explorer`, `Virtual File System`).
-   - **Center Multi-Tab Canvas (`CenterTabCanvas.tsx`):** Dynamic closable document strip dispatching **13 primary workspace tabs** backed by **19 specialized view/modal components**:
-     - `SUMMARY` -> `ExtractionSummaryTab` (Device metadata, Master Owner Dossier, Dual SHA-256 chain)
-     - `CHATS` -> `ChatsMasterWorkspace` + `ChatBubbleView` (Thread sidebar, 28-col PA data table, bubble mode, Myers redline `<del>/<ins>`)
-     - `UPI_LEDGER` -> `UPIMasterLedgerView`
-     - `CONTACTS` -> `PATableWorkspace` (or `ContactsView`)
-     - `CALL_LOGS` -> `BankCdrFusionView` (+ `CallLogsView`)
-     - `OS_SPILLOVER` -> `OsSpilloverView`
-     - `LOCATIONS_MEDIA` -> `LocationsMediaView`
-     - `CRYPTO` -> `CryptoWalletView`
-     - `MULE_GRAPH` -> `MuleLinkGraphTab`
-     - `SQLITE_WIZARD` -> `SQLiteWizardTab`
-     - `FILE_SYSTEM` -> `FileSystemExplorerTab`
-     - `MALICIOUS_APKS` -> `MaliciousApkView`
-     - `REMOTE_ACCESS` -> `RemoteAccessView`
-   - **Right Contextual Inspector Pane (`PAFieldInspector.tsx`, `ProvenanceSidebar.tsx`, `SyncedHexViewer.tsx`):** Displays full record metadata, 5D/provenance pointer breakdown (`File :: Path :: Table :: RowID :: ByteOffset :: RecoveryState`), and live synchronized Hex/ASCII viewer highlighting exact field bytes in the evidence archive or DB.
+1. **Workflow-stage layout (`workspace/AppShell.tsx`)**, described in full in `docs/UI_DESIGN.md`:
+   - **Case bar (`CaseBar.tsx`):** case and evidence name, an integrity line built only from recorded hashes (`pre recorded / re-hash MATCH | MISMATCH | NOT RECORDED`), engine status, Open evidence, Ctrl+K, display settings.
+   - **Stage navigator (`StageNavigator.tsx`, `stages.ts`):** eight numbered stages (Intake, Evidence, People, Money, Messages, Places, Findings, Court output); each lists its views and counts; recovered records are shown as plain "+N recovered" text.
+   - **Workspace (`Workspace.tsx`):** breadcrumb plus the active view:
+     - `SUMMARY` -> `ExtractionSummaryTab`; `FILE_SYSTEM` -> `FileSystemExplorerTab`; `SQLITE_WIZARD` -> `SQLiteWizardTab`
+     - `CONTACTS`, `CALLS` -> `RecordTable` (sortable-by-position table with real call-activity chart, CSV export)
+     - `UPI_LEDGER` -> `UPIMasterLedgerView`; `CALL_LOGS` -> `BankCdrFusionView`; `CRYPTO` -> `CryptoWalletView`; `MULE_GRAPH` -> `MuleLinkGraphTab`
+     - `CHATS` -> `ChatsMasterWorkspace`; `OS_SPILLOVER` -> `OsSpilloverView`; `LOCATIONS_MEDIA` -> `LocationsMediaView`
+     - `FINDINGS` -> `FindingsView` (backed by `GET/POST/DELETE /api/case/findings`); `COURT_OUTPUT` -> `CourtOutputView`
+     - The malicious-APK and remote-access views were removed: nothing in the backend produced data for them.
+   - **Evidence card (`inspectors/EvidenceCard.tsx`):** details, source location ("not recorded" where a parser did not record it), raw bytes (`SyncedHexViewer`, loaded when the tab is opened), exact-match links, and Pin.
+   - **Command palette (`CommandPalette.tsx`)**, **display settings (`SettingsDialog.tsx`, `state/preferencesStore.ts`)**, **status line (`StatusLine.tsx`)**.
    - **Floating Statutory Modals:** `AddExtractionModal`, `Sec63BsaModal`, `Sec230BnssModal`, `Ncrp1930FreezeModal`.
 2. **State & Transport (`workbenchStore.ts` + `forensicClient.ts`):**
    - Centralized Zustand store holding active tabs, subcategories, selected artifacts, toast queue, modal state, and backend synchronization (`syncWithBackendCase`).

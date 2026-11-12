@@ -49,7 +49,7 @@ export const LocationsMediaView: React.FC = () => {
         <div className="flex items-center space-x-2">
           <MapPin className="w-4 h-4 text-teal-400" aria-hidden="true" />
           <h2 className="font-bold text-slate-100">Locations &amp; geotags</h2>
-          <span className="text-[11px] text-slate-400 font-mono">({rows.length} records)</span>
+          <span className="text-[0.6875rem] text-slate-400 font-mono">({rows.length} records)</span>
         </div>
       </div>
 
@@ -81,7 +81,7 @@ export const LocationsMediaView: React.FC = () => {
                 <th scope="col" className="py-2 px-3">Source</th>
               </tr>
             </thead>
-            <tbody className="font-mono text-[11px] divide-y divide-slate-800/60">
+            <tbody className="font-mono text-[0.6875rem] divide-y divide-slate-800/60">
               {rows.map((r) => (
                 <tr key={r.id} className="hover:bg-slate-900/60">
                   <td className="py-2 px-3 text-slate-300">{r.Timestamp_IST || r.Timestamp_UTC || 'Unknown'}</td>

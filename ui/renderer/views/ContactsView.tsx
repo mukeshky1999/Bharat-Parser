@@ -21,17 +21,17 @@ export const ContactsView: React.FC = () => {
         <div className="flex items-center space-x-2">
           <Users className="w-4 h-4 text-indigo-400" />
           <span className="font-bold text-slate-100">Contacts, Social Profiles & Dating Matches</span>
-          <span className="text-[11px] text-slate-400 font-mono">({filteredContacts.length} Entities)</span>
+          <span className="text-[0.6875rem] text-slate-400 font-mono">({filteredContacts.length} Entities)</span>
         </div>
-        <div className="text-[10px] text-slate-400 font-mono">
+        <div className="text-[0.6875rem] text-slate-400 font-mono">
           Corroborated Against Device SQLite & Cloud Cache
         </div>
       </div>
 
       {/* Grid */}
       <div className="flex-1 overflow-auto">
-        <table className="w-full text-left text-[11px] font-mono border-collapse">
-          <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 uppercase text-[9.5px] sticky top-0 z-10">
+        <table className="w-full text-left text-[0.6875rem] font-mono border-collapse">
+          <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 uppercase text-[0.6875rem] sticky top-0 z-10">
             <tr>
               <th className="p-2 w-10">#</th>
               <th className="p-2 w-28">Source App</th>
@@ -69,7 +69,7 @@ export const ContactsView: React.FC = () => {
                 >
                   <td className="p-2 text-slate-500">{idx + 1}</td>
                   <td className="p-2 font-semibold">
-                    <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px]">
+                    <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[0.6875rem]">
                       {cnt.sourceApp}
                     </span>
                   </td>
@@ -84,7 +84,7 @@ export const ContactsView: React.FC = () => {
                   </td>
                   <td className="p-2">
                     {cnt.datingMetadata ? (
-                      <div className="text-[10px] space-y-0.5 font-sans">
+                      <div className="text-[0.6875rem] space-y-0.5 font-sans">
                         <div className="text-pink-300 font-semibold flex items-center space-x-1">
                           <Heart className="w-3 h-3 text-pink-400" />
                           <span>Age: {cnt.datingMetadata.age} | {cnt.datingMetadata.gender}</span>
@@ -95,17 +95,17 @@ export const ContactsView: React.FC = () => {
                         </div>
                       </div>
                     ) : (
-                      <span className="text-slate-600 font-mono text-[10px]">—</span>
+                      <span className="text-slate-600 font-mono text-[0.6875rem]">—</span>
                     )}
                   </td>
-                  <td className="p-2 text-slate-400 truncate text-[10px]">
+                  <td className="p-2 text-slate-400 truncate text-[0.6875rem]">
                     {cnt.provenance.tableName || 'N/A'}
                   </td>
-                  <td className="p-2 text-amber-400 font-bold text-[10.5px]">
+                  <td className="p-2 text-amber-400 font-bold text-[0.6875rem]">
                     {hexOffset}
                   </td>
                   <td className="p-2">
-                    <span className="text-[9px] bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-1.5 py-0.2 rounded font-mono">
+                    <span className="text-[0.6875rem] bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-1.5 py-0.2 rounded font-mono">
                       [ACTIVE]
                     </span>
                   </td>

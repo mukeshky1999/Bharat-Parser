@@ -156,9 +156,9 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0b1320] text-slate-100 overflow-hidden select-text font-sans">
+    <div className="flex-1 flex flex-col bg-slate-900 text-slate-100 overflow-hidden select-text font-sans">
       {/* 1. Header Toolbar */}
-      <div className="h-11 bg-[#090f1d] border-b border-[#1e293b] px-3 flex items-center justify-between shrink-0 select-none text-xs">
+      <div className="h-11 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between shrink-0 select-none text-xs">
         <div className="flex items-center space-x-1.5">
           <button
             onClick={() => setActiveSubTab('CUSTODIAL')}
@@ -170,7 +170,7 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
           >
             <Wallet className="w-4 h-4" />
             <span>15 Custodial Wallets</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/20 font-mono">
+            <span className="text-[0.6875rem] px-1.5 py-0.2 rounded-full bg-black/20 font-mono">
               {custodialRecords.length}
             </span>
           </button>
@@ -185,7 +185,7 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
           >
             <Coins className="w-4 h-4" />
             <span>P2P Escrow Orders</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/20 font-mono">
+            <span className="text-[0.6875rem] px-1.5 py-0.2 rounded-full bg-black/20 font-mono">
               {p2pRecords.length}
             </span>
           </button>
@@ -200,7 +200,7 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
           >
             <Link className="w-4 h-4" />
             <span>Fiat-to-Crypto Temporal Bridge</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/20 font-mono">
+            <span className="text-[0.6875rem] px-1.5 py-0.2 rounded-full bg-black/20 font-mono">
               {bridgeRecords.length}
             </span>
           </button>
@@ -215,7 +215,7 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
           >
             <ShieldAlert className="w-4 h-4" />
             <span>Harvested TRC-20 / BTC Addresses</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/20 font-mono">
+            <span className="text-[0.6875rem] px-1.5 py-0.2 rounded-full bg-black/20 font-mono">
               {addressRecords.length}
             </span>
           </button>
@@ -246,7 +246,7 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
       </div>
 
       {/* 2. Content Table */}
-      <div className="flex-1 overflow-auto bg-[#080d1a] font-mono text-xs">
+      <div className="flex-1 overflow-auto bg-slate-950 font-mono text-xs">
         {loading ? (
           <div className="h-full flex items-center justify-center text-slate-400 space-x-2">
             <span className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
@@ -264,7 +264,7 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
           </div>
         ) : (
           <table className="w-full text-left border-collapse">
-            <thead className="bg-[#0b1322] text-slate-400 text-[10.5px] uppercase tracking-wider sticky top-0 border-b border-[#1e293b] z-10 select-none">
+            <thead className="bg-slate-900 text-slate-400 text-[0.6875rem] uppercase tracking-wider sticky top-0 border-b border-slate-800 z-10 select-none">
               <tr>
                 <th className="py-2.5 px-3 w-10 text-slate-500">#</th>
                 <th className="py-2.5 px-3 w-32">App / Exchange</th>
@@ -276,7 +276,7 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
                 <th className="py-2.5 px-3 w-28">Byte Offset</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#162238]">
+            <tbody className="divide-y divide-slate-800">
               {currentRows.map((r, idx) => {
                 const hexOffset = formatOffset(r.byte_offset ?? r.Byte_Offset);
                 const app = r.wallet_app || r.Exchange || r.source_app || r.app_name || 'Unknown';
@@ -289,7 +289,7 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
                   <tr
                     key={idx}
                     onClick={() => handleSelectRow(r)}
-                    className="cursor-pointer hover:bg-[#0f1b2d] text-slate-300 transition-colors"
+                    className="cursor-pointer hover:bg-slate-900 text-slate-300 transition-colors"
                   >
                     <td className="py-2 px-3 text-slate-500">{idx + 1}</td>
                     <td className="py-2 px-3 text-amber-300 font-bold">{app}</td>
@@ -298,15 +298,15 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
                       {amt === null || amt === '' || Number.isNaN(Number(amt)) ? 'n/a' : Number(amt).toLocaleString('en-US', { maximumFractionDigits: 6 })}
                     </td>
                     <td className="py-2 px-3 text-center">
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800/80">
+                      <span className="px-1.5 py-0.5 rounded text-[0.6875rem] font-bold bg-amber-950 text-amber-300 border border-amber-800/80">
                         P2P / ON-RAMP
                       </span>
                     </td>
                     <td className="py-2 px-3 text-teal-300 font-mono truncate max-w-md" title={addr}>
                       {addr}
                     </td>
-                    <td className="py-2 px-3 text-slate-400 text-[11px]">{String(ts).substring(0, 19)}</td>
-                    <td className="py-2 px-3 text-amber-400 text-[11px] font-mono">{hexOffset}</td>
+                    <td className="py-2 px-3 text-slate-400 text-[0.6875rem]">{String(ts).substring(0, 19)}</td>
+                    <td className="py-2 px-3 text-amber-400 text-[0.6875rem] font-mono">{hexOffset}</td>
                   </tr>
                 );
               })}

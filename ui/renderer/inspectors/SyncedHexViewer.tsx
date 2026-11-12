@@ -17,6 +17,8 @@ import { ForensicProvenance } from '../../shared/forensic-types';
 
 interface SyncedHexViewerProps {
   provenance?: ForensicProvenance | null;
+  /** true when shown inside the evidence card instead of as a bottom dock */
+  embedded?: boolean;
 }
 
 const ROW_HEIGHT = 22;
@@ -95,13 +97,15 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
 
   return (
     <footer
-      className={`bg-[#070d18] border-t border-slate-800 flex flex-col shrink-0 select-text transition-all duration-200 ${getDockHeightClass()}`}
+      className={props.embedded
+        ? 'bg-slate-950 flex flex-col h-full min-h-[260px] select-text'
+        : `bg-slate-950 border-t border-slate-800 flex flex-col shrink-0 select-text transition-all duration-200 ${getDockHeightClass()}`}
     >
       {/* Hex Toolbar with Dual Tabs */}
-      <div className="h-8 bg-[#0b1320] border-b border-slate-800 px-3 flex items-center justify-between text-xs select-none">
+      <div className={`${props.embedded ? 'min-h-8 flex-wrap gap-y-1 py-1' : 'h-8'} bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between text-xs select-none`}>
         <div className="flex items-center space-x-3">
           {/* Tab Switcher */}
-          <div className="flex items-center space-x-1 font-mono text-[11px]">
+          <div className="flex items-center space-x-1 font-mono text-[0.6875rem]">
             <button
               onClick={() => {
                 if (dockState === 'COLLAPSED') setDockState('NORMAL');
@@ -132,27 +136,27 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
             </button>
           </div>
 
-          <span className="text-[10px] text-slate-500 font-mono">
+          <span className="text-[0.6875rem] text-slate-500 font-mono">
             @ 0x{targetOffset.toString(16).toUpperCase()}
           </span>
           {isLoadingHex && (
-            <span className="text-[10px] text-emerald-400 animate-pulse font-mono font-semibold">
+            <span className="text-[0.6875rem] text-emerald-400 font-mono font-semibold">
               [STREAMING 4KB MMAP CHUNK...]
             </span>
           )}
           {hexWindow?.fileSize ? (
-            <span className="text-[10px] text-slate-500 font-mono hidden lg:inline">
+            <span className="text-[0.6875rem] text-slate-500 font-mono hidden lg:inline">
               [FILE: {hexWindow.fileSize.toLocaleString()} B]
             </span>
           ) : null}
           {hexWindow?.isEof && (
-            <span className="text-[10px] text-amber-400 font-mono font-semibold">
+            <span className="text-[0.6875rem] text-amber-400 font-mono font-semibold">
               [EOF REACHED]
             </span>
           )}
         </div>
 
-        <div className="flex items-center space-x-4 text-[10.5px] font-mono">
+        <div className="flex items-center space-x-4 text-[0.6875rem] font-mono">
           <div className="flex items-center space-x-1 hidden sm:flex">
             <span className="text-slate-500">Physical Offset:</span>
             <span className="text-amber-400 font-bold">
@@ -220,7 +224,7 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
             <div
               ref={containerRef}
               onScroll={handleScroll}
-              className="flex-1 overflow-y-auto p-2 font-mono text-[11px] leading-snug select-text scroll-smooth bg-[#060b14]"
+              className="flex-1 overflow-auto p-2 font-mono text-[0.6875rem] leading-snug select-text scroll-smooth bg-slate-950"
             >
               {rows.length > 0 ? (
                 <div style={{ height: totalHeight, position: 'relative' }} className="min-w-full">
@@ -313,13 +317,13 @@ export const SyncedHexViewer: React.FC<SyncedHexViewerProps> = (props) => {
             </div>
           ) : (
             /* Raw Decoded JSON / Protobuf Tree Tab */
-            <div className="flex-1 overflow-y-auto p-3 font-mono text-xs select-text bg-[#060b14]">
-              <div className="bg-[#0b1320] rounded-lg border border-slate-800 p-3 leading-relaxed">
-                <div className="text-[10px] text-indigo-400 font-bold mb-2 uppercase tracking-wide flex items-center space-x-2">
+            <div className="flex-1 overflow-y-auto p-3 font-mono text-xs select-text bg-slate-950">
+              <div className="bg-slate-900 rounded-lg border border-slate-800 p-3 leading-relaxed">
+                <div className="text-[0.6875rem] text-indigo-400 font-bold mb-2 uppercase tracking-wide flex items-center space-x-2">
                   <Code2 className="w-3.5 h-3.5" />
                   <span>Decoded Artifact Tree & Wire Payload Structure</span>
                 </div>
-                <pre className="text-emerald-300 text-[11px] font-mono overflow-x-auto whitespace-pre-wrap">
+                <pre className="text-emerald-300 text-[0.6875rem] font-mono overflow-x-auto whitespace-pre-wrap">
                   {JSON.stringify(
                     storeArtifact?.rawData || {
                       artifact_id: storeArtifact?.id || 'NO_SELECTION',

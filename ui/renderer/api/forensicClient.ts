@@ -1,5 +1,5 @@
 /**
- * Bharat-PA Forensics — Dual HTTP + Electron API Client Bridge
+ * BharatAnalyzer — Dual HTTP + Electron API Client Bridge
  * Safely wraps Electron IPC and REST API on http://127.0.0.1:8000.
  * Strictly aligned with FastAPI/Pydantic models:
  *   - CaseOpenResponse
@@ -116,6 +116,9 @@ export interface IngestCaseResponse {
     fileSizeBytes?: number;
     verified?: boolean;
     calculatedAt?: string;
+    postIngestionSha256?: string;
+    postIngestionMd5?: string;
+    integrityMatch?: boolean;
   };
   owner_dossier?: Record<string, unknown> | null;
   device_metadata?: Record<string, unknown> | null;
@@ -142,6 +145,9 @@ export interface CaseStateResponse {
     fileSizeBytes?: number;
     verified?: boolean;
     calculatedAt?: string;
+    postIngestionSha256?: string;
+    postIngestionMd5?: string;
+    integrityMatch?: boolean;
   };
 }
 
@@ -158,6 +164,9 @@ export interface CaseSummaryResponse {
     fileSizeBytes?: number;
     verified?: boolean;
     calculatedAt?: string;
+    postIngestionSha256?: string;
+    postIngestionMd5?: string;
+    integrityMatch?: boolean;
   };
   owner_dossier?: any | null;
   device_metadata?: any | null;
@@ -556,7 +565,7 @@ class ForensicClient {
   }
 
   /**
-   * Fetches Physical Analyzer Analyzed Data tree counts (Active vs WAL/Carved).
+   * Fetches the per-category record counts (Active vs WAL/Carved).
    */
   public async getTreeCounts(signal?: AbortSignal): Promise<TreeCountsResponse> {
     try {

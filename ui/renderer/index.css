@@ -1,8 +1,34 @@
 @import "tailwindcss";
+@import "./theme.css";
+
+/* Reading comfort is set here and by the preferences store (data-theme, data-density, --font-scale).
+   Rules: no pure black page, text never below 11px at 100%, numbers align in columns, nothing blinks. */
+:root {
+  --font-scale: 1;
+  --row-h: 30px;
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Noto Sans", sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", Consolas, "Courier New", monospace;
+}
+:root[data-density='compact'] { --row-h: 24px; }
+:root[data-density='comfortable'] { --row-h: 32px; }
+
+html {
+  font-size: calc(16px * var(--font-scale));
+}
 
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100 font-sans;
+    background-color: var(--c-slate-950);
+    color: var(--c-slate-200);
+    font-family: var(--font-ui);
+    font-size: 0.8125rem; /* 13px at 100% */
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, pre, kbd, samp, .font-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
   }
   /* Examiners must be able to select and copy evidence text; only controls are non-selectable. */
   button,
@@ -16,8 +42,15 @@
 
 /* Visible keyboard focus everywhere (WCAG 2.4.7) */
 :focus-visible {
-  outline: 2px solid #22d3ee;
+  outline: 2px solid var(--c-cyan-400);
   outline-offset: 2px;
+}
+
+/* Nothing in this application blinks or pulses: constant motion tires the eye over a long shift. */
+.animate-ping,
+.animate-pulse,
+.animate-bounce {
+  animation: none !important;
 }
 
 /* Respect the OS reduced-motion setting */
@@ -32,18 +65,11 @@
   }
 }
 
-/* Custom forensic scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #0f172a;
-}
-::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #475569;
-}
+/* Scrollbars follow the theme */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--c-slate-950); }
+::-webkit-scrollbar-thumb { background: var(--c-slate-700); border-radius: 5px; border: 2px solid var(--c-slate-950); }
+::-webkit-scrollbar-thumb:hover { background: var(--c-slate-600); }
+
+/* Data tables: row height follows the density setting */
+.rec-row { height: var(--row-h); }
