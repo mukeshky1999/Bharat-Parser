@@ -499,6 +499,8 @@ export interface ReportParticulars {
   designation?: string;
   requesting_officer?: string;
   notes?: string;
+  /** Optional sections to include; leave out to include all. The evidence, limitations and audit sections are always included. */
+  sections?: string[];
 }
 
 export interface AuditEntry {

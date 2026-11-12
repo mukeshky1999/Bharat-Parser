@@ -157,3 +157,23 @@ def test_no_statutory_form_routes_exist():
     banned = re.compile(r"sec63|sec230|ncrp|1930|bnss|bsa|nodal|requisition", re.IGNORECASE)
     assert not [p for p in paths if banned.search(p)], [p for p in paths if banned.search(p)]
     assert "/api/report/examination" in paths and "/api/report/facts" in paths and "/api/report/package" in paths
+
+
+def test_report_sections_can_be_left_out_but_evidence_limitations_and_audit_cannot(ingested):
+    full = _html(api_server.examination_report_post(ReportParticulars()))
+    part = _html(api_server.examination_report_post(ReportParticulars(sections=["findings"])))
+    none = _html(api_server.examination_report_post(ReportParticulars(sections=[])))
+    assert "Case particulars" in full and "Tool and processing environment" in full
+    for html in (full, part, none):                                     # always present, whatever was asked for
+        assert "Evidence and hashes" in html and "Limitations" in html and "Audit log" in html
+    assert "Case particulars" not in part.split("chose not to include")[0] and "Findings pinned" in part
+    assert "chose not to include" in part and "Case particulars" in part.split("chose not to include")[1]   # named as left out
+    assert "chose not to include" not in full
+    nums = re.findall(r"<h2>(\d+)\. ", none)
+    assert nums == ["1", "2", "3"]                                      # numbering follows what is shown
+    assert not FORBIDDEN.search(none)
+
+
+def test_unknown_section_names_are_ignored(ingested):
+    html = _html(api_server.examination_report_post(ReportParticulars(sections=["not_a_section", "tags"])))
+    assert "Records tagged by the examiner" in html and "not_a_section" not in html

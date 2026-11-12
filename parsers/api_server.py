@@ -2448,6 +2448,8 @@ class ReportParticulars(BaseModel):
     designation: Optional[str] = ""
     requesting_officer: Optional[str] = ""
     notes: Optional[str] = ""
+    # Optional sections to include (see examination_report.OPTIONAL_SECTIONS); None means all of them.
+    sections: Optional[List[str]] = None
 
 
 _TX_DIRECTION = {"DEBIT": "OUTGOING", "CREDIT": "INCOMING"}
@@ -2506,9 +2508,11 @@ def examination_report_post(req: ReportParticulars):
     _require_case()
     # Record the generation first, then render, so the audit section lists it.
     _audit_event("report_generated", {"kind": "examination_report"})
-    facts = _report_facts(req.model_dump(exclude_none=True))
+    data = req.model_dump(exclude_none=True)
+    sections = data.pop("sections", None)
+    facts = _report_facts(data)
     return Response(
-        content=examination_report.render_report_html(facts), media_type="text/html; charset=utf-8",
+        content=examination_report.render_report_html(facts, sections), media_type="text/html; charset=utf-8",
         headers={**_NO_STORE, "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline';",
                  "Content-Disposition": 'inline; filename="examination_report.html"'},
     )

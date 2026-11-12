@@ -42,6 +42,11 @@ const Card: React.FC<{ icon: React.ElementType; title: string; children: React.R
   </section>
 );
 
+const OPTIONAL_SECTIONS: Array<[string, string]> = [
+  ['particulars', 'Case particulars'], ['device', 'Device details'], ['environment', 'Tool and environment'],
+  ['counts', 'Records found'], ['findings', 'Pinned findings'], ['tags', 'Tagged records'],
+];
+
 const btn = 'h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40 disabled:hover:bg-transparent';
 const btnPrimary = 'h-8 px-3 rounded bg-cyan-600 text-slate-50 hover:bg-cyan-500 disabled:opacity-40 disabled:hover:bg-cyan-600';
 
@@ -52,6 +57,7 @@ export const ReportExportView: React.FC = () => {
   const hasCase = !!caseManifest;
 
   const [particulars, setParticulars] = useState<ReportParticulars>({});
+  const [included, setIncluded] = useState<Record<string, boolean>>({});
   const [notes, setNotes] = useState('');
   const [html, setHtml] = useState('');
   const [reportError, setReportError] = useState('');
@@ -74,7 +80,7 @@ export const ReportExportView: React.FC = () => {
 
   useEffect(() => { void refreshAudit(); }, [refreshAudit, caseManifest?.caseId]);
 
-  const fullParticulars = (): ReportParticulars => ({ ...particulars, notes });
+  const fullParticulars = (): ReportParticulars => ({ ...particulars, notes, sections: OPTIONAL_SECTIONS.filter(([id]) => included[id] !== false).map(([id]) => id) });
 
   const preview = async () => {
     setBusy('report'); setReportError('');
@@ -172,6 +178,17 @@ export const ReportExportView: React.FC = () => {
               />
             </label>
           </div>
+          <fieldset className="mb-3 rounded border border-slate-800 p-3">
+            <legend className="px-1 text-slate-300">Sections in this copy of the report</legend>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {OPTIONAL_SECTIONS.map(([id, label]) => (
+                <label key={id} className="inline-flex items-center gap-1.5 text-slate-200">
+                  <input type="checkbox" checked={included[id] !== false} disabled={!hasCase} onChange={(e) => setIncluded((cur) => ({ ...cur, [id]: e.target.checked }))} />{label}
+                </label>
+              ))}
+            </div>
+            <p className="mt-2 text-slate-400 text-xs">The evidence and hashes, the limitations and the audit log are always included. A section you leave out is named at the end of the report, so a reader knows it exists.</p>
+          </fieldset>
           <div className="flex flex-wrap gap-2">
             <button className={btnPrimary} onClick={preview} disabled={!hasCase || busy === 'report'}>{busy === 'report' ? 'Building…' : 'Build and preview report'}</button>
             <button className={btn} onClick={() => saveText('examination_report.html', html, 'text/html;charset=utf-8')} disabled={!html}>

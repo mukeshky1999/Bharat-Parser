@@ -194,7 +194,23 @@ def _source_text(src: Dict[str, Any]) -> str:
     return "; ".join(f"{k}: {v}" for k, v in sorted(src.items()))
 
 
-def render_report_html(f: Dict[str, Any]) -> str:
+# Sections the examiner may leave out of the report. The evidence and hashes, the limitations and the audit log
+# are always included: a report must not be able to hide what was not read or what the examiner did.
+OPTIONAL_SECTIONS = {
+    "particulars": "Case particulars",
+    "device": "Device, as recorded in the evidence",
+    "environment": "Tool and processing environment",
+    "counts": "Records found",
+    "findings": "Findings pinned by the examiner",
+    "tags": "Records tagged by the examiner",
+}
+REQUIRED_SECTIONS = ("evidence", "limitations", "audit")
+
+
+def render_report_html(f: Dict[str, Any], sections: Optional[List[str]] = None) -> str:
+    """``sections`` lists the optional sections to include; None means all of them. Required sections are always there.
+    The report names the sections that were left out, so a reader knows they exist."""
+    chosen = set(OPTIONAL_SECTIONS) if sections is None else {s for s in sections if s in OPTIONAL_SECTIONS}
     env, au = f["environment"], f["audit"]
     many = f.get("evidence_items")
     units = many if many else [{"item_id": None, "label": None, "evidence": f["evidence"], "device": f["device"]}]
@@ -264,6 +280,30 @@ def render_report_html(f: Dict[str, Any]) -> str:
         for x in fail_log[:200]
     )
 
+    parts: List[Tuple[str, str, str]] = [
+        ("particulars", "Case particulars (as entered by the examiner)",
+         f"""<table>{_rows([("Case ID (in this tool)", f['case']['id']), ("Case name", f['case']['name'])] + [(label, f['particulars'][k]) for k, label in PARTICULAR_FIELDS])}</table>"""),
+        ("evidence", "Evidence and hashes", evidence_html),
+        ("device", "Device, as recorded in the evidence", device_html),
+        ("environment", "Tool and processing environment", f"<table>{_rows([(k, v) for k, v in env.items()])}</table>"),
+        ("counts", "Records found",
+         f"<table><tr><th>Category</th><th>Active</th><th>Recovered (WAL / carved)</th><th>Total</th></tr>{count_rows}</table>"),
+        ("limitations", "Limitations",
+         lim_html + f"""
+<p>Processing steps: {f['processing']['ok']} completed, {f['processing']['failed']} failed, {f['processing']['warnings']} warnings.</p>
+{('<table><tr><th>Status</th><th>Stage</th><th>File</th><th>Detail</th></tr>' + log_rows + '</table>') if log_rows else ''}"""),
+        ("findings", "Findings pinned by the examiner", fnd_html),
+        ("tags", "Records tagged by the examiner", tags_html),
+        ("audit", "Audit log", f"""<p>Entries: {len(entries)}. Chain check: <strong class="{audit_cls}">{audit_state}</strong>{(' (' + _e(au.get('error','')) + ')') if au.get('error') else ''}.
+Head hash at the time of this report: <span class="mono">{_e(str(au.get('head_hash','')))}</span></p>
+<table><tr><th>#</th><th>Time (UTC)</th><th>By</th><th>Action</th></tr>{audit_rows}</table>{more}"""),
+    ]
+    shown_parts = [p for p in parts if p[0] in REQUIRED_SECTIONS or p[0] in chosen]
+    left_out = [OPTIONAL_SECTIONS[p[0]] for p in parts if p[0] in OPTIONAL_SECTIONS and p[0] not in chosen]
+    body_html = "\n\n".join(f"<h2>{i}. {_e(title)}</h2>{html_}" for i, (_, title, html_) in enumerate(shown_parts, 1))
+    if left_out:
+        body_html += "\n\n<p><em>Sections the examiner chose not to include in this copy of the report: " + _e("; ".join(left_out)) + ".</em></p>"
+
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><title>Examination report: {_e(str(f['case']['id']))}</title>
 <style>{_CSS}</style></head><body>
@@ -271,33 +311,7 @@ def render_report_html(f: Dict[str, Any]) -> str:
 <p>Generated {_e(f['generated']['utc'])} ({_e(f['generated']['ist'])}). This report lists what the software recorded for this case.
 It contains no opinion and makes no declaration. Any legal form a court or agency requires is prepared and signed by the examiner.</p>
 
-<h2>1. Case particulars (as entered by the examiner)</h2>
-<table>{_rows([("Case ID (in this tool)", f['case']['id']), ("Case name", f['case']['name'])] + [(label, f['particulars'][k]) for k, label in PARTICULAR_FIELDS])}</table>
-
-<h2>2. Evidence and hashes</h2>
-{evidence_html}
-
-<h2>3. Device, as recorded in the evidence</h2>
-{device_html}
-
-<h2>4. Tool and processing environment</h2>
-<table>{_rows([(k, v) for k, v in env.items()])}</table>
-
-<h2>5. Records found</h2>
-<table><tr><th>Category</th><th>Active</th><th>Recovered (WAL / carved)</th><th>Total</th></tr>{count_rows}</table>
-
-<h2>6. Limitations</h2>{lim_html}
-<p>Processing steps: {f['processing']['ok']} completed, {f['processing']['failed']} failed, {f['processing']['warnings']} warnings.</p>
-{('<table><tr><th>Status</th><th>Stage</th><th>File</th><th>Detail</th></tr>' + log_rows + '</table>') if log_rows else ''}
-
-<h2>7. Findings pinned by the examiner</h2>{fnd_html}
-
-<h2>8. Records tagged by the examiner</h2>{tags_html}
-
-<h2>9. Audit log</h2>
-<p>Entries: {len(entries)}. Chain check: <strong class="{audit_cls}">{audit_state}</strong>{(' (' + _e(au.get('error','')) + ')') if au.get('error') else ''}.
-Head hash at the time of this report: <span class="mono">{_e(str(au.get('head_hash','')))}</span></p>
-<table><tr><th>#</th><th>Time (UTC)</th><th>By</th><th>Action</th></tr>{audit_rows}</table>{more}
+{body_html}
 
 <div class="sig"><div>Examiner name and signature:</div><div>Date:</div></div>
 </body></html>"""
