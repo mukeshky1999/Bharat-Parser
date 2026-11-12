@@ -286,17 +286,19 @@ class OsPrivacySpilloverRecovery:
         if usagestats_path.endswith('.db') or 'knowledgec' in usagestats_path.lower():
             try:
                 conn = sqlite3.connect(f"file:{usagestats_path}?mode=ro", uri=True)
+                conn.row_factory = sqlite3.Row
+                conn.row_factory = sqlite3.Row  # dict(row) below needs named columns
                 cur = conn.cursor()
                 cur.execute("""
                 SELECT Z_PK, ZSTARTDATE, ZENDDATE, ZSTREAMNAME, ZVALUESTRING
                 FROM ZOBJECT
-                WHERE ZSTREAMNAME LIKE '%app.inFocus%'
+                WHERE ZSTREAMNAME LIKE '%/app/inFocus%' OR ZSTREAMNAME LIKE '%app.inFocus%'
                 ORDER BY ZSTARTDATE DESC
                 """)
                 for r in cur.fetchall():
                     r = dict(r)
                     row_id = r.get('Z_PK')
-                    s_date = r.get('ZSTARTDATE', 0)
+                    s_date = r.get('ZSTARTDATE') or 0
                     e_date = r.get('ZENDDATE', 0)
                     stream = r.get('ZSTREAMNAME', '')
                     app_id = r.get('ZVALUESTRING', '')

@@ -178,6 +178,19 @@ function mapTxStatus(v: unknown): 'SUCCESS' | 'FAILED' | 'PENDING' | 'UNKNOWN' {
 }
 
 /** Reads table/rowid/offset out of the backend provenance string. Missing parts stay unknown. */
+function mapChatDirection(v: unknown): 'INCOMING' | 'OUTGOING' | 'UNKNOWN' {
+  const t = String(v ?? '').trim().toUpperCase();
+  if (t === 'OUTGOING' || t === 'SENT' || t === 'OUT') return 'OUTGOING';
+  if (t === 'INCOMING' || t === 'RECEIVED' || t === 'IN') return 'INCOMING';
+  return 'UNKNOWN'; // blank / UNKNOWN: the evidence does not say
+}
+
+function mapCallDirection(v: unknown): 'INCOMING' | 'OUTGOING' | 'MISSED' | 'REJECTED' | 'UNKNOWN' {
+  const t = String(v ?? '').trim().toUpperCase();
+  if (t === 'OUTGOING' || t === 'INCOMING' || t === 'MISSED' || t === 'REJECTED') return t;
+  return 'UNKNOWN';
+}
+
 function parseProvenance(prov: unknown, summary: any, fallbackTable: string, vfsPath: string): any {
   const text = String(prov ?? '');
   const row = text.match(/RowID=([^\s:]+)/i)?.[1];
@@ -400,22 +413,23 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
             sha256: summary.hashes.sha256 || '',
             fileSizeBytes: summary.hashes.fileSizeBytes || 0,
             verified: Boolean(summary.hashes.verified),
-            calculatedAt: summary.hashes.calculatedAt || new Date().toISOString()
+            calculatedAt: summary.hashes.calculatedAt || '' // not recorded: never use the time the page was opened
           } : null,
           caseManifest: summary.extractions?.[0] ? {
             caseId: summary.case_id || 'CASE_01',
             caseNumber: summary.case_id || 'CASE_01',
-            firNumber: 'FIR/CYB/2026/01',
-            policeStation: 'Cyber Crime PS',
-            district: 'State HQ',
-            examinerName: summary.examiner_name || 'Forensic Examiner',
+            // Case particulars come from the examiner, never from placeholders (review U-07).
+            firNumber: '',
+            policeStation: '',
+            district: '',
+            examinerName: summary.examiner_name || '',
             evidencePath: summary.evidence_path || '',
             evidenceFileName: summary.case_name || 'Evidence Extraction Dump',
             fileSizeBytes: summary.hashes?.fileSizeBytes || 0,
             preIngestionHashes: {
               md5: summary.hashes?.md5 || '',
               sha256: summary.hashes?.sha256 || '',
-              calculatedAt: summary.hashes?.calculatedAt || new Date().toISOString()
+              calculatedAt: summary.hashes?.calculatedAt || ''
             },
             indexedAt: normalizeTimestamp(Date.now(), 'UNIX_MS'),
             totalFilesIndexed: summary.extractions?.length || 1
@@ -472,7 +486,8 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
               recipientJid: r.Recipient_Identifier || '',
               recipientName: r.Recipient_Name || 'Unknown',
               body: r.Message_Body || '',
-              isFromMe: String(r.Direction || '').toUpperCase() === 'OUTGOING',
+              isFromMe: mapChatDirection(r.Direction) === 'OUTGOING',
+              direction: mapChatDirection(r.Direction),
               timestamp: normalizeTimestamp(r.Timestamp_UTC || r.Timestamp_IST || '', 'ISO_8601'),
               messageStatus: r.Delivery_Status || 'Unknown',
               isViewOnce: Boolean(r.Is_View_Once),
@@ -492,18 +507,7 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
               identifiers: [{ type: 'PHONE', value: r.Phone_Number || r.Identifier || '' }],
               sourceApp: r.Application || 'Contacts',
               isKnownSuspect: false,
-              provenance: {
-                evidenceId: summary.case_id || 'CASE_01',
-                archivePath: summary.evidence_path || '',
-                vfsInternalPath: r.Source_File || '',
-                containerType: 'SQLITE',
-                tableName: 'contacts',
-                pageNumber: 1,
-                byteOffset: 0,
-                byteLength: 64,
-                recoveryState: 'ACTIVE',
-                rawPayloadHex: '00'
-              }
+              provenance: parseProvenance(r.Forensic_Provenance, summary, 'contacts', r.Source_File || '')
             }))
           });
         }
@@ -513,27 +517,16 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
             callLogs: callRes.rows.map((r: any) => ({
               id: `CALL_${r.id}`,
               callType: (r.Call_Type === 'VOIP' || (r.Application && r.Application !== 'Cellular')) ? 'VOIP_APP' : 'CELLULAR_CDR',
-              direction: r.Direction || 'INCOMING',
+              direction: mapCallDirection(r.Direction),
               callerNumberOrId: r.Caller || r.Peer || 'Unknown',
               callerName: r.Peer || '',
               calleeNumberOrId: r.Callee || 'Unknown',
               calleeName: '',
               durationSeconds: r.Duration_Sec || 0,
-              callResult: r.Call_Result || 'ANSWERED',
+              callResult: r.Call_Result || 'UNKNOWN',
               timestamp: normalizeTimestamp(r.Timestamp_IST || '', 'ISO_8601'),
               sourceApp: r.Application || 'Phone',
-              provenance: {
-                evidenceId: summary.case_id || 'CASE_01',
-                archivePath: summary.evidence_path || '',
-                vfsInternalPath: '',
-                containerType: 'SQLITE',
-                tableName: 'calls',
-                pageNumber: 1,
-                byteOffset: 0,
-                byteLength: 64,
-                recoveryState: 'ACTIVE',
-                rawPayloadHex: '00'
-              }
+              provenance: parseProvenance(r.Forensic_Provenance, summary, 'calls', r.Source_File || '')
             }))
           });
         }

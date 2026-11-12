@@ -76,13 +76,10 @@ def snappy_decompress(data: bytes) -> bytes:
             pos += 1
             offset = (offset_hi << 8) | offset_lo
 
-            if offset == 0:
-                break
+            if offset == 0 or offset > len(out):
+                raise ValueError('Snappy copy offset outside decoded data')
             for _ in range(length):
-                copy_idx = len(out) - offset
-                if copy_idx < 0:
-                    break
-                out.append(out[copy_idx])
+                out.append(out[len(out) - offset])
 
         elif tag == 2:
             # Copy with 2-byte offset
@@ -92,13 +89,10 @@ def snappy_decompress(data: bytes) -> bytes:
             offset = struct.unpack("<H", data[pos:pos + 2])[0]
             pos += 2
 
-            if offset == 0:
-                break
+            if offset == 0 or offset > len(out):
+                raise ValueError('Snappy copy offset outside decoded data')
             for _ in range(length):
-                copy_idx = len(out) - offset
-                if copy_idx < 0:
-                    break
-                out.append(out[copy_idx])
+                out.append(out[len(out) - offset])
 
         else:
             # Copy with 4-byte offset
@@ -108,14 +102,14 @@ def snappy_decompress(data: bytes) -> bytes:
             offset = struct.unpack("<I", data[pos:pos + 4])[0]
             pos += 4
 
-            if offset == 0:
-                break
+            if offset == 0 or offset > len(out):
+                raise ValueError('Snappy copy offset outside decoded data')
             for _ in range(length):
-                copy_idx = len(out) - offset
-                if copy_idx < 0:
-                    break
-                out.append(out[copy_idx])
+                out.append(out[len(out) - offset])
 
+    if len(out) != uncompressed_len:
+        # Corrupt or truncated stream: do not hand back a short buffer as if it were the whole block (review R-16).
+        raise ValueError(f"Snappy output {len(out)} bytes, header declared {uncompressed_len}")
     return bytes(out)
 
 

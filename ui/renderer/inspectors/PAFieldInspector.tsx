@@ -162,7 +162,7 @@ export const PAFieldInspector: React.FC<PAFieldInspectorProps> = (props) => {
             <div className="flex items-start justify-between gap-2">
               <span className="text-slate-400 font-medium shrink-0">Direction:</span>
               <span className="font-mono text-cyan-300 text-right">
-                {rawData.Direction || (isFromMe ? 'OUTGOING' : 'INCOMING')}
+                {rawData.Direction || rawData.direction || (isFromMe ? 'OUTGOING' : 'UNKNOWN')}
               </span>
             </div>
 

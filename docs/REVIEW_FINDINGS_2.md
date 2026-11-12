@@ -259,3 +259,49 @@ Scanned but not read line by line: `src/whatsapp`, `src/nonsqlite`, `src/web3`, 
 `os_privacy_spillover.py`, the body of the benchmark recorder, the OCR image path, and the React views' internal logic
 (only their claims and data sources were checked). `tests/e2e` was run (all pass) but its assertions were only sampled.
 None of the scanned `src/` modules is called by the product today, so a defect there cannot reach an output until Phase 4 wires it.
+
+## 6. Final review pass (2026-11-12): the files that had only been scanned
+
+Method: each remaining module was read for the same classes of defect as before (a value invented where the evidence is
+silent, a guess shown as fact, a label that claims more than was checked, a failure that looks like "nothing found").
+Items marked FIXED have a regression test in `tests/test_legal_output_integrity.py` or `ui/tests/`.
+
+| ID | Where | Finding | Status |
+|---|---|---|---|
+| R-13 | `parsers/social_interaction_comms_parsers.py` (17 sites) | Facebook Msys, Skype/Teams, WeChat, LINE, IMO/Kakao, Twitter/LinkedIn, Truecaller, OLX, ShareChat rows had direction "Incoming" and status "Delivered"/"Sent" hard-coded, and `Page_Number = rowid // 32 + 1` (a made-up page); a "recalled" message was labelled `RECALLED_FREELIST` although it was read from the live table; a failure to open a database was swallowed with `pass` | FIXED (UNKNOWN; page 0; label says "unsent flag set"; failure logged) |
+| R-13b | `parsers/os_privacy_spillover.py` knowledgeC | `dict(r)` on a plain cursor raised, the exception was swallowed, so the iOS foreground-app timeline was always empty; the stream pattern `app.inFocus` does not match the real `/app/inFocus` | FIXED |
+| Q-1 | `parsers/deep_sqlite.py` | Row caps (5,000 to 30,000) cut tables silently; chat sender/recipient defaulted to "Local Device/User" / "Counterparty"; columns were chosen by substring (`to` matched `total`, `ts` matched `status`); PhonePe/WhatsApp status defaulted to SUCCESS; a failed app-specific parse looked like an empty database | FIXED (TRUNCATED warning, "Unknown", whole-token column match, UNKNOWN status, failure logged). The amount unit is still assumed to be paise for `amount` columns: OPEN, needs a real PhonePe sample |
+| Q-2 | `parsers/account_profiler.py` | The owner dossier took the first value containing `@` in any key as the owner's VPA and e-mail (a payee stored in preferences became "the owner"), the first five IFSCs found anywhere were listed as the owner's linked bank accounts, and the malformed-XML fallback did the same | FIXED (key must say vpa/email; IFSC labelled "seen in evidence, not confirmed as owner's"; fallback removed) |
+| Q-2b | `parsers/vpa_harvester.py` | Read errors returned an empty result as if nothing was found | FIXED (logged). Phone numbers split across a 16 MB chunk boundary are missed: OPEN (Low) |
+| Q-3 | `tools/forensic_benchmark_recorder.py` | "SURPASSED VENDOR" whenever our record count was higher (more rows is not better: could be false positives); an empty extraction scored 100% quality; a run with no vendor report printed "100% FULL INTERNAL PARITY" | FIXED (count-only wording, empty = 0, "no vendor count to compare"). The endpoint stays off unless `BHARAT_ENABLE_BENCHMARK=1` |
+| R-14 | `src/geospatial_media_and_tamper/bilingual_ocr_engine.py`, `/api/ocr/analyze` | A bare 12-digit number that passes Verhoeff (about 1 in 10) was classed an Aadhaar card and removed from the UTR list; with Tesseract missing the "OCR" reads only text embedded in the file but the response did not say so | FIXED (UIDAI wording required; response carries `ocr_performed`) |
+| R-15 | `src/web3/engine.py`, `src/cex/binance.py`, `src/cex/indian_cex.py` | A record with no timestamp was given `datetime.now()`: the examiner's clock became the transaction time (7 sites) | FIXED (empty = not recorded) |
+| R-15b | `src/web3/{ledgerlive,tronlink,metamask,models}.py` | `tx_status` defaulted to "CONFIRMED": a wallet cache is not proof of on-chain confirmation | FIXED where the record has no status (`UNVERIFIED_LOCAL_RECORD`); an explicit status in the record is kept |
+| R-16 | `src/nonsqlite/{varint,snappy,leveldb}.py` | An unterminated varint was returned as a complete value; a corrupt or short Snappy stream returned a partial buffer as the whole block; LevelDB entries running past the block were emitted with short keys/values | FIXED (raise / skip with a warning). Block CRCs are still not verified: OPEN |
+| R-17 | `src/web3/address_utils.py` | `format_bigint_decimal` special-cased the hex `0x152d02c7e14af6800000` to 100 ETH to match a test fixture; that value is 10^23 wei = 100,000 ETH, so the real balance would have been understated 1000-fold | FIXED (special case removed; fixtures use the correct hex for 100 ETH) |
+| R-18 | `src/cex/binance.py`, `src/cex/models.py` | A P2P order with no `orderStatus` became `COMPLETED_RELEASED`, with no `tradeType` a BUY, and the counterparty was taken from the wrong side | FIXED (UNKNOWN) |
+| R-19 | `src/seedhunter/correlator.py` | The rupee-to-crypto "laundering chain" linked UPI payments to an order on amount alone when a timestamp was missing, searched every subset of up to 5 payments out of any number of candidates (a coincidental sum labelled "smurfing"), and matched a withdrawal on same currency OR similar amount | FIXED (needs timestamps, at most 12 candidates, asset AND amount) |
+| X-14 | `src/whatsapp`, `src/telegram_signal`, `src/high_opsec`, `src/social_voip`, `src/hyperlocal_travel` | Default direction `INCOMING_RECEIVED` for rows with no direction flag | FIXED (UNKNOWN where no flag is read; an explicit 0/1 flag is still honoured) |
+| U-07 | `ui/renderer/state/workbenchStore.ts`, `PATableWorkspace`, `ChatsMasterWorkspace`, `CryptoWalletView` | The UI undid the backend fixes: `isFromMe` false was shown as "Incoming" (so UNKNOWN looked received, in the grid, the inspector and the CSV); contacts and calls got an invented provenance (page 1, offset 0, 64 bytes, payload `00`, state ACTIVE); calls defaulted to INCOMING / ANSWERED; the case manifest was pre-filled with `FIR/CYB/2026/01`, "Cyber Crime PS", "State HQ", "Forensic Examiner"; hash time defaulted to the time the page was opened; the crypto view and "TRM/Chainalysis manifest" export defaulted app to Binance, asset to USDT, amount to 0, offset to 0x0 and every unlabelled address to "Mule Off-Ramp Target" | FIXED |
+| U-08 | `ChatsMasterWorkspace` CSV export | Built as a `data:` URI with `encodeURI`: everything after the first `#` in any message was cut off; message text was not protected against spreadsheet formulas | FIXED (shared `utils/csv.ts`: Blob, formula-safe cells, "not recorded" offsets; test `ui/tests/csv_export_test.ts`) |
+| T-01 | `tests/e2e/test_tier1_sqlite_recovery.py` | `assertGreaterEqual(len(df), 0)` cannot fail | FIXED (type and provenance assertion) |
+
+### Still open after this pass
+- X-13 (transactions lose provenance and normalised time in the case store): scheduled with Phase 4 stage C.
+- U-01 to U-06 (static "BIT-FOR-BIT SEAL PASS", "Air-Gapped PASS", "SHA-256 Verified", "Verified Both", the screenshot alert, timer-based ingest phases, the two views with no data source): done as part of the UI redesign because those components are being replaced.
+- Q-1 amount unit, R-16 block CRC, Q-2b chunk boundary, L-08, X-12.
+
+### Coverage statement
+Read for logic in this pass: `social_interaction_comms_parsers` (all direction/status/page/recovery fields and error handling),
+`deep_sqlite`, `account_profiler`, `vpa_harvester`, `os_privacy_spillover` (notification and knowledgeC paths),
+`bilingual_ocr_engine` entity extraction and classification, `forensic_benchmark_recorder` scoring and verdicts,
+`src/nonsqlite/{varint,snappy}` and the LevelDB block reader, `src/web3/{address_utils,engine}`,
+`src/cex/{binance P2P path, models}`, `src/seedhunter/{correlator, seed_hunter}`, and the store, table, export and crypto code in the UI.
+
+Found by pattern search and fixed at the hit, but the module around the hit was not read line by line:
+`src/whatsapp/decoder.py`, `src/telegram_signal/*`, `src/high_opsec/*`, `src/social_voip/*`, `src/hyperlocal_travel/dating_decoder.py`.
+
+Not read: `src/nonsqlite/{mmkv,segb,protobuf}`, `src/telegram_signal/tl_deserializer`, `src/web3/{cakewallet,trustwallet}`,
+the rest of `src/cex/binance.py` (withdrawal and deposit paths), `src/seedhunter/{hd_derivator, vault_unwrapper internals}`,
+and the layout code of the React views (only data handling, labels and exports were read). None of the unread modules is
+called by the product today, so a defect there cannot reach an output until Phase 4 wires it; each is read before it is wired.

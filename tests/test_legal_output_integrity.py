@@ -466,3 +466,126 @@ def test_fiat_crypto_alignment_drops_clearly_different_amounts_and_hedges_wordin
     ok = align_fiat_to_crypto(upi, close)
     assert len(ok) == 1 and "Possible link" in ok.iloc[0]["Evidentiary_Insight"]
     assert align_fiat_to_crypto(upi, far).empty  # 100000 vs 900 close in time is not a lead
+
+
+def _viber_style_msys_db(tmp_path):
+    import sqlite3
+    p = str(tmp_path / "msys_database_1.db")
+    c = sqlite3.connect(p)
+    c.execute("CREATE TABLE cql_messages (message_id TEXT, thread_key TEXT, text TEXT, sender_id TEXT, timestamp_ms INTEGER, is_unsent INTEGER)")
+    c.execute("INSERT INTO cql_messages VALUES ('m1','t1','hello','100',1760430000000,0)")
+    c.commit(); c.close()
+    return p
+
+
+def test_r13_facebook_msys_does_not_invent_direction_status_or_page(tmp_path):
+    from parsers.social_interaction_comms_parsers import parse_facebook_messenger_database
+
+    df = parse_facebook_messenger_database(_viber_style_msys_db(tmp_path))
+    assert len(df) == 1
+    row = df.iloc[0]
+    assert row["Direction"] == "Unknown"   # the table has no sent/received column
+    assert row["Status"] == "Unknown"      # not "Delivered"
+    assert row["Page_Number"] == 0         # a rowid-derived page number is not a page number
+
+
+def test_r13_knowledgec_foreground_timeline_is_actually_read(tmp_path):
+    import sqlite3
+    from parsers.os_privacy_spillover import OsPrivacySpilloverRecovery
+
+    p = str(tmp_path / "knowledgeC.db")
+    c = sqlite3.connect(p)
+    c.execute("CREATE TABLE ZOBJECT (Z_PK INTEGER, ZSTARTDATE REAL, ZENDDATE REAL, ZSTREAMNAME TEXT, ZVALUESTRING TEXT)")
+    c.execute("INSERT INTO ZOBJECT VALUES (1, 700000000.0, 700000060.0, '/app/inFocus', 'ph.telegra.Telegraph')")
+    c.commit(); c.close()
+    rows = OsPrivacySpilloverRecovery.parse_usagestats_timeline(p)
+    assert len(rows) == 1 and rows[0]["App_Identifier"] == "ph.telegra.Telegraph"
+
+
+def test_r16_nonsqlite_primitives_reject_truncated_input():
+    from src.nonsqlite.snappy import snappy_decompress
+    from src.nonsqlite.varint import decode_le_varint
+
+    with pytest.raises(ValueError):
+        decode_le_varint(b"\x80\x80")            # continuation bit set, no terminator
+    assert decode_le_varint(b"\xac\x02") == (300, 2)
+    # declared length 5 but only a 2-byte literal follows: a short buffer must not look complete
+    with pytest.raises(ValueError):
+        snappy_decompress(b"\x05\x04ab")
+    assert snappy_decompress(b"\x02\x04ab") == b"ab"
+
+
+def test_r15_missing_timestamp_is_not_replaced_by_analysis_time():
+    import inspect
+
+    import src.cex.binance as b
+    import src.cex.indian_cex as i
+    import src.web3.engine as w
+
+    for mod in (b, i, w):
+        assert "datetime.now(" not in inspect.getsource(mod)
+
+
+def test_r14_bare_checksum_is_not_an_aadhaar_without_uidai_wording():
+    from src.geospatial_media_and_tamper.bilingual_ocr_engine import BilingualOcrEngine
+
+    eng = BilingualOcrEngine()
+    # a 12-digit number that passes Verhoeff, with no UIDAI wording, stays a candidate reference number
+    num = next(str(n) for n in range(234567890123, 234567890123 + 200)
+               if eng.verhoeff_validator.validate_verhoeff(str(n)))
+    res = eng.extract_from_text(f"Reference {num}")
+    assert res.document_category != "UIDAI_IDENTITY_CARD"
+    assert num in res.extracted_utrs
+
+
+def test_r17_bigint_conversion_has_no_fixture_special_case():
+    from src.web3.address_utils import format_bigint_decimal
+
+    assert format_bigint_decimal("0x56bc75e2d63100000", 18)[1] == "100.000000000000000000"
+    # 10^23 wei is 100,000 ETH; it must not be silently turned into 100 ETH
+    assert format_bigint_decimal("0x152d02c7e14af6800000", 18)[1] == "100000.000000000000000000"
+
+
+def _chain_inputs(w_currency="USDT", upi_ts="2024-05-10T14:05:00Z"):
+    from src.seedhunter.models import Phase3UPIPayment, Phase4CryptoWithdrawal, Phase4P2POrder
+
+    upi = Phase3UPIPayment(tx_master_uid=1, utr_reference="630911111111", amount_inr=90000.0, counterparty_vpa="a@okaxis",
+                           counterparty_name="A", source_app="PhonePe", timestamp_utc_iso=upi_ts)
+    order = Phase4P2POrder(p2p_order_uid=2, order_number="9", exchange_name="Binance", order_side="BUY", crypto_quantity=1000.0,
+                           crypto_currency="USDT", fiat_total_amount=90000.0, fiat_currency="INR", counterparty_vpa="a@okaxis",
+                           order_status="COMPLETED", created_utc_iso="2024-05-10T14:00:00Z",
+                           completed_utc_iso="2024-05-10T14:08:00Z")
+    w = Phase4CryptoWithdrawal(transfer_uid=3, exchange_name="Binance", currency=w_currency, amount=5.0,
+                               blockchain_network="TRON_TRC20", destination_address="T" + "x" * 33, txid="ab" * 32,
+                               timestamp_utc_iso="2024-05-10T14:20:00Z", matches_local_wallet=True)
+    return upi, order, w
+
+
+def test_r19_withdrawal_needs_same_asset_and_similar_amount():
+    from src.seedhunter.correlator import RupeeToCryptoCorrelator
+
+    upi, order, w = _chain_inputs()
+    # same currency but 5 USDT against a 1000 USDT order: not the same money
+    chains = RupeeToCryptoCorrelator().correlate([upi], [order], [w])
+    assert len(chains) == 1 and chains[0].hop3_cex_withdrawal_or_pay_uid is None
+
+
+def test_r19_amount_alone_without_timestamps_is_not_linked():
+    from src.seedhunter.correlator import RupeeToCryptoCorrelator
+
+    upi, order, w = _chain_inputs(upi_ts="")
+    assert RupeeToCryptoCorrelator().correlate([upi], [order], [w]) == []
+
+
+def test_r18_binance_p2p_missing_status_and_side_are_unknown(tmp_path):
+    from src.cex.models import CEXP2POrderStatus, CEXP2PTradeDirection
+
+    assert CEXP2POrderStatus.UNKNOWN.value == "UNKNOWN" and CEXP2PTradeDirection.UNKNOWN.value == "UNKNOWN"
+    from src.cex.models import CEXP2PEscrowOrderRecord
+    assert CEXP2PEscrowOrderRecord().order_status == CEXP2POrderStatus.UNKNOWN
+
+
+def test_whatsapp_direction_unknown_when_from_me_missing():
+    from src.whatsapp.models import MessageDirection
+
+    assert MessageDirection.UNKNOWN.value == "UNKNOWN"

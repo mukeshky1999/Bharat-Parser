@@ -151,7 +151,7 @@ class IndianCEXDecoder:
                 elif ts_val > 0:
                     ts_iso = ForensicTimestamp.from_unix_seconds(ts_val).utc_iso8601
                 else:
-                    ts_iso = datetime.now(timezone.utc).isoformat()
+                    ts_iso = ""  # not recorded: never substitute the time of analysis
 
                 ev_state = EvidentiaryState(
                     existence=EvidentiaryExistence.OBSERVED,

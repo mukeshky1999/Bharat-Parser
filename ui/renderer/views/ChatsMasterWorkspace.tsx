@@ -4,6 +4,7 @@ import {
   RecoveryState
 } from '../../shared/forensic-types';
 import { useWorkbenchStore, RecoveryPillFilter, EphemeralPillFilter, ChatWorkspaceMode } from '../state/workbenchStore';
+import { csvCell, downloadCsv, formatOffset } from '../utils/csv';
 import {
   MessageSquare,
   ArrowUpRight,
@@ -116,25 +117,18 @@ export const ChatsMasterWorkspace: React.FC = () => {
     if (chats.length === 0) return;
     const headers = ['ID', 'App', 'Direction', 'Sender', 'Recipient', 'Body', 'Status', 'Timestamp_IST', 'Byte_Offset', 'Recovery_State'];
     const rows = chats.map((m) => [
-      m.id,
-      m.sourceApp,
-      m.isFromMe ? 'OUTGOING' : 'INCOMING',
-      `"${(m.senderName || '').replace(/"/g, '""')}"`,
-      `"${(m.recipientName || '').replace(/"/g, '""')}"`,
-      `"${(m.body || '').replace(/"/g, '""')}"`,
-      m.messageStatus || '',
-      m.timestamp?.istFormatted || '',
-      `0x${m.provenance.byteOffset.toString(16).toUpperCase()}`,
-      m.provenance.recoveryState
-    ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `BharatAnalyzer_Chats_Export_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      csvCell(m.id),
+      csvCell(m.sourceApp),
+      csvCell(m.direction || (m.isFromMe ? 'OUTGOING' : 'UNKNOWN')),
+      csvCell(m.senderName || ''),
+      csvCell(m.recipientName || ''),
+      csvCell(m.body || ''),
+      csvCell(m.messageStatus || ''),
+      csvCell(m.timestamp?.istFormatted || ''),
+      csvCell(formatOffset(m.provenance.byteOffset)),
+      csvCell(m.provenance.recoveryState)
+    ].join(','));
+    downloadCsv(`BharatAnalyzer_Chats_Export_${Date.now()}.csv`, [headers.join(','), ...rows]);
   };
 
   // 1. Group chats into Distinct Conversation Threads

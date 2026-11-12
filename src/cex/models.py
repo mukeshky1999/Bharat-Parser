@@ -31,6 +31,7 @@ class CEXP2PTradeDirection(str, Enum):
     """P2P Fiat-to-Crypto Trading Direction."""
     BUY_CRYPTO_PAID_FIAT = "BUY_CRYPTO_PAID_FIAT"
     SELL_CRYPTO_RECEIVED_FIAT = "SELL_CRYPTO_RECEIVED_FIAT"
+    UNKNOWN = "UNKNOWN"  # tradeType missing from the record
 
 
 @unique
@@ -40,6 +41,7 @@ class CEXP2POrderStatus(str, Enum):
     CANCELLED = "CANCELLED"
     APPEAL_DISPUTED = "APPEAL_DISPUTED"
     IN_ESCROW_PENDING = "IN_ESCROW_PENDING"
+    UNKNOWN = "UNKNOWN"  # orderStatus missing from the record
 
 
 @unique
@@ -92,7 +94,7 @@ class CEXP2PEscrowOrderRecord:
     recovery_classification: ResidualConfidence = ResidualConfidence.ORIGINAL_RECORD
     p2p_order_number: str = ""
     trade_direction: CEXP2PTradeDirection = CEXP2PTradeDirection.BUY_CRYPTO_PAID_FIAT
-    order_status: CEXP2POrderStatus = CEXP2POrderStatus.COMPLETED_RELEASED
+    order_status: CEXP2POrderStatus = CEXP2POrderStatus.UNKNOWN
     crypto_asset: str = "USDT"
     crypto_quantity_decimal: float = 0.0
     fiat_currency: str = "INR"

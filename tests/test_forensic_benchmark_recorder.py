@@ -269,9 +269,9 @@ class TestForensicBenchmarkPipeline(unittest.TestCase):
         self.assertTrue(s4.get("vendor_xml_found"))
         comp = s4.get("comparison_matrix", {})
         self.assertIn("WhatsApp", comp)
-        self.assertEqual(comp["WhatsApp"]["verdict"], "🏆 SURPASSED VENDOR")
+        self.assertEqual(comp["WhatsApp"]["verdict"], "MORE RECORDS THAN VENDOR (count only, correctness not checked)")
         self.assertIn("PhonePe", comp)
-        self.assertEqual(comp["PhonePe"]["verdict"], "🏆 SURPASSED VENDOR")
+        self.assertEqual(comp["PhonePe"]["verdict"], "MORE RECORDS THAN VENDOR (count only, correctness not checked)")
 
         # STAGE 5 CHECKS (Report generation & PII Sanitization)
         json_path = os.path.join(self.output_dir, "benchmark_telemetry_ledger.json")

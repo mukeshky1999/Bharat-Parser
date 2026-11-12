@@ -201,8 +201,12 @@ class TestTier1SQLiteRecovery(unittest.TestCase):
             self.skipTest(f"Evidence {evidence_db} not found")
 
         df = carve_sqlite_freelists(str(evidence_db))
-        self.assertIsNotNone(df)
-        self.assertGreaterEqual(len(df), 0)
+        # len(df) >= 0 is always true, so it proved nothing. What can be asserted without knowing the
+        # fixture's contents: a DataFrame comes back, and every carved row says where it came from (review R-12).
+        import pandas as pd
+        self.assertIsInstance(df, pd.DataFrame)
+        if len(df):
+            self.assertTrue(any(c for c in df.columns if 'prov' in str(c).lower() or 'offset' in str(c).lower() or 'source' in str(c).lower()))
 
     def test_corrupted_sqlite_file_carver(self):
         """

@@ -161,7 +161,7 @@ class MetaDecoder:
                             except Exception as exc:
                                 logger.debug("Failed parsing message JSON in Instagram DB: %s", exc)
 
-                        direction = "INCOMING_RECEIVED"
+                        direction = "UNKNOWN"  # no sent/received flag read (X-14)
                         if viewer_id and str(s_id) == viewer_id:
                             direction = "OUTGOING_SENT"
 
@@ -264,7 +264,7 @@ class MetaDecoder:
                             recovery_classification=ResidualConfidence.ORIGINAL_RECORD,
                             thread_or_channel_id=str(th_key),
                             native_message_id=str(mid),
-                            direction="INCOMING_RECEIVED",
+                            direction="UNKNOWN",
                             sender_id_and_handle=str(sid) if sid else None,
                             content_category=SocialContentCategory.TEXT,
                             message_text=txt,

@@ -290,7 +290,7 @@ class TelegramDatabaseDecoder:
             cur.execute(f"SELECT mid, uid, date, data, out, ttl FROM {target_table}")
             for mid, uid, date, data, out, ttl in cur.fetchall():
                 thread_id_str, thread_class, _ = unpack_dialog_uid(uid, self_user_id)
-                direction = "OUTGOING_SENT" if out == 1 else "INCOMING_RECEIVED"
+                direction = "OUTGOING_SENT" if out == 1 else ("INCOMING_RECEIVED" if out == 0 else "UNKNOWN")
 
                 tl_info = decode_tl_message(data) if data else {}
                 msg_text = tl_info.get("message_text")

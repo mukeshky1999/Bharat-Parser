@@ -95,7 +95,8 @@ class TestSocialInteractionParsers(unittest.TestCase):
         self.assertEqual(df.iloc[0]["Source_App"], "Facebook Messenger")
         self.assertEqual(df.iloc[0]["Sender_Name"], "Rohan Boss")
         self.assertTrue(df.iloc[1]["Is_Deleted"])
-        self.assertEqual(df.iloc[1]["Recovery_Method"], "RECALLED_FREELIST")
+        # an unsent flag in the live table is not evidence of freelist recovery (review R-13)
+        self.assertEqual(df.iloc[1]["Recovery_Method"], "ACTIVE_SQLITE (unsent flag set)")
 
     def test_truecaller_parser(self):
         db_path = os.path.join(self.tmp_dir, "tc.db")

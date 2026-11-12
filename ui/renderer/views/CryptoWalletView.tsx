@@ -16,6 +16,7 @@ import {
 import { forensicClient } from '../api/forensicClient';
 import { useWorkbenchStore } from '../state/workbenchStore';
 import { CryptoWalletTransaction, ForensicProvenance } from '../../shared/forensic-types';
+import { csvCell, formatOffset } from '../utils/csv';
 
 interface CryptoWalletViewProps {
   transactions?: CryptoWalletTransaction[];
@@ -102,21 +103,21 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
 
     const csvRows = recordsToExport.map((r) => {
       const addr = r.Address || r.crypto_address || r.destination_address || r.wallet_address || '';
-      const coin = r.Currency || r.coin || r.asset || r.blockchain || 'USDT_TRC20';
-      const app = r.Exchange || r.wallet_app || r.source_app || 'Binance';
-      const label = r.Label || r.entity || 'Mule Off-Ramp Target';
-      const ctx = r.Context || r.source_table || r.notes || 'Carved Memory/DB';
-      const valid = r.is_valid !== false ? 'VALID' : 'UNCONFIRMED';
-      const offset = `0x${Number(r.byte_offset || r.Byte_Offset || 0).toString(16).toUpperCase().padStart(8, '0')}`;
+      const coin = r.Currency || r.coin || r.asset || r.blockchain || 'Unknown';
+      const app = r.Exchange || r.wallet_app || r.source_app || 'Unknown';
+      const label = r.Label || r.entity || 'Not labelled';
+      const ctx = r.Context || r.source_table || r.notes || 'Not recorded';
+      const valid = r.is_valid === true ? 'CHECKSUM VALID' : (r.is_valid === false ? 'CHECKSUM INVALID' : 'NOT CHECKED');
+      const offset = formatOffset(r.byte_offset ?? r.Byte_Offset);
 
       return [
-        `"${addr}"`,
-        `"${coin}"`,
-        `"${app}"`,
-        `"${label}"`,
-        `"${ctx}"`,
-        `"${valid}"`,
-        `"${offset}"`
+        csvCell(addr),
+        csvCell(coin),
+        csvCell(app),
+        csvCell(label),
+        csvCell(ctx),
+        csvCell(valid),
+        csvCell(offset)
       ].join(',');
     });
 
@@ -277,10 +278,10 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
             </thead>
             <tbody className="divide-y divide-[#162238]">
               {currentRows.map((r, idx) => {
-                const hexOffset = `0x${Number(r.byte_offset || r.Byte_Offset || 0).toString(16).toUpperCase().padStart(8, '0')}`;
-                const app = r.wallet_app || r.Exchange || r.source_app || r.app_name || 'Binance';
-                const asset = r.coin || r.Currency || r.asset || 'USDT';
-                const amt = r.amount || r.Amount || r.crypto_amount || 0;
+                const hexOffset = formatOffset(r.byte_offset ?? r.Byte_Offset);
+                const app = r.wallet_app || r.Exchange || r.source_app || r.app_name || 'Unknown';
+                const asset = r.coin || r.Currency || r.asset || 'Unknown';
+                const amt = r.amount ?? r.Amount ?? r.crypto_amount ?? null;
                 const addr = r.Address || r.crypto_address || r.destination_address || r.order_id || '-';
                 const ts = r.timestamp_ist || r.Timestamp_IST || r.created_at || '-';
 
@@ -294,7 +295,7 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
                     <td className="py-2 px-3 text-amber-300 font-bold">{app}</td>
                     <td className="py-2 px-3 text-slate-200 font-semibold">{asset}</td>
                     <td className="py-2 px-3 text-right font-bold text-slate-100">
-                      {Number(amt).toLocaleString('en-US', { maximumFractionDigits: 6 })}
+                      {amt === null || amt === '' || Number.isNaN(Number(amt)) ? 'n/a' : Number(amt).toLocaleString('en-US', { maximumFractionDigits: 6 })}
                     </td>
                     <td className="py-2 px-3 text-center">
                       <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800/80">

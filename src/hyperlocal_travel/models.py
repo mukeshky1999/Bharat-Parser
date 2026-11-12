@@ -295,7 +295,7 @@ class DatingMessageRecord:
     dating_peer_uid: int = 0
     source_vfs_file_id: int = 0
     recovery_classification: ResidualConfidence = ResidualConfidence.ORIGINAL_RECORD
-    direction: str = "INCOMING_RECEIVED"
+    direction: str = "UNKNOWN"
     message_text_or_prompt: Optional[str] = None
     media_or_shared_pin_json: Optional[str] = None
     extracted_handoff_phone_or_handle: Optional[str] = None

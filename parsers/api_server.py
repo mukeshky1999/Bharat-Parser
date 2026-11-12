@@ -1214,6 +1214,9 @@ def analyze_image_ocr(req: OcrAnalyzeRequest):
         "success": True,
         "image_path": abs_path,
         "engine_used": ocr_result.engine_used,
+        # False when Tesseract is not installed: the fallback only reads text embedded in the file (PNG text chunks,
+        # etc.), it does not read the pixels. An empty result then means "not OCRed", not "no text".
+        "ocr_performed": ocr_result.engine_used.startswith("TESSERACT"),
         "raw_text": ocr_result.raw_bilingual_text,
         "normalized_text": ocr_result.normalized_ascii_text,
         "detected_scripts": ocr_result.detected_scripts,

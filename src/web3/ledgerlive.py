@@ -178,7 +178,7 @@ class LedgerLiveDecoder:
                     raw_bigint_amount_str=raw_val_str,
                     token_decimals=decimals,
                     human_amount_decimal_str=human_op_amt,
-                    tx_status="CONFIRMED",
+                    tx_status="UNVERIFIED_LOCAL_RECORD",  # a wallet cache is not proof of on-chain confirmation
                     tx_timestamp=forensic_ts,
                     evidentiary_state=op_ev_state,
                 )

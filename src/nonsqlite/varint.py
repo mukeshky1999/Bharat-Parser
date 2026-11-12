@@ -26,7 +26,9 @@ def decode_le_varint(buf: bytes, pos: int = 0) -> Tuple[int, int]:
             return result, i + 1
         shift += 7
 
-    return result, limit
+    # Ran out of bytes (or 10 bytes) with the continuation bit still set: the value is truncated or
+    # overlong. Returning it as if complete would read garbage as a length (review R-16).
+    raise ValueError(f"Unterminated varint at position {pos}")
 
 
 def encode_le_varint(val: int) -> bytes:

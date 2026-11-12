@@ -4,6 +4,7 @@ Eliminates binary column-bleed (e.g. `user@yblzxxxxxx8119` -> `user@ybl`), Whats
 Java `.toString()` object hashes, and leading-hyphen fragments (`-2@ybl`).
 """
 
+import logging
 import os
 import re
 from collections import Counter
@@ -16,6 +17,8 @@ _EMAIL_PROVIDER_HANDLES = {
     'gmail', 'googlemail', 'yahoo', 'ymail', 'outlook', 'hotmail', 'live',
     'icloud', 'me', 'apple', 'rediffmail', 'protonmail', 'zoho', 'aol', 'msn',
 }
+
+logger = logging.getLogger(__name__)
 
 
 def is_valid_indian_mobile(phone_10: str) -> bool:
@@ -266,8 +269,8 @@ def harvest_ifsc_from_file(file_path: str) -> pd.DataFrame:
                         ifsc_counter[ifsc_str] += 1
                     except Exception:
                         continue
-    except Exception:
-        pass
+    except Exception as exc:  # a read failure must not look like 'nothing found'
+        logger.warning('harvest incomplete for %s: %s', file_path, exc)
 
     rows = [
         {'IFSC_Code': code, 'Bank_Name': resolve_ifsc_bank(code), 'Occurrences': cnt}
@@ -324,8 +327,8 @@ def harvest_entities_from_file(file_path: str) -> Tuple[pd.DataFrame, pd.DataFra
                         continue
 
                 prev_tail = chunk[-OVERLAP:] if len(chunk) >= OVERLAP else chunk
-    except Exception:
-        pass
+    except Exception as exc:  # a read failure must not look like 'nothing found'
+        logger.warning('harvest incomplete for %s: %s', file_path, exc)
 
     vpa_rows = []
     for vpa_val, count in vpa_counter.most_common():

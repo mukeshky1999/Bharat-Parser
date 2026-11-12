@@ -96,7 +96,7 @@ class DatingMatrimonialDecoder:
             plat_name = plat_val
 
         peer_uid = int(chat_data.get("peer_uid", 1))
-        direction = str(chat_data.get("direction", "INCOMING_RECEIVED"))
+        direction = str(chat_data.get("direction", "UNKNOWN"))
         msg_text = chat_data.get("message_text") or chat_data.get("message_text_or_prompt")
         handoff = extract_chat_handoffs(str(msg_text or ""))
 

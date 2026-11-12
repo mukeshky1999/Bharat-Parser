@@ -249,14 +249,17 @@ class BinanceDecoder:
                 continue
             order_no = item.get("orderNumber") or item.get("orderId")
             if order_no:
-                t_type = str(item.get("tradeType", "BUY")).upper()
+                # A missing tradeType/orderStatus is unknown, not a completed purchase (review R-18).
+                t_type = str(item.get("tradeType") or "").upper()
                 dir_enum = (
-                    CEXP2PTradeDirection.BUY_CRYPTO_PAID_FIAT
-                    if t_type == "BUY"
-                    else CEXP2PTradeDirection.SELL_CRYPTO_RECEIVED_FIAT
+                    CEXP2PTradeDirection.BUY_CRYPTO_PAID_FIAT if t_type == "BUY"
+                    else CEXP2PTradeDirection.SELL_CRYPTO_RECEIVED_FIAT if t_type == "SELL"
+                    else CEXP2PTradeDirection.UNKNOWN
                 )
-                status_raw = item.get("orderStatus", 4)
-                if status_raw in [4, "COMPLETED"]:
+                status_raw = item.get("orderStatus")
+                if status_raw is None:
+                    stat_enum = CEXP2POrderStatus.UNKNOWN
+                elif status_raw in [4, "COMPLETED"]:
                     stat_enum = CEXP2POrderStatus.COMPLETED_RELEASED
                 elif status_raw in [2, "CANCELLED"]:
                     stat_enum = CEXP2POrderStatus.CANCELLED
@@ -279,9 +282,9 @@ class BinanceDecoder:
                 buyer_uid = item.get("buyerUserNo")
                 buyer_name = item.get("buyerRealName")
 
-                counter_nick = seller_nick if t_type == "BUY" else buyer_nick
-                counter_uid = seller_uid if t_type == "BUY" else buyer_uid
-                counter_name = seller_name if t_type == "BUY" else buyer_name
+                counter_nick = seller_nick if t_type == "BUY" else (buyer_nick if t_type == "SELL" else None)
+                counter_uid = seller_uid if t_type == "BUY" else (buyer_uid if t_type == "SELL" else None)
+                counter_name = seller_name if t_type == "BUY" else (buyer_name if t_type == "SELL" else None)
 
                 # Extract counterparty payment method
                 pay_method = item.get("payMethod", {})
@@ -298,7 +301,7 @@ class BinanceDecoder:
                     )
                     iso_created = forensic_ts.utc_iso8601
                 else:
-                    iso_created = datetime.now(timezone.utc).isoformat()
+                    iso_created = ""  # not recorded: never substitute the time of analysis
 
                 ev_state = EvidentiaryState(
                     existence=EvidentiaryExistence.OBSERVED,
@@ -361,7 +364,7 @@ class BinanceDecoder:
         elif timestamp_ms > 0:
             ts_iso = ForensicTimestamp.from_unix_seconds(timestamp_ms).utc_iso8601
         else:
-            ts_iso = datetime.now(timezone.utc).isoformat()
+            ts_iso = ""  # not recorded: never substitute the time of analysis
 
         ev_state = EvidentiaryState(
             existence=EvidentiaryExistence.OBSERVED,
@@ -439,7 +442,7 @@ class BinanceDecoder:
             if raw_ts > 10_000_000_000:
                 ts_iso = ForensicTimestamp.from_unix_milliseconds(raw_ts).utc_iso8601
             else:
-                ts_iso = datetime.now(timezone.utc).isoformat()
+                ts_iso = ""  # not recorded: never substitute the time of analysis
 
             ev_state = EvidentiaryState(
                 existence=EvidentiaryExistence.OBSERVED,
@@ -474,7 +477,7 @@ class BinanceDecoder:
             if raw_ts > 10_000_000_000:
                 ts_iso = ForensicTimestamp.from_unix_milliseconds(raw_ts).utc_iso8601
             else:
-                ts_iso = datetime.now(timezone.utc).isoformat()
+                ts_iso = ""  # not recorded: never substitute the time of analysis
 
             matched_web3_uid = lookup.get(address)
 

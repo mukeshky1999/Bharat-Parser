@@ -7,6 +7,7 @@ counterparty and accurate DEBIT/CREDIT direction in PhonePe and WhatsApp stores.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -23,6 +24,14 @@ from parsers.app_overrides import (
     resolve_payer_payee_counterparty,
 )
 from parsers.protobuf_decoder import decode_protobuf_stream
+
+logger = logging.getLogger(__name__)
+
+
+def _name_tokens(name: Any) -> Set[str]:
+    """Lower-case word tokens of a column name: 'sentTime' -> {'sent','time'}, 'recipient_id' -> {'recipient','id'}."""
+    spaced = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', str(name))
+    return {t for t in re.split(r'[^a-z0-9]+', spaced.lower()) if t}
 
 
 def _decode_blob(raw: Any) -> Tuple[Optional[Dict[str, Any]], str]:
@@ -126,6 +135,9 @@ def dump_sqlite_tables(
                 )
                 if df.empty:
                     continue
+                if len(df) >= max_rows_per_table:
+                    logger.warning('TRUNCATED: table %s in %s has at least %d rows; only the first %d were read',
+                                   table, os.path.basename(db_path), max_rows_per_table, max_rows_per_table)
                 for col in df.columns:
                     sample = df[col].dropna()
                     if len(sample) == 0:
@@ -250,10 +262,10 @@ def _parse_phonepe_chats(db_path: str) -> pd.DataFrame:
     rows: List[Dict[str, Any]] = []
     for _, df in dump_sqlite_tables(db_path, max_rows_per_table=20000).items():
         lower = {str(c).lower(): c for c in df.columns}
-        ts_col = next((lower[k] for k in lower if any(x in k for x in ['time', 'date', 'created', 'sent', 'ts'])), None)
-        msg_col = next((lower[k] for k in lower if any(x in k for x in ['message', 'body', 'text', 'payload', 'note', 'content'])), None)
-        sender_col = next((lower[k] for k in lower if any(x in k for x in ['sender', 'from', 'origin'])), None)
-        recipient_col = next((lower[k] for k in lower if any(x in k for x in ['recipient', 'receiver', 'to', 'destination'])), None)
+        ts_col = next((lower[k] for k in lower if _name_tokens(k) & {'time', 'timestamp', 'date', 'created', 'sent', 'ts'}), None)
+        msg_col = next((lower[k] for k in lower if _name_tokens(k) & {'message', 'msg', 'body', 'text', 'payload', 'note', 'content'}), None)
+        sender_col = next((lower[k] for k in lower if _name_tokens(k) & {'sender', 'from', 'origin'}), None)
+        recipient_col = next((lower[k] for k in lower if _name_tokens(k) & {'recipient', 'receiver', 'to', 'destination'}), None)
         if not msg_col:
             continue
         for _, r in df.iterrows():
@@ -271,8 +283,8 @@ def _parse_phonepe_chats(db_path: str) -> pd.DataFrame:
                 continue
             rows.append({
                 'Timestamp': normalize_timestamp_value(r.get(ts_col), 'auto') if ts_col else '',
-                'Sender': str(r.get(sender_col, 'Local Device/User')) if sender_col else 'Local Device/User',
-                'Recipient': str(r.get(recipient_col, 'Counterparty')) if recipient_col else 'Counterparty',
+                'Sender': str(r.get(sender_col)) if sender_col and r.get(sender_col) is not None else 'Unknown',
+                'Recipient': str(r.get(recipient_col)) if recipient_col and r.get(recipient_col) is not None else 'Unknown',
                 'Message': msg_str[:8000],
             })
     if rows:
@@ -365,7 +377,7 @@ def _parse_phonepe_transactions(db_path: str, owner_identifiers: Optional[Set[st
                     'Transaction_ID': txid or 'N/A',
                     'Amount': amount,
                     'Counterparty': resolved_cpty or 'Unknown',
-                    'Status': status or 'SUCCESS',
+                    'Status': status or 'UNKNOWN',
                     'Type': tx_type,
                 })
             except Exception:
@@ -456,7 +468,7 @@ def _parse_whatsapp_payments(db_path: str) -> pd.DataFrame:
                 'Transaction_ID': txid,
                 'Amount': amount,
                 'Counterparty': cparty,
-                'Status': str(r.get('status', 'SUCCESS')),
+                'Status': str(r.get('status') or 'UNKNOWN'),
                 'Type': 'TRANSFER',
             })
     if rows:
@@ -567,8 +579,8 @@ def deep_parse(
             result['notifications'] = _parse_whatsapp_calls(db_path)
         elif tag == 'jiofinance_http':
             result['notifications'] = _parse_jiofinance_http(db_path)
-    except Exception:
-        pass
+    except Exception as exc:  # a failed app-specific parse must not look like an empty database
+        logger.warning('app-specific parse failed for %s (%s): %s', db_path, tag, exc)
 
     dumps = dump_sqlite_tables(db_path)
     extracted_frames: List[pd.DataFrame] = []

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import binascii
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -34,6 +35,7 @@ from parsers.chat_social_privacy_parsers import (
     normalize_iso_ist,
 )
 
+logger = logging.getLogger(__name__)
 IST = timezone(timedelta(hours=5, minutes=30))
 
 
@@ -183,7 +185,7 @@ def parse_facebook_messenger_database(
                     "Message_Text": raw_text or ("[Media Attachment]" if attach_path else ""),
                     "Message_Type": "UNSENT" if is_unsent else (_safe_str(row["_type"]) or "Text"),
                     "Direction": "Outgoing" if is_from_me else "Incoming",
-                    "Status": "Unsent / Recalled" if is_unsent else "Delivered",
+                    "Status": "Unsent / Recalled" if is_unsent else "Unknown",
                     "Quoted_Message_Text": "",
                     "Sender_ID": sender_id,
                     "Sender_Name": sender_name,
@@ -209,9 +211,9 @@ def parse_facebook_messenger_database(
                     "Source_File": os.path.basename(db_path),
                     "Source_Table": msg_tbl,
                     "Row_ID": row["_rowid"],
-                    "Page_Number": int(row["_rowid"]) // 32 + 1,
+                    "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                     "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
-                    "Recovery_Method": "RECALLED_FREELIST" if is_unsent else "ACTIVE_SQLITE",
+                    "Recovery_Method": "ACTIVE_SQLITE (unsent flag set)" if is_unsent else "ACTIVE_SQLITE",
                 })
 
         # ----------------------------------------------------------------------
@@ -259,8 +261,8 @@ def parse_facebook_messenger_database(
                     "Thread_Title": _safe_str(row["_thread"]),
                     "Message_Text": _safe_str(row["_text"]),
                     "Message_Type": "E2EE Message",
-                    "Direction": "Incoming",
-                    "Status": "Unsent" if is_unsent else "Delivered",
+                    "Direction": "Unknown",  # no sent/received column is read (review R-13)
+                    "Status": "Unsent" if is_unsent else "Unknown",
                     "Quoted_Message_Text": "",
                     "Sender_ID": _safe_str(row["_sender"]),
                     "Sender_Name": _safe_str(row["_sender"]),
@@ -286,14 +288,14 @@ def parse_facebook_messenger_database(
                     "Source_File": os.path.basename(db_path),
                     "Source_Table": tname,
                     "Row_ID": row["_rowid"],
-                    "Page_Number": int(row["_rowid"]) // 32 + 1,
+                    "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                     "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "E2EE_SQLITE",
                 })
 
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:  # do not lose the failure silently
+        logger.warning("parse failed for %s: %s", db_path, exc)
 
     return make_categorized_dataframe(records)
 
@@ -330,8 +332,8 @@ def parse_facebook_contacts_database(db_path: str) -> pd.DataFrame:
                     "Source_Table": tname,
                 })
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:  # do not lose the failure silently
+        logger.warning("parse failed for %s: %s", db_path, exc)
 
     return pd.DataFrame(contacts)
 
@@ -392,8 +394,8 @@ def parse_discord_database(db_path_or_dir: str) -> pd.DataFrame:
                             "Thread_Title": f"Discord Channel {_safe_str(r['_ch'])}",
                             "Message_Text": _safe_str(r["_c"]),
                             "Message_Type": "Discord Message",
-                            "Direction": "Incoming",
-                            "Status": "Sent",
+                            "Direction": "Unknown",  # no sent/received column is read (review R-13)
+                            "Status": "Unknown",
                             "Quoted_Message_Text": "",
                             "Sender_ID": author_id or author_name,
                             "Sender_Name": author_name,
@@ -419,7 +421,7 @@ def parse_discord_database(db_path_or_dir: str) -> pd.DataFrame:
                             "Source_File": os.path.basename(path),
                             "Source_Table": t,
                             "Row_ID": r["_rowid"],
-                            "Page_Number": int(r["_rowid"]) // 32 + 1,
+                            "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                             "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                             "Recovery_Method": "ROOM_SQLITE",
                         })
@@ -441,8 +443,8 @@ def parse_discord_database(db_path_or_dir: str) -> pd.DataFrame:
                                 "Thread_Title": f"Discord Channel {_safe_str(val_json.get('channel_id', ''))}",
                                 "Message_Text": _safe_str(val_json.get("content", "")),
                                 "Message_Type": "KV Discord Message",
-                                "Direction": "Incoming",
-                                "Status": "Delivered",
+                                "Direction": "Unknown",  # no sent/received column is read (review R-13)
+                                "Status": "Unknown",
                                 "Quoted_Message_Text": "",
                                 "Sender_ID": _safe_str(auth.get("id", "")) if isinstance(auth, dict) else "",
                                 "Sender_Name": author_name,
@@ -468,7 +470,7 @@ def parse_discord_database(db_path_or_dir: str) -> pd.DataFrame:
                                 "Source_File": os.path.basename(path),
                                 "Source_Table": t,
                                 "Row_ID": r["_rowid"],
-                                "Page_Number": int(r["_rowid"]) // 32 + 1,
+                                "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                                 "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                                 "Recovery_Method": "KV_CACHE_SQLITE",
                             })
@@ -547,8 +549,8 @@ def parse_skype_teams_database(db_path: str) -> pd.DataFrame:
                     "Thread_Title": _safe_str(r["_chat"]),
                     "Message_Text": clean_body,
                     "Message_Type": "Skype Message",
-                    "Direction": "Incoming",
-                    "Status": "Delivered",
+                    "Direction": "Unknown",  # no sent/received column is read (review R-13)
+                    "Status": "Unknown",
                     "Quoted_Message_Text": "",
                     "Sender_ID": _safe_str(r["_author"]),
                     "Sender_Name": _safe_str(r["_dispname"]) or _safe_str(r["_author"]),
@@ -574,7 +576,7 @@ def parse_skype_teams_database(db_path: str) -> pd.DataFrame:
                     "Source_File": os.path.basename(db_path),
                     "Source_Table": skype_msg_tbl,
                     "Row_ID": r["_rowid"],
-                    "Page_Number": int(r["_rowid"]) // 32 + 1,
+                    "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                     "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "SKYPE_SQLITE",
                 })
@@ -607,8 +609,8 @@ def parse_skype_teams_database(db_path: str) -> pd.DataFrame:
                     "Thread_Title": "Teams Channel",
                     "Message_Text": clean_body,
                     "Message_Type": "Teams Chat",
-                    "Direction": "Incoming",
-                    "Status": "Sent",
+                    "Direction": "Unknown",  # no sent/received column is read (review R-13)
+                    "Status": "Unknown",
                     "Quoted_Message_Text": "",
                     "Sender_ID": _safe_str(r["_creator"]),
                     "Sender_Name": _safe_str(r["_creator"]),
@@ -634,14 +636,14 @@ def parse_skype_teams_database(db_path: str) -> pd.DataFrame:
                     "Source_File": os.path.basename(db_path),
                     "Source_Table": teams_tbl,
                     "Row_ID": r["_rowid"],
-                    "Page_Number": int(r["_rowid"]) // 32 + 1,
+                    "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                     "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "TEAMS_SQLITE",
                 })
 
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:  # do not lose the failure silently
+        logger.warning("parse failed for %s: %s", db_path, exc)
 
     return make_categorized_dataframe(records)
 
@@ -733,14 +735,14 @@ def parse_viber_database(db_path: str) -> pd.DataFrame:
                     "Source_File": os.path.basename(db_path),
                     "Source_Table": msg_tbl,
                     "Row_ID": r["_rowid"],
-                    "Page_Number": int(r["_rowid"]) // 32 + 1,
+                    "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                     "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "VIBER_SQLITE",
                 })
 
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:  # do not lose the failure silently
+        logger.warning("parse failed for %s: %s", db_path, exc)
 
     return make_categorized_dataframe(records)
 
@@ -820,14 +822,14 @@ def parse_wechat_database(db_path: str) -> pd.DataFrame:
                     "Source_File": os.path.basename(db_path),
                     "Source_Table": msg_tbl,
                     "Row_ID": r["_rowid"],
-                    "Page_Number": int(r["_rowid"]) // 32 + 1,
+                    "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                     "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "WECHAT_SQLITE",
                 })
 
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:  # do not lose the failure silently
+        logger.warning("parse failed for %s: %s", db_path, exc)
 
     return make_categorized_dataframe(records)
 
@@ -878,8 +880,8 @@ def parse_line_database(db_path: str) -> pd.DataFrame:
                     "Thread_Title": f"LINE Chat {_safe_str(r['_chat'])}",
                     "Message_Text": _safe_str(r["_content"]),
                     "Message_Type": "LINE Chat",
-                    "Direction": "Incoming",
-                    "Status": "Delivered",
+                    "Direction": "Unknown",  # no sent/received column is read (review R-13)
+                    "Status": "Unknown",
                     "Quoted_Message_Text": "",
                     "Sender_ID": _safe_str(r["_from"]),
                     "Sender_Name": _safe_str(r["_from"]),
@@ -905,14 +907,14 @@ def parse_line_database(db_path: str) -> pd.DataFrame:
                     "Source_File": os.path.basename(db_path),
                     "Source_Table": ch_tbl,
                     "Row_ID": r["_rowid"],
-                    "Page_Number": int(r["_rowid"]) // 32 + 1,
+                    "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                     "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "LINE_SQLITE",
                 })
 
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:  # do not lose the failure silently
+        logger.warning("parse failed for %s: %s", db_path, exc)
 
     return make_categorized_dataframe(records)
 
@@ -951,8 +953,8 @@ def parse_imo_kakaotalk_database(db_path: str) -> pd.DataFrame:
                     "Thread_Title": f"IMO {_safe_str(r['_peer'])}",
                     "Message_Text": _safe_str(r["_msg"]),
                     "Message_Type": "IMO Message",
-                    "Direction": "Incoming",
-                    "Status": "Delivered",
+                    "Direction": "Unknown",  # no sent/received column is read (review R-13)
+                    "Status": "Unknown",
                     "Quoted_Message_Text": "",
                     "Sender_ID": _safe_str(r["_peer"]),
                     "Sender_Name": _safe_str(r["_peer"]),
@@ -978,7 +980,7 @@ def parse_imo_kakaotalk_database(db_path: str) -> pd.DataFrame:
                     "Source_File": os.path.basename(db_path),
                     "Source_Table": tbl,
                     "Row_ID": r["_rowid"],
-                    "Page_Number": int(r["_rowid"]) // 32 + 1,
+                    "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                     "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "IMO_SQLITE",
                 })
@@ -1004,8 +1006,8 @@ def parse_imo_kakaotalk_database(db_path: str) -> pd.DataFrame:
                     "Thread_Title": f"KakaoTalk {_safe_str(r['_chat'])}",
                     "Message_Text": _safe_str(r["_msg"]),
                     "Message_Type": "KakaoTalk Log",
-                    "Direction": "Incoming",
-                    "Status": "Delivered",
+                    "Direction": "Unknown",  # no sent/received column is read (review R-13)
+                    "Status": "Unknown",
                     "Quoted_Message_Text": "",
                     "Sender_ID": _safe_str(r["_user"]),
                     "Sender_Name": _safe_str(r["_user"]),
@@ -1031,14 +1033,14 @@ def parse_imo_kakaotalk_database(db_path: str) -> pd.DataFrame:
                     "Source_File": os.path.basename(db_path),
                     "Source_Table": tbl,
                     "Row_ID": r["_rowid"],
-                    "Page_Number": int(r["_rowid"]) // 32 + 1,
+                    "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                     "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "KAKAOTALK_SQLITE",
                 })
 
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:  # do not lose the failure silently
+        logger.warning("parse failed for %s: %s", db_path, exc)
 
     return make_categorized_dataframe(records)
 
@@ -1098,8 +1100,8 @@ def parse_twitter_threads_reddit_linkedin(db_path: str) -> pd.DataFrame:
                     "Thread_Title": f"X DM {sender}",
                     "Message_Text": text,
                     "Message_Type": "Twitter DM",
-                    "Direction": "Incoming",
-                    "Status": "Delivered",
+                    "Direction": "Unknown",  # no sent/received column is read (review R-13)
+                    "Status": "Unknown",
                     "Quoted_Message_Text": "",
                     "Sender_ID": sender,
                     "Sender_Name": sender,
@@ -1125,7 +1127,7 @@ def parse_twitter_threads_reddit_linkedin(db_path: str) -> pd.DataFrame:
                     "Source_File": os.path.basename(db_path),
                     "Source_Table": t,
                     "Row_ID": r["_rowid"],
-                    "Page_Number": int(r["_rowid"]) // 32 + 1,
+                    "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                     "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "TWITTER_SQLITE",
                 })
@@ -1153,8 +1155,8 @@ def parse_twitter_threads_reddit_linkedin(db_path: str) -> pd.DataFrame:
                         "Thread_Title": f"LinkedIn Conversation",
                         "Message_Text": _safe_str(r["_body"]),
                         "Message_Type": "LinkedIn Message",
-                        "Direction": "Incoming",
-                        "Status": "Delivered",
+                        "Direction": "Unknown",  # no sent/received column is read (review R-13)
+                        "Status": "Unknown",
                         "Quoted_Message_Text": "",
                         "Sender_ID": _safe_str(r["_from"]),
                         "Sender_Name": _safe_str(r["_from"]),
@@ -1180,14 +1182,14 @@ def parse_twitter_threads_reddit_linkedin(db_path: str) -> pd.DataFrame:
                         "Source_File": os.path.basename(db_path),
                         "Source_Table": t,
                         "Row_ID": r["_rowid"],
-                        "Page_Number": int(r["_rowid"]) // 32 + 1,
+                        "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                         "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                         "Recovery_Method": "LINKEDIN_SQLITE",
                     })
 
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:  # do not lose the failure silently
+        logger.warning("parse failed for %s: %s", db_path, exc)
 
     return make_categorized_dataframe(records)
 
@@ -1272,7 +1274,7 @@ def parse_truecaller_database(db_path: str) -> pd.DataFrame:
                     "Source_File": os.path.basename(db_path),
                     "Source_Table": msg_tbl,
                     "Row_ID": r["_rowid"],
-                    "Page_Number": int(r["_rowid"]) // 32 + 1,
+                    "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                     "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "TRUECALLER_SQLITE",
                 })
@@ -1302,7 +1304,7 @@ def parse_truecaller_database(db_path: str) -> pd.DataFrame:
                         "Thread_Title": f"Caller ID: {name} ({num})",
                         "Message_Text": f"[TRUECALLER IDENTIFIED] Name: {name} | Number: {num} | Spam/Fraud Score: {spam}",
                         "Message_Type": "Caller Identity",
-                        "Direction": "Incoming",
+                        "Direction": "Unknown",  # no sent/received column is read (review R-13)
                         "Status": "Spam / Fraud Tagged" if str(spam) not in ("0", "") else "Identified",
                         "Quoted_Message_Text": "",
                         "Sender_ID": num,
@@ -1329,14 +1331,14 @@ def parse_truecaller_database(db_path: str) -> pd.DataFrame:
                         "Source_File": os.path.basename(db_path),
                         "Source_Table": contact_tbl,
                         "Row_ID": r["_rowid"],
-                        "Page_Number": int(r["_rowid"]) // 32 + 1,
+                        "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                         "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                         "Recovery_Method": "TRUECALLER_CALLER_ID",
                     })
 
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:  # do not lose the failure silently
+        logger.warning("parse failed for %s: %s", db_path, exc)
 
     return make_categorized_dataframe(records)
 
@@ -1388,8 +1390,8 @@ def parse_olx_database(db_path: str) -> pd.DataFrame:
                     "Thread_Title": f"OLX Ad Thread {_safe_str(r['_thread'])}",
                     "Message_Text": text,
                     "Message_Type": "UPI Lure / Payment Request" if is_upi_lure else "OLX Message",
-                    "Direction": "Incoming",
-                    "Status": "Flagged UPI Lure" if is_upi_lure else "Delivered",
+                    "Direction": "Unknown",  # no sent/received column is read (review R-13)
+                    "Status": "Flagged UPI Lure" if is_upi_lure else "Unknown",
                     "Quoted_Message_Text": "",
                     "Sender_ID": _safe_str(r["_sender"]),
                     "Sender_Name": _safe_str(r["_sender"]),
@@ -1415,14 +1417,14 @@ def parse_olx_database(db_path: str) -> pd.DataFrame:
                     "Source_File": os.path.basename(db_path),
                     "Source_Table": t,
                     "Row_ID": r["_rowid"],
-                    "Page_Number": int(r["_rowid"]) // 32 + 1,
+                    "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                     "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "OLX_CYBERCRIME_SQLITE",
                 })
 
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:  # do not lose the failure silently
+        logger.warning("parse failed for %s: %s", db_path, exc)
 
     return make_categorized_dataframe(records)
 
@@ -1461,8 +1463,8 @@ def parse_sharechat_moj_database(db_path: str) -> pd.DataFrame:
                     "Thread_Title": f"ShareChat Room",
                     "Message_Text": _safe_str(r["_msg"]),
                     "Message_Type": "ShareChat Message",
-                    "Direction": "Incoming",
-                    "Status": "Delivered",
+                    "Direction": "Unknown",  # no sent/received column is read (review R-13)
+                    "Status": "Unknown",
                     "Quoted_Message_Text": "",
                     "Sender_ID": _safe_str(r["_user"]),
                     "Sender_Name": _safe_str(r["_user"]),
@@ -1488,14 +1490,14 @@ def parse_sharechat_moj_database(db_path: str) -> pd.DataFrame:
                     "Source_File": os.path.basename(db_path),
                     "Source_Table": t,
                     "Row_ID": r["_rowid"],
-                    "Page_Number": int(r["_rowid"]) // 32 + 1,
+                    "Page_Number": 0,  # page unknown: no B-tree walk (review R-13)
                     "Byte_Offset": None,  # no B-tree walk: offset unknown (C-09)
                     "Recovery_Method": "SHARECHAT_SQLITE",
                 })
 
         conn.close()
-    except Exception:
-        pass
+    except Exception as exc:  # do not lose the failure silently
+        logger.warning("parse failed for %s: %s", db_path, exc)
 
     return make_categorized_dataframe(records)
 

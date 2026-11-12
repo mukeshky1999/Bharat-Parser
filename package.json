@@ -16,7 +16,7 @@
     "package:electron": "electron-builder --win --x64",
     "electron:start": "electron .",
     "test:python": "python -m pytest tests",
-    "test:ts": "npx jiti ui/tests/workbench_store_test.ts && npx jiti tests/test_forensic_client.ts"
+    "test:ts": "npx jiti ui/tests/workbench_store_test.ts && npx jiti ui/tests/csv_export_test.ts && npx jiti tests/test_forensic_client.ts"
   },
   "keywords": [
     "forensics",

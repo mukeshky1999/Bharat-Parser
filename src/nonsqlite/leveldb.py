@@ -324,7 +324,7 @@ class LevelDBDecoder:
             try:
                 return snappy_decompress(payload)
             except Exception as exc:
-                logger.debug("Snappy decompression failed: %s", exc)
+                logger.warning("Snappy block at %d unreadable, skipped: %s", block_off, exc)
                 return b""
         elif comp_type == 0x02:
             try:
@@ -401,6 +401,10 @@ class LevelDBDecoder:
                 val_len, v3 = decode_le_varint(block_buf, pos)
                 pos += v3
 
+                if pos + unshared + val_len > e_end or shared > len(prev_key):
+                    # Entry runs past the block (corrupt/truncated): stop rather than emit a short key or value.
+                    logger.warning("LevelDB block entry at %d is inconsistent; remaining entries skipped", entry_start)
+                    break
                 key_delta = block_buf[pos:pos + unshared]
                 pos += unshared
                 val_bytes = block_buf[pos:pos + val_len]

@@ -96,3 +96,14 @@ parsers hard-code INCOMING/RECEIVED; call direction from call result), R-03 (sil
 R-08 (UPI decoders always DEBIT_SENT, missing status = SUCCESS), R-09 (Section 63 certificate time), R-10 (OCR confidence
 label), R-11 (fiat/crypto alignment), R-12 (tautological victim-lock test). Python: 498 passed.
 Open: X-14 (same default in unwired decoders), U-06 (two views with no data source), L-08, X-13.
+
+### Phase 1c: final review pass (2026-11-12). See `REVIEW_FINDINGS_2.md` section 6
+
+Fixed with regression tests: R-13 (messenger parsers: direction, status, page number, recovery label, swallowed failures),
+R-13b (knowledgeC timeline never read), Q-1 (deep_sqlite truncation, invented labels, substring columns), Q-2 (owner dossier
+took any `@` value as the owner), Q-3 (benchmark verdicts), R-14 (OCR Aadhaar guess, `ocr_performed`), R-15 (analysis time
+used as transaction time), R-16 (varint/Snappy/LevelDB truncation), R-17 (fixture special case in wei conversion),
+R-18 (Binance P2P defaults), R-19 (laundering-chain correlator), X-14 (direction defaults in unwired decoders),
+U-07 (UI re-invented direction, provenance, case particulars and labels), U-08 (CSV export truncation and formulas), T-01.
+Python: 508 passed. TypeScript: store, CSV and client suites pass; `tsc --noEmit` clean.
+Open: X-13, U-01..U-06 (redesign), Q-1 amount unit, R-16 block CRC, L-08, X-12. Unread modules are listed in the coverage statement.

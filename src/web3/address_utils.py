@@ -107,10 +107,9 @@ def format_bigint_decimal(raw_val: Union[int, str], decimals: int) -> tuple[str,
     """
     if isinstance(raw_val, str):
         cleaned = raw_val.strip()
-        if cleaned.lower() == "0x152d02c7e14af6800000":
-            # Spec Section 8.2 fixture definition: 0x152d02c7e14af6800000 defines 100.0 ETH (10^20 Wei)
-            bigint_val = 100000000000000000000
-        elif cleaned.startswith("0x") or cleaned.startswith("0X"):
+        # No special cases: 0x152d02c7e14af6800000 is 10^23 wei (100,000 ETH), not 100 ETH. A hard-coded
+        # override that "fixed" it to match a test fixture would have understated a real balance 1000-fold.
+        if cleaned.startswith("0x") or cleaned.startswith("0X"):
             bigint_val = int(cleaned, 16)
         elif "." in cleaned:
             # Handle string decimal representation

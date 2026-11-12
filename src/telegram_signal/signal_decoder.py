@@ -186,7 +186,7 @@ class SignalDatabaseDecoder:
                         thread_or_dialog_id=str(thread_id),
                         thread_classification=ThreadClassification.DIRECT_1ON1_CHAT,
                         native_message_id=str(m_id),
-                        direction="INCOMING_RECEIVED",
+                        direction="UNKNOWN",
                         sent_utc_ns=sent_ns,
                         sent_utc_iso=sent_iso,
                         sender_peer_id=str(from_id) if from_id else None,
@@ -225,7 +225,7 @@ class SignalDatabaseDecoder:
                     is_edited = 1 if uid_val in edit_revisions_map else 0
                     diff_json = json.dumps(edit_revisions_map[uid_val]) if uid_val in edit_revisions_map else None
 
-                    direction = "OUTGOING_SENT" if (r_type and "Outgoing" in r_type) else "INCOMING_RECEIVED"
+                    direction = ("UNKNOWN" if not r_type else ("OUTGOING_SENT" if "Outgoing" in r_type else "INCOMING_RECEIVED"))
                     sent_ns = ts * 1_000_000 if ts else 0
                     sent_iso = _format_utc_iso_ms(ts) if ts else ""
 

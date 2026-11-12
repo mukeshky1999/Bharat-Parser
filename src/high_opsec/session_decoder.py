@@ -220,7 +220,7 @@ class SessionDecoder:
                     cur.execute(query)
                     for m_id, body_val, sender_val, ts_val, type_val, ttl_val, th_val in cur.fetchall():
                         # Direction check
-                        direction = "INCOMING_RECEIVED"
+                        direction = "UNKNOWN"  # no sent/received flag read (X-14)
                         if type_val:
                             if isinstance(type_val, int) and type_val in (2, 23, 87, 88):
                                 direction = "OUTGOING_SENT"

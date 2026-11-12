@@ -46,6 +46,7 @@ class SocialMessageDirection(str, Enum):
     """Message transmission direction."""
     OUTGOING_SENT = "OUTGOING_SENT"
     INCOMING_RECEIVED = "INCOMING_RECEIVED"
+    UNKNOWN = "UNKNOWN"
     VOIP_CALL_EVENT = "VOIP_CALL_EVENT"
     SYSTEM_EVENT = "SYSTEM_EVENT"
 
@@ -122,7 +123,7 @@ class SocialMessageRecord:
     recovery_classification: ResidualConfidence = ResidualConfidence.ORIGINAL_RECORD
     thread_or_channel_id: str = ""
     native_message_id: str = ""
-    direction: str = "INCOMING_RECEIVED"
+    direction: str = "UNKNOWN"
     sender_id_and_handle: Optional[str] = None
     receiver_or_thread_title: Optional[str] = None
     content_category: SocialContentCategory = SocialContentCategory.TEXT

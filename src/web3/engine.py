@@ -199,7 +199,7 @@ class Web3SelfCustodyWalletsEngine:
 
         # Insert transactions
         for tx in self.transactions:
-            ts_iso = tx.tx_timestamp.utc_iso8601 if tx.tx_timestamp else datetime.now(timezone.utc).isoformat()
+            ts_iso = tx.tx_timestamp.utc_iso8601 if tx.tx_timestamp else ""  # not recorded: never substitute the time of analysis
             # Calculate nanoseconds
             try:
                 dt_obj = datetime.fromisoformat(ts_iso.replace("Z", "+00:00"))
@@ -238,7 +238,7 @@ class Web3SelfCustodyWalletsEngine:
 
         # Insert cross-chain swap orders
         for sw in self.swaps:
-            sw_iso = sw.swap_timestamp.utc_iso8601 if sw.swap_timestamp else datetime.now(timezone.utc).isoformat()
+            sw_iso = sw.swap_timestamp.utc_iso8601 if sw.swap_timestamp else ""  # not recorded: never substitute the time of analysis
             cursor.execute("""
                 INSERT INTO web3_cross_chain_bridge_and_swap_orders (
                     app_instance_id, source_vfs_file_id, swap_aggregator_provider,

@@ -95,7 +95,7 @@ class Web3TransactionRecord:
     token_decimals: int = 18
     human_amount_decimal_str: str = "0.0"
     monero_secret_tx_key: Optional[str] = None
-    tx_status: str = "CONFIRMED"
+    tx_status: str = "UNVERIFIED_LOCAL_RECORD"  # set from the record, never assumed
     tx_timestamp: ForensicTimestamp = field(
         default_factory=lambda: ForensicTimestamp.from_unix_seconds(0)
     )

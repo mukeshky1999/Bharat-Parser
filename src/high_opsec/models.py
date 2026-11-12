@@ -47,6 +47,7 @@ class MessageDirection(str, Enum):
     """Message transmission direction."""
     OUTGOING_SENT = "OUTGOING_SENT"
     INCOMING_RECEIVED = "INCOMING_RECEIVED"
+    UNKNOWN = "UNKNOWN"
     SYSTEM_EVENT = "SYSTEM_EVENT"
 
 
@@ -138,7 +139,7 @@ class OpSecMessageRecord:
     source_vfs_file_id: int = 0
     recovery_classification: ResidualConfidence = ResidualConfidence.ORIGINAL_RECORD
     thread_identifier: str = ""
-    direction: str = "INCOMING_RECEIVED"
+    direction: str = "UNKNOWN"
     sender_crypto_handle: Optional[str] = None
     receiver_crypto_handle: Optional[str] = None
     message_body_text: Optional[str] = None

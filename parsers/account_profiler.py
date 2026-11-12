@@ -107,7 +107,6 @@ def _inspect_key_val(key: str, val: Any, profile_data: Dict[str, Any]) -> None:
     # 2. Owner Email Address
     if (
         any(x in k_lower for x in ['email', 'mail', 'gmail', 'google_account', 'login_id'])
-        or '@' in val_str
     ) and not profile_data.get('Owner_Email'):
         em_m = EMAIL_RE.search(val_str)
         if em_m:
@@ -116,7 +115,6 @@ def _inspect_key_val(key: str, val: Any, profile_data: Dict[str, Any]) -> None:
     # 3. Primary VPA (Strictly validated against NPCI handles)
     if (
         any(x in k_lower for x in ['vpa', 'upi_id', 'handle', 'virtual_address', 'primary_vpa'])
-        or '@' in val_str
     ) and not profile_data.get('Primary_VPA'):
         for token in re.findall(r'[a-zA-Z0-9.\-_]{3,64}@[a-zA-Z0-9]{2,32}', val_str):
             valid_vpa = clean_and_validate_vpa(token)
@@ -195,22 +193,8 @@ def extract_account_profile(file_path: str) -> Dict[str, Any]:
                 if val:
                     _inspect_key_val(name_attr, val, profile_data)
         except Exception:
-            try:
-                with open(file_path, 'rb') as f:
-                    raw_text = f.read().decode('utf-8', errors='ignore')
-                for token in re.findall(r'[a-zA-Z0-9.\-_]{3,64}@[a-zA-Z0-9]{2,32}', raw_text):
-                    valid_vpa = clean_and_validate_vpa(token)
-                    if valid_vpa:
-                        profile_data.setdefault('Primary_VPA', valid_vpa)
-                        vpa_phone_m = re.match(r'^([6-9]\d{9})\b', valid_vpa.split('@')[0])
-                        if vpa_phone_m and is_valid_indian_mobile(vpa_phone_m.group(1)):
-                            profile_data['Registered_Phone'] = vpa_phone_m.group(1)
-                        break
-                em_m = EMAIL_RE.search(raw_text)
-                if em_m:
-                    profile_data.setdefault('Owner_Email', em_m.group(1).lower())
-            except Exception:
-                pass
+            # Malformed XML: the first VPA/e-mail in free text is not known to be the owner's, so none is taken.
+            pass
 
     return profile_data
 
@@ -327,7 +311,8 @@ def build_unified_owner_dossier(
             code = str(i_row.get('IFSC_Code', '')).strip()
             b_name = str(i_row.get('Bank_Name', '')).strip()
             if code:
-                bank_accounts.append(f"{b_name} (IFSC: {code})")
+                # An IFSC seen anywhere in the evidence is usually a counterparty's, not the owner's.
+                bank_accounts.append(f"{b_name} (IFSC seen in evidence: {code}; not confirmed as owner's)")
 
     # Deduplicate while preserving order
     unique_vpas = list(dict.fromkeys(owner_vpas))

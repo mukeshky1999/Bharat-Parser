@@ -376,7 +376,8 @@ class WhatsAppDatabaseDecoder:
                 chat_jid = chat_info[0]
                 chat_title = chat_info[1]
 
-                direction = MessageDirection.OUTGOING_SENT if from_me == 1 else MessageDirection.INCOMING_RECEIVED
+                direction = (MessageDirection.OUTGOING_SENT if from_me == 1
+                             else MessageDirection.INCOMING_RECEIVED if from_me == 0 else MessageDirection.UNKNOWN)
 
                 # Resolve sender
                 resolved_phone_jid = None
@@ -523,7 +524,8 @@ class WhatsAppDatabaseDecoder:
                 msg_date, z_text, msg_type, stanza_id
             ) in cur.fetchall():
                 c_jid, p_name = chat_sessions_ios.get(z_session, ("", None))
-                direction = MessageDirection.OUTGOING_SENT if is_from_me == 1 else MessageDirection.INCOMING_RECEIVED
+                direction = (MessageDirection.OUTGOING_SENT if is_from_me == 1
+                             else MessageDirection.INCOMING_RECEIVED if is_from_me == 0 else MessageDirection.UNKNOWN)
 
                 # Convert Cocoa timestamp to Unix ms
                 unix_sec = (msg_date + COCOA_EPOCH_OFFSET) if msg_date else 0.0

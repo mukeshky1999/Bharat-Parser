@@ -70,8 +70,8 @@ class RupeeToCryptoCorrelator:
                     diff_mins = (upi_dt - order_dt).total_seconds() / 60.0
                     if -30.0 <= diff_mins <= 60.0:
                         candidate_upis.append(upi)
-                else:
-                    candidate_upis.append(upi)
+                # With no usable timestamp on either side there is nothing to link on except the amount,
+                # and an amount alone is not a lead worth reporting: skip (review R-19).
 
             matched_upis: List[Phase3UPIPayment] = []
             pattern = LaunderingPattern.SINGLE_UPI_TO_P2P_USDT
@@ -84,7 +84,9 @@ class RupeeToCryptoCorrelator:
                     break
 
             # Tier C: Split-UPI Smurfing Subset-Sum Correlator
-            if not matched_upis and len(candidate_upis) >= 2:
+            # Cap the search: the number of subsets grows combinatorially and with enough candidates some subset
+            # will sum to the order amount by coincidence.
+            if not matched_upis and 2 <= len(candidate_upis) <= 12:
                 for k in range(2, min(6, len(candidate_upis) + 1)):
                     found = False
                     for subset in itertools.combinations(candidate_upis, k):
@@ -108,13 +110,10 @@ class RupeeToCryptoCorrelator:
                 if p2p_comp_dt and w_dt:
                     diff_hours = (w_dt - p2p_comp_dt).total_seconds() / 3600.0
                     if 0.0 <= diff_hours <= 24.0:
-                        if abs(w.amount - order.crypto_quantity) <= 10.0 or w.currency == order.crypto_currency:
+                        # Same asset AND a similar quantity. 'Or' linked any same-currency withdrawal in the window.
+                        if abs(w.amount - order.crypto_quantity) <= 10.0 and w.currency == order.crypto_currency:
                             matched_withdrawal = w
                             break
-                else:
-                    if abs(w.amount - order.crypto_quantity) <= 10.0:
-                        matched_withdrawal = w
-                        break
 
             # 3. Hop 4: Self-Custody / Wallet info
             hop4_json = None

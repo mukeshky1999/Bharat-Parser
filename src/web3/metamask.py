@@ -183,7 +183,7 @@ class MetaMaskDecoder:
             tx_hash = tx_obj.get("hash", "")
             chain_id = tx_obj.get("chainId", "0x1")
             raw_time = tx_obj.get("time", 0)
-            status_str = str(tx_obj.get("status", "CONFIRMED")).upper()
+            status_str = str(tx_obj.get("status", "UNVERIFIED_LOCAL_RECORD")).upper()
 
             tx_params = tx_obj.get("txParams", {})
             from_addr = tx_params.get("from")

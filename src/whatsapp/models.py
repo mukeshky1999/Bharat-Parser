@@ -31,6 +31,7 @@ class MessageDirection(str, Enum):
     OUTGOING_SENT = "OUTGOING_SENT"
     INCOMING_RECEIVED = "INCOMING_RECEIVED"
     SYSTEM_EVENT = "SYSTEM_EVENT"
+    UNKNOWN = "UNKNOWN"  # from_me flag missing in the record
 
 
 class MessageTypeCategory(str, Enum):
@@ -86,7 +87,7 @@ class WhatsAppMessageRecord:
     recovery_classification: ResidualConfidence = ResidualConfidence.ORIGINAL_RECORD
     recovery_source_detail: str = "LIVE_ACTIVE_TABLE"
     chat_display_title: Optional[str] = None
-    direction: MessageDirection = MessageDirection.INCOMING_RECEIVED
+    direction: MessageDirection = MessageDirection.UNKNOWN
     sender_resolved_phone_jid: Optional[str] = None
     sender_raw_lid: Optional[str] = None
     sender_push_and_saved_name: Optional[str] = None

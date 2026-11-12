@@ -158,8 +158,8 @@ def test_metamask_persist_root_double_json_and_uint256_precision(tmp_path):
             "AccountTrackerController": {
                 "accounts": {
                     "0x71c7656ec7ab88b098defb751b7401b5f6d8976f": {
-                        # 0x152d02c7e14af6800000 Wei = 100,000,000,000,000,000,000 Wei = 100.0 ETH (> 2^63-1)
-                        "balance": "0x152d02c7e14af6800000"
+                        # 0x56bc75e2d63100000 Wei = 100,000,000,000,000,000,000 Wei = 100.0 ETH (> 2^63-1)
+                        "balance": "0x56bc75e2d63100000"
                     }
                 }
             },
@@ -182,7 +182,7 @@ def test_metamask_persist_root_double_json_and_uint256_precision(tmp_path):
                         "txParams": {
                             "from": "0x71c7656ec7ab88b098defb751b7401b5f6d8976f",
                             "to": "0x388c818ca8b9251b393131c08a736a67ccb19297",
-                            "value": "0x152d02c7e14af6800000",
+                            "value": "0x56bc75e2d63100000",
                             "data": "0x"
                         }
                     }

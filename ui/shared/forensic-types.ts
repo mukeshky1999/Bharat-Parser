@@ -75,6 +75,8 @@ export interface ChatArtifact {
   recipientName?: string;
   body: string;
   isFromMe: boolean;
+  /** UNKNOWN when the source table has no sent/received flag; never defaulted to INCOMING. */
+  direction?: 'INCOMING' | 'OUTGOING' | 'UNKNOWN';
   timestamp: TimestampTriplet;
   messageStatus?: 'SENT' | 'DELIVERED' | 'READ' | 'PENDING' | 'FAILED' | 'PLAYED';
   ephemeralDuration?: number; // Disappearing message duration in seconds
@@ -115,7 +117,8 @@ export interface CallLogArtifact {
   callerName?: string;
   calleeNumberOrId: string;
   calleeName?: string;
-  direction: 'INCOMING' | 'OUTGOING' | 'MISSED' | 'REJECTED';
+  direction: 'INCOMING' | 'OUTGOING' | 'MISSED' | 'REJECTED' | 'UNKNOWN';
+  callResult?: string;
   durationSeconds: number;
   timestamp: TimestampTriplet;
   provenance: ForensicProvenance;

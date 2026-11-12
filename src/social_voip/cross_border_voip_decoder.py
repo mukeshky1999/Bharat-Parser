@@ -110,7 +110,7 @@ class CrossBorderVoIPDecoder:
                                 recovery_classification=ResidualConfidence.ORIGINAL_RECORD,
                                 thread_or_channel_id=str(sess),
                                 native_message_id=str(mid),
-                                direction="INCOMING_RECEIVED",
+                                direction="UNKNOWN",
                                 sender_id_and_handle=str(from_u) if from_u else None,
                                 content_category=SocialContentCategory.TEXT,
                                 message_text=txt,

@@ -313,7 +313,9 @@ class BilingualOcrEngine:
         )
 
         for num in candidate_12d:
-            if self.verhoeff_validator.validate_verhoeff(num) and (has_uidai_keywords or not has_upi_keywords):
+            # About 1 in 10 random 12-digit numbers pass Verhoeff, so a bare checksum is not evidence of an
+            # Aadhaar number: only call it one when the image also carries UIDAI wording (review R-14).
+            if self.verhoeff_validator.validate_verhoeff(num) and has_uidai_keywords:
                 is_verhoeff_valid = True
             else:
                 if num not in extracted_utrs:

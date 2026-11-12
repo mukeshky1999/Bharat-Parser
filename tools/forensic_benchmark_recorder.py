@@ -613,7 +613,7 @@ class ForensicBenchmarkRecorder:
     def _compute_transaction_quality_score(self, tx_list: List[Dict[str, Any]]) -> float:
         """Calculates completeness score (0-100%) for parsed transactions."""
         if not tx_list:
-            return 100.0
+            return 0.0  # nothing extracted is not a perfect score
         valid_date = 0
         valid_cparty = 0
         valid_txid = 0
@@ -639,7 +639,7 @@ class ForensicBenchmarkRecorder:
     def _compute_chat_quality_score(self, chat_list: List[Dict[str, Any]]) -> float:
         """Calculates completeness score (0-100%) for parsed chats."""
         if not chat_list:
-            return 100.0
+            return 0.0  # nothing extracted is not a perfect score
         valid_sender = 0
         valid_body = 0
         valid_ts = 0
@@ -897,17 +897,17 @@ class ForensicBenchmarkRecorder:
 
             # Assign Differential Verdict
             if ven_total == 0 and our_total > 0:
-                verdict = '🏆 SURPASSED VENDOR'
+                verdict = 'MORE RECORDS THAN VENDOR (count only, correctness not checked)'
             elif ven_total > 0 and our_total > ven_total:
-                verdict = '🏆 SURPASSED VENDOR'
+                verdict = 'MORE RECORDS THAN VENDOR (count only, correctness not checked)'
             elif ven_total > 0 and our_total >= (0.95 * ven_total):
-                verdict = '✅ FULL PARITY (95%–100%)'
+                verdict = 'COUNT WITHIN 5% OF VENDOR (count only)'
             elif ven_total > 0 and our_total >= (0.50 * ven_total):
-                verdict = '⚠️ PARTIAL PARITY (50%–94%)'
+                verdict = 'COUNT 50-94% OF VENDOR (count only)'
             elif ven_total > 0 and our_total < (0.50 * ven_total):
-                verdict = '❌ GAP DETECTED (<50%)'
+                verdict = 'COUNT BELOW 50% OF VENDOR (count only)'
             else:
-                verdict = 'ℹ️ RAW DUMP ONLY'
+                verdict = 'NO VENDOR COUNT TO COMPARE'
 
             comparison[app] = {
                 'app_name': app,
@@ -953,7 +953,7 @@ class ForensicBenchmarkRecorder:
         tot_locations = sum(m['counts']['locations'] for m in matrix)
 
         all_scores = [m['completeness_score'] for m in matrix if m['completeness_score'] > 0]
-        avg_score = round(sum(all_scores) / len(all_scores), 1) if all_scores else 100.0
+        avg_score = round(sum(all_scores) / len(all_scores), 1) if all_scores else 0.0
 
         exec_summary = {
             'dump_name': self.telemetry['metadata']['dump_name'],
@@ -1028,7 +1028,7 @@ class ForensicBenchmarkRecorder:
             "",
             "## 2. HEAD-TO-HEAD VENDOR DIFFERENTIAL MATRIX",
             "",
-            "| Application / Target | Vendor Count (Active / Del) | Our Count (Active / Carved) | Quality % | Parity Verdict |",
+            "| Application / Target | Vendor Count (Active / Del) | Our Count (Active / Carved) | Fields present % | Parity Verdict |",
             "| :--- | :--- | :--- | :--- | :--- |",
         ]
 
@@ -1040,7 +1040,7 @@ class ForensicBenchmarkRecorder:
                     f"| **{app}** | {v_str} | {our_str} | `{d['completeness_score']}%` | **{d['verdict']}** |"
                 )
         else:
-            lines.append("| *No commercial report.xml present in dump* | N/A | Evaluated via Internal SQLite B-Tree Matrix | 100% | ✅ FULL INTERNAL PARITY |")
+            lines.append("| *No commercial report.xml present in dump* | N/A | Internal run only | N/A | NO VENDOR COUNT TO COMPARE |")
 
         lines.extend([
             "",
