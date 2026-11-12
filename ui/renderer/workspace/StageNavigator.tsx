@@ -16,6 +16,7 @@ function recovered(items: HasRecovery[]): number {
 export const StageNavigator: React.FC = () => {
   const activeTab = useWorkbenchStore((s) => s.activeTab);
   const setActiveTab = useWorkbenchStore((s) => s.setActiveTab);
+  const addToast = useWorkbenchStore((s) => s.addToast);
   const upi = useWorkbenchStore((s) => s.upiTransactions);
   const chats = useWorkbenchStore((s) => s.chats);
   const contacts = useWorkbenchStore((s) => s.contacts);
@@ -83,13 +84,19 @@ export const StageNavigator: React.FC = () => {
                     return (
                       <li key={v.tab}>
                         <button
-                          onClick={() => setActiveTab(v.tab)}
+                          onClick={() => (v.unavailable
+                            ? addToast({ type: 'info', title: `${v.label}: not available yet`, message: v.unavailable })
+                            : setActiveTab(v.tab))}
                           aria-current={activeTab === v.tab ? 'page' : undefined}
+                          aria-disabled={v.unavailable ? true : undefined}
+                          title={v.unavailable ? 'Not available yet: needs testing on real data' : undefined}
                           className={`w-full flex items-center justify-between gap-2 pl-3 pr-2 py-1 text-left rounded-r ${
+                            v.unavailable ? 'text-slate-500 cursor-not-allowed' :
                             activeTab === v.tab ? 'bg-slate-800 text-cyan-300 font-medium' : 'text-slate-300 hover:bg-slate-800/60'
                           }`}
                         >
                           <span className="truncate">{v.label}</span>
+                          {v.unavailable && <span className="text-[0.6875rem] text-slate-500">not tested</span>}
                           {n !== null && n > 0 && <span className="text-slate-400">{n.toLocaleString()}</span>}
                         </button>
                       </li>

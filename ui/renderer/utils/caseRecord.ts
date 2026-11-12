@@ -8,7 +8,11 @@ export interface CaseRecordRef { table: string; id: number }
 export function caseRecordOf(artifactId: string | undefined, itemType?: string): CaseRecordRef | null {
   if (!artifactId) return null;
   const row = (s: string): number | null => (/^\d+$/.test(s) && Number(s) > 0 ? Number(s) : null);
-  const prefixed: Array<[RegExp, string]> = [[/^TX_(\d+)$/, 'transactions'], [/^CNT_(\d+)$/, 'contacts'], [/^CALL_(\d+)$/, 'calls']];
+  const prefixed: Array<[RegExp, string]> = [
+    [/^TX_(\d+)$/, 'transactions'], [/^CNT_(\d+)$/, 'contacts'], [/^CALL_(\d+)$/, 'calls'],
+    [/^CRYPTO_custodial_wallets_(\d+)$/, 'custodial_wallets'], [/^CRYPTO_p2p_orders_(\d+)$/, 'p2p_orders'],
+    [/^CRYPTO_fiat_crypto_bridge_(\d+)$/, 'fiat_crypto_bridge'], [/^CRYPTO_crypto_addresses_(\d+)$/, 'crypto_addresses'],
+  ];
   for (const [re, table] of prefixed) {
     const m = re.exec(artifactId);
     if (m) { const n = row(m[1]); return n ? { table, id: n } : null; }

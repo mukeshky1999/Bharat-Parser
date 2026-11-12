@@ -245,6 +245,8 @@ export interface TagSummary {
   by_table: Record<string, number>;
 }
 
+export interface SavedFilter { name: string; state: Record<string, string | number | boolean | null>; saved_at_utc: string }
+
 export interface TagRecordRef { table: string; id: number }
 
 export interface TaggedRecord {
@@ -1557,6 +1559,19 @@ class ForensicClient {
   /** Accounts from payment records the examiner tagged; those shared with complainant / excluded / privileged records come back in `left_out`. */
   public async getAccountsOfInterest(): Promise<{ data: { accounts: Array<Record<string, string | number>>; left_out: Array<Record<string, string | number>>; note: string } | null; error: string | null }> {
     return this.fetchApi('/api/report/accounts-of-interest');
+  }
+
+  /** Saved filters of one screen, kept in the case file. */
+  public async getSavedFilters(scope: string): Promise<{ data: { scope: string; filters: SavedFilter[] } | null; error: string | null }> {
+    return this.fetchApi(`/api/case/filters?scope=${encodeURIComponent(scope)}`);
+  }
+
+  public async saveFilter(scope: string, name: string, state: Record<string, string | number | boolean | null>): Promise<{ data: { name: string; replaced: boolean } | null; error: string | null }> {
+    return this.fetchApi('/api/case/filters', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scope, name, state }) });
+  }
+
+  public async removeSavedFilter(scope: string, name: string): Promise<{ data: { removed: number } | null; error: string | null }> {
+    return this.fetchApi('/api/case/filters/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scope, name }) });
   }
 
   /** Runs the known-answer checks on scratch inputs; the open case is left alone. */

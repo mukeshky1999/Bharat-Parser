@@ -40,7 +40,8 @@ export type ActiveTabType =
   | 'SEARCH'
   | 'TIMELINE'
   | 'TAGS'
-  | 'MEDIA';
+  | 'MEDIA'
+  | 'BANK_ALERTS';
 
 export interface SelectedArtifactState {
   id: string;
@@ -213,7 +214,7 @@ function mapCallDirection(v: unknown): 'INCOMING' | 'OUTGOING' | 'MISSED' | 'REJ
   return 'UNKNOWN';
 }
 
-function parseProvenance(prov: unknown, summary: any, fallbackTable: string, vfsPath: string): any {
+export function parseProvenance(prov: unknown, summary: any, fallbackTable: string, vfsPath: string): any {
   const text = String(prov ?? '');
   const rowRaw = text.match(/RowID=([^\s:]+)/i)?.[1];
   const row = rowRaw && !/^not$/i.test(rowRaw) ? rowRaw : undefined; // "Not recorded" is not a row id
@@ -545,12 +546,12 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
               id: `CALL_${r.id}`,
               callType: (r.Call_Type === 'VOIP' || (r.Application && r.Application !== 'Cellular')) ? 'VOIP_APP' : 'CELLULAR_CDR',
               direction: mapCallDirection(r.Direction),
-              callerNumberOrId: r.Caller || r.Peer || 'Unknown',
+              callerNumberOrId: r.Caller || r.Peer || '', // empty = not recorded
               callerName: r.Peer || '',
-              calleeNumberOrId: r.Callee || 'Unknown',
+              calleeNumberOrId: r.Callee || '',
               calleeName: '',
-              durationSeconds: r.Duration_Sec || 0,
-              callResult: r.Call_Result || 'UNKNOWN',
+              durationSeconds: r.Duration_Sec === null || r.Duration_Sec === undefined || r.Duration_Sec === '' ? -1 : Number(r.Duration_Sec), // -1 = not recorded
+              callResult: r.Call_Result || '',
               timestamp: normalizeTimestamp(r.Timestamp_IST || '', 'ISO_8601'),
               sourceApp: r.Application || 'Phone',
               provenance: parseProvenance(r.Forensic_Provenance, summary, 'calls', r.Source_File || '')

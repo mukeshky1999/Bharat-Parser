@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { forensicClient, TimelineEvent, TimelineGroup, TimelineResult } from '../api/forensicClient';
 import { usePreferences } from '../state/preferencesStore';
 import { RecordDetail, RecordRef, TagPills } from '../inspectors/RecordDetail';
+import { SavedFilters } from '../workspace/SavedFilters';
 
 const GROUPS: Array<{ id: TimelineGroup; label: string; help: string }> = [
   { id: 'fixed', label: 'Placed in time', help: 'The source gave a zone or an absolute time, so the instant is known. Listed in time order. A device clock that was wrong is not corrected.' },
@@ -66,6 +67,8 @@ export const TimelineView: React.FC = () => {
           <label className="text-xs text-slate-400">To <input type="date" aria-label="To date" value={to} onChange={(e) => setTo(e.target.value)} className={field} /></label>
           <input aria-label="Only this app" value={app} onChange={(e) => setApp(e.target.value)} placeholder="App (optional)" className={`${field} w-32`} />
           <input aria-label="Only records with this tag" value={tag} onChange={(e) => setTag(e.target.value)} placeholder="Tag (optional)" className={`${field} w-32`} />
+          <SavedFilters scope="timeline" current={{ group, from, to, app, tag, descending }} isDefault={group === 'fixed' && !from && !to && !app && !tag && !descending}
+            onApply={(s) => { setGroup((s.group as TimelineGroup) ?? 'fixed'); setFrom(String(s.from ?? '')); setTo(String(s.to ?? '')); setApp(String(s.app ?? '')); setTag(String(s.tag ?? '')); setDescending(s.descending === true); }} />
           {group === 'fixed' && (
             <label className="text-xs text-slate-300 inline-flex items-center gap-1"><input type="checkbox" checked={descending} onChange={(e) => setDescending(e.target.checked)} />Newest first</label>
           )}

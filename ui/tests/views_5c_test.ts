@@ -1,7 +1,7 @@
 // Phase 5C: the new screens are registered, and the rules they promised are still in their source.
 import * as fs from 'fs';
 import * as path from 'path';
-import { STAGES } from '../renderer/workspace/stages';
+import { STAGES, BANK_ALERTS_NOTICE } from '../renderer/workspace/stages';
 import { shownValue, NOT_RECORDED } from '../renderer/utils/recordText';
 import { caseRecordOf } from '../renderer/utils/caseRecord';
 import { interpret, parseOffset } from '../renderer/utils/byteInterpreter';
@@ -79,6 +79,22 @@ ok(/not recorded/.test(grid), 'the grid has a "not recorded" cell');
 for (const f of ['UPIMasterLedgerView.tsx', 'BankCdrFusionView.tsx']) ok(/DataGrid/.test(view(f)), `${f} is built on the shared grid`);
 ok(/Leads, not findings/.test(view('MuleLinkGraphTab.tsx')), 'the link graph says its content is leads');
 ok(!/byteOffset: 0/.test(view('BankCdrFusionView.tsx')), 'fusion rows do not invent a byte offset of 0');
+
+// bank alerts: shown greyed out, opens nothing, says why
+const bank = STAGES.flatMap((st) => st.views).find((v) => v.tab === 'BANK_ALERTS');
+ok(!!bank && !!bank.unavailable && /not been tested on real/.test(bank.unavailable) && bank.unavailable === BANK_ALERTS_NOTICE, 'bank alerts is listed as unavailable and says it needs real-data testing');
+ok(STAGES.flatMap((st) => st.views).filter((v) => v.unavailable).length === 1, 'only bank alerts is switched off');
+const nav = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace', 'StageNavigator.tsx'), 'utf8');
+ok(/v\.unavailable\s*\?\s*addToast/.test(nav) && /aria-disabled/.test(nav) && /cursor-not-allowed/.test(nav), 'clicking an unavailable view shows a notice, is marked disabled, and is greyed');
+ok(/v\.unavailable \? addToast/.test(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace', 'CommandPalette.tsx'), 'utf8')), 'the command palette shows the notice too');
+// crypto and calls are on the shared grid and carry no invented labels
+for (const f of ['CryptoWalletView.tsx', 'CallLogsView.tsx']) ok(/DataGrid/.test(view(f)), `${f} is built on the shared grid`);
+ok(!/15 Custodial|P2P \/ ON-RAMP|'USDT'|\|\| 0\)/.test(view('CryptoWalletView.tsx')), 'crypto view has no hard-coded wallet count, row type, default asset or default offset');
+ok(!/'Target'|\[ACTIVE\]/.test(view('CallLogsView.tsx')), 'call view invents no callee name or state');
+ok(eq(caseRecordOf('CRYPTO_p2p_orders_5'), { table: 'p2p_orders', id: 5 }) && eq(caseRecordOf('CRYPTO_crypto_addresses_2'), { table: 'crypto_addresses', id: 2 }), 'crypto rows can be tagged from the card');
+// saved filters live in the case, not the browser
+ok(/getSavedFilters/.test(view('../workspace/SavedFilters.tsx')) && !/localStorage|sessionStorage|indexedDB/.test(view('../workspace/SavedFilters.tsx')), 'saved filters are kept in the case file');
+ok(/not records/.test(view('../workspace/SavedFilters.tsx')), 'saved filters say they hold choices, not records');
 
 // none of the new screens keeps case data in browser storage
 for (const f of ['ReviewerMarksCard.tsx', 'ValidationCard.tsx', 'SearchView.tsx', 'TimelineView.tsx', 'TagsView.tsx', 'MediaLibraryView.tsx', 'IngestProgressPanel.tsx']) {

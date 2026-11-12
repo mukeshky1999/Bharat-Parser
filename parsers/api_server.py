@@ -2601,6 +2601,51 @@ def build_review_package(req: PackageRequest):
 
 
 # ---------------------------------------------------------------------------
+# Saved filters (5C): the examiner's own filter choices for a screen, kept in the case file
+# ---------------------------------------------------------------------------
+class SavedFilterIn(BaseModel):
+    scope: str
+    name: str
+    state: Dict[str, Any]
+
+
+class SavedFilterRemoveIn(BaseModel):
+    scope: str
+    name: str
+
+
+def _filters_call(fn):
+    from parsers import case_filters
+    _require_case()
+    conn = _active_store._get_connection()
+    try:
+        conn.executescript(case_filters.SCHEMA)
+        return fn(conn)
+    except case_filters.FilterError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    finally:
+        conn.close()
+
+
+@app.get("/api/case/filters")
+def saved_filters_list(scope: str = Query(...)):
+    from parsers import case_filters
+    return {"scope": scope, "filters": _filters_call(lambda c: case_filters.list_filters(c, scope))}
+
+
+@app.post("/api/case/filters")
+def saved_filters_save(body: SavedFilterIn):
+    from parsers import case_filters
+    return _filters_call(lambda c: case_filters.save_filter(c, body.scope, body.name, body.state))
+
+
+@app.post("/api/case/filters/remove")
+def saved_filters_remove(body: SavedFilterRemoveIn):
+    from parsers import case_filters
+    return _filters_call(lambda c: case_filters.remove_filter(c, body.scope, body.name))
+
+
+# ---------------------------------------------------------------------------
 # Validation record (5B.10): run the known-answer checks from the app
 # ---------------------------------------------------------------------------
 @app.post("/api/validation/run")

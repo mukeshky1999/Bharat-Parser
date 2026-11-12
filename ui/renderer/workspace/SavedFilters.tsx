@@ -1,0 +1,69 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import { forensicClient, SavedFilter } from '../api/forensicClient';
+
+export type FilterScope = 'upi_ledger' | 'calls' | 'search' | 'timeline' | 'crypto_custodial' | 'crypto_p2p' | 'crypto_bridge' | 'crypto_addresses';
+
+/**
+ * Saves the filter choices on this screen under a name, and applies a saved set again. Saved filters are kept in the
+ * case file (not in the browser) because a filter can hold text from the evidence. A filter holds only your choices,
+ * never records.
+ */
+export const SavedFilters: React.FC<{
+  scope: FilterScope;
+  current: Record<string, string | number | boolean | null>;
+  onApply: (state: Record<string, string | number | boolean | null>) => void;
+  /** true when nothing is filtered, so there is nothing worth saving */
+  isDefault: boolean;
+}> = ({ scope, current, onApply, isDefault }) => {
+  const [filters, setFilters] = useState<SavedFilter[]>([]);
+  const [name, setName] = useState('');
+  const [msg, setMsg] = useState('');
+
+  const load = useCallback(async () => {
+    const res = await forensicClient.getSavedFilters(scope);
+    setFilters(res.data?.filters ?? []);
+  }, [scope]);
+  useEffect(() => { void load(); }, [load]);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg('');
+    const res = await forensicClient.saveFilter(scope, name, current);
+    if (res.error) { setMsg(res.error); return; }
+    setMsg(res.data?.replaced ? `Replaced “${res.data.name}”.` : `Saved “${res.data?.name}”.`);
+    setName('');
+    await load();
+  };
+
+  const remove = async (n: string) => {
+    await forensicClient.removeSavedFilter(scope, n);
+    await load();
+  };
+
+  return (
+    <details className="relative">
+      <summary className="h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 cursor-pointer inline-flex items-center list-none">
+        Saved filters{filters.length ? ` (${filters.length})` : ''}
+      </summary>
+      <div className="absolute z-20 mt-1 w-80 rounded border border-slate-700 bg-slate-900 p-2 shadow-xl text-slate-200">
+        {filters.length === 0 ? <p className="text-slate-400 text-xs">No saved filters on this screen yet.</p> : (
+          <ul className="mb-2 space-y-1">
+            {filters.map((f) => (
+              <li key={f.name} className="flex items-center justify-between gap-2">
+                <button className="text-left hover:underline truncate" onClick={() => onApply(f.state)} title="Apply this filter">{f.name}</button>
+                <button className="text-slate-400 hover:text-rose-300 text-xs" aria-label={`Delete ${f.name}`} onClick={() => void remove(f.name)}>Delete</button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <form onSubmit={(e) => void save(e)} className="flex gap-1">
+          <input aria-label="Name for this filter" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="Name this filter"
+            className="h-8 flex-1 rounded bg-slate-950 border border-slate-700 px-2 text-slate-100 placeholder-slate-500" />
+          <button type="submit" disabled={!name.trim() || isDefault} className="h-8 px-3 rounded border border-slate-700 hover:bg-slate-800 disabled:opacity-40"
+            title={isDefault ? 'Nothing is filtered yet' : undefined}>Save</button>
+        </form>
+        <p className="mt-1 text-[0.6875rem] text-slate-400">Kept in this case file. A saved filter holds your choices, not records.{msg ? ` ${msg}` : ''}</p>
+      </div>
+    </details>
+  );
+};

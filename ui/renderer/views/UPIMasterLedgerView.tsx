@@ -4,6 +4,7 @@ import { usePreferences } from '../state/preferencesStore';
 import { UnifiedUPITransaction } from '../../shared/forensic-types';
 import { formatOffset } from '../utils/csv';
 import { DataGrid, FilterInput, GridColumn, Segmented, Unset } from '../workspace/DataGrid';
+import { SavedFilters } from '../workspace/SavedFilters';
 
 interface UPIMasterLedgerViewProps {
   transactions?: UnifiedUPITransaction[];
@@ -130,6 +131,13 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
       <label className="text-slate-300 inline-flex items-center gap-2">
         <input type="checkbox" checked={clockOnly} onChange={(e) => setClockOnly(e.target.checked)} />Clock differs from sequence
       </label>
+      <SavedFilters scope="upi_ledger"
+        current={{ app, direction, recovery, amount, clockOnly, query }}
+        isDefault={app === 'ALL' && direction === 'ALL' && recovery === 'ALL' && amount === 'ANY' && !clockOnly && !query}
+        onApply={(s) => {
+          setApp(String(s.app ?? 'ALL')); setDirection((s.direction as DirectionFilter) ?? 'ALL'); setRecovery((s.recovery as RecoveryFilter) ?? 'ALL');
+          setAmount((s.amount as AmountFilter) ?? 'ANY'); setClockOnly(s.clockOnly === true); setQuery(String(s.query ?? ''));
+        }} />
       {apps.length > 1 && (
         <label className="text-slate-300 inline-flex items-center gap-2">App
           <select aria-label="App" value={app} onChange={(e) => setApp(e.target.value)} className="h-8 rounded bg-slate-900 border border-slate-700 px-2 text-slate-100">

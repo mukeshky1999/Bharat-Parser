@@ -469,6 +469,8 @@ class CaseUIPaginatorStore:
             cur.executescript(_TAGS_SCHEMA)
             from parsers.case_media import SCHEMA as _MEDIA_SCHEMA    # Phase 5B.8
             cur.executescript(_MEDIA_SCHEMA)
+            from parsers.case_filters import SCHEMA as _FILTERS_SCHEMA    # Phase 5C saved filters
+            cur.executescript(_FILTERS_SCHEMA)
             conn.commit()
         finally:
             conn.close()

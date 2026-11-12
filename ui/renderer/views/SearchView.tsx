@@ -4,6 +4,7 @@ import { forensicClient, SearchMode, SearchResult } from '../api/forensicClient'
 import { useWorkbenchStore } from '../state/workbenchStore';
 import { RecordDetail, RecordRef } from '../inspectors/RecordDetail';
 import { BulkTagBar } from '../inspectors/BulkTagBar';
+import { SavedFilters } from '../workspace/SavedFilters';
 
 const MODES: Array<{ id: SearchMode; label: string; help: string }> = [
   { id: 'keyword', label: 'Words', help: 'Every word must appear, in any order. Indic scripts work.' },
@@ -57,6 +58,8 @@ export const SearchView: React.FC = () => {
             {MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
           </select>
           <input aria-label="Only this app" value={app} onChange={(e) => setApp(e.target.value)} placeholder="App (optional)" className={`${field} w-36`} />
+          <SavedFilters scope="search" current={{ text, mode, app }} isDefault={!text.trim()}
+            onApply={(s) => { const t = String(s.text ?? ''); const m = (s.mode as SearchMode) ?? 'keyword'; const a = String(s.app ?? ''); setText(t); setMode(m); setApp(a); setOffset(0); setSearchQuery(t); void run(t, m, a, 0); }} />
           <button type="submit" disabled={busy || !text.trim()} className="h-8 px-3 rounded bg-cyan-600 hover:bg-cyan-500 text-slate-50 inline-flex items-center gap-1.5 disabled:opacity-40">
             <Search className="w-4 h-4" aria-hidden="true" />{busy ? 'Searching…' : 'Search'}
           </button>

@@ -16,6 +16,7 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
   const close = useUi((s) => s.close);
   const open = useUi((s) => s.open);
   const setActiveTab = useWorkbenchStore((s) => s.setActiveTab);
+  const addToast = useWorkbenchStore((s) => s.addToast);
   const setSearchQuery = useWorkbenchStore((s) => s.setSearchQuery);
   const setPref = usePreferences((s) => s.set);
   const [q, setQ] = useState('');
@@ -24,7 +25,10 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
 
   const commands: Command[] = useMemo(() => {
     const go: Command[] = STAGES.flatMap((st) =>
-      st.views.map((v) => ({ id: `go-${v.tab}`, label: `Go to ${v.label}`, hint: `Stage ${st.no}: ${st.label}`, run: () => setActiveTab(v.tab) }))
+      st.views.map((v) => ({
+        id: `go-${v.tab}`, label: `Go to ${v.label}`, hint: v.unavailable ? 'Not available yet' : `Stage ${st.no}: ${st.label}`,
+        run: () => (v.unavailable ? addToast({ type: 'info', title: `${v.label}: not available yet`, message: v.unavailable }) : setActiveTab(v.tab)),
+      }))
     );
     return [
       ...go,
@@ -37,7 +41,7 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
       { id: 'd-compact', label: 'Rows: Compact', run: () => setPref({ density: 'compact' }) },
       { id: 'd-comf', label: 'Rows: Comfortable', run: () => setPref({ density: 'comfortable' }) },
     ];
-  }, [setActiveTab, open, setPref, onPickFile, onPickFolder]);
+  }, [setActiveTab, addToast, open, setPref, onPickFile, onPickFolder]);
 
   const term = q.trim().toLowerCase();
   const matches = term ? commands.filter((c) => `${c.label} ${c.hint ?? ''}`.toLowerCase().includes(term)) : commands.slice(0, 12);

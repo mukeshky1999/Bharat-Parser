@@ -1,22 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-  Coins,
-  ArrowUpRight,
-  ShieldAlert,
-  CheckCircle2,
-  Download,
-  Search,
-  Filter,
-  FileSpreadsheet,
-  Link,
-  Wallet,
-  Layers,
-  ArrowRight
-} from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { forensicClient } from '../api/forensicClient';
-import { useWorkbenchStore } from '../state/workbenchStore';
-import { CryptoWalletTransaction, ForensicProvenance } from '../../shared/forensic-types';
-import { csvCell, formatOffset } from '../utils/csv';
+import { useWorkbenchStore, parseProvenance } from '../state/workbenchStore';
+import { usePreferences } from '../state/preferencesStore';
+import { formatOffset } from '../utils/csv';
+import { DataGrid, FilterInput, GridColumn, Unset } from '../workspace/DataGrid';
+import { SavedFilters, FilterScope } from '../workspace/SavedFilters';
+import type { CryptoWalletTransaction } from '../../shared/forensic-types';
 
 interface CryptoWalletViewProps {
   transactions?: CryptoWalletTransaction[];
@@ -24,296 +13,144 @@ interface CryptoWalletViewProps {
   onSelectTx?: (tx: CryptoWalletTransaction) => void;
 }
 
-export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
-  transactions: propTransactions,
-  selectedTxId: propSelectedTxId,
-  onSelectTx,
-}) => {
-  const store = useWorkbenchStore();
-  const [activeSubTab, setActiveSubTab] = useState<'CUSTODIAL' | 'P2P' | 'BRIDGE' | 'ADDRESSES'>('CUSTODIAL');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+type Row = Record<string, any>;
+type Tab = 'custodial_wallets' | 'p2p_orders' | 'fiat_crypto_bridge' | 'crypto_addresses';
 
-  // Live Artifact States fetched from case store
-  const [custodialRecords, setCustodialRecords] = useState<any[]>([]);
-  const [p2pRecords, setP2pRecords] = useState<any[]>([]);
-  const [bridgeRecords, setBridgeRecords] = useState<any[]>([]);
-  const [addressRecords, setAddressRecords] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+const TABS: Array<{ id: Tab; label: string; scope: FilterScope; title: string; note?: string; empty: string }> = [
+  { id: 'custodial_wallets', label: 'Exchange and wallet accounts', scope: 'crypto_custodial', title: 'Exchange and wallet accounts', empty: 'No exchange or wallet account was found in the evidence.' },
+  { id: 'p2p_orders', label: 'Peer-to-peer orders', scope: 'crypto_p2p', title: 'Peer-to-peer orders', empty: 'No peer-to-peer order was found in the evidence.' },
+  { id: 'fiat_crypto_bridge', label: 'Rupee and crypto links (leads)', scope: 'crypto_bridge', title: 'Rupee payments and crypto orders that may be linked',
+    note: 'A link here means a UPI payment and a crypto order were close in time and in amount. That is a lead, not proof they are the same trade. Open both records before relying on it.',
+    empty: 'No rupee payment was linked to a crypto order.' },
+  { id: 'crypto_addresses', label: 'Addresses found', scope: 'crypto_addresses', title: 'Crypto addresses found in the evidence',
+    note: 'An address was found in the evidence as text. Finding an address does not show who controls it or that any money moved.', empty: 'No crypto address was found in the evidence.' },
+];
+
+const text = (v: unknown) => (v === null || v === undefined || v === '' ? '' : String(v));
+const cell = (v: unknown) => (text(v) ? text(v) : <Unset />);
+const col = (key: string, label: string, width: string, field: string | ((r: Row) => unknown), align?: 'right' | 'center'): GridColumn<Row> => {
+  const get = typeof field === 'function' ? field : (r: Row) => r[field];
+  return { key, label, width, align, cell: (r) => cell(get(r)), text: (r) => text(get(r)) || 'not recorded' };
+};
+const amount = (v: unknown, unit?: unknown) => (text(v) && Number.isFinite(Number(v)) ? `${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 8 })}${text(unit) ? ` ${text(unit)}` : ''}` : '');
+
+const COLUMNS: Record<Tab, Array<GridColumn<Row>>> = {
+  custodial_wallets: [
+    col('app', 'App or exchange', '10rem', 'Wallet_App'), col('user', 'User ID', '11rem', 'User_ID'), col('tier', 'Account tier', '9rem', 'Account_Tier'),
+    col('kyc', 'Identity check status', '11rem', 'KYC_Status'), col('mobile', 'Linked mobile', '10rem', 'Linked_Mobile'), col('email', 'Linked email', 'minmax(10rem,1fr)', 'Linked_Email'),
+    col('addr', 'Deposit address', 'minmax(12rem,1fr)', 'Deposit_Address'), col('device', 'Device', '7rem', 'Evidence_Item'), col('prov', 'Where it came from', 'minmax(12rem,1fr)', 'Forensic_Provenance'),
+  ],
+  p2p_orders: [
+    col('time', 'Time (IST)', '12rem', (r) => text(r.Timestamp_IST).substring(0, 19)), col('platform', 'Platform', '8rem', 'Platform'), col('order', 'Order number', '12rem', 'Order_Number'),
+    col('type', 'Buy or sell', '8rem', 'Trade_Type'), col('fiat', 'Fiat amount', '10rem', (r) => amount(r.Fiat_Amount, r.Fiat_Currency), 'right'),
+    col('crypto', 'Crypto amount', '11rem', (r) => amount(r.Crypto_Amount, r.Crypto_Asset), 'right'), col('nick', 'Counterparty nickname', '11rem', 'Counterparty_Nick'),
+    col('name', 'Counterparty name', '11rem', 'Counterparty_Real_Name'), col('bank', 'Bank account', '11rem', 'Bank_Account'), col('upi', 'UPI ID', '11rem', 'UPI_ID'),
+    col('status', 'Status', '9rem', 'Order_Status'), col('device', 'Device', '7rem', 'Evidence_Item'), col('prov', 'Where it came from', 'minmax(12rem,1fr)', 'Forensic_Provenance'),
+  ],
+  fiat_crypto_bridge: [
+    col('upi', 'UPI payment', '12rem', 'UPI_Transaction_ID'), col('order', 'Crypto order', '12rem', 'P2P_Order_Number'), col('fiat', 'Rupee amount', '10rem', (r) => amount(r.Fiat_Amount), 'right'),
+    col('crypto', 'Crypto amount', '11rem', (r) => amount(r.Crypto_Amount), 'right'), col('delta', 'Time apart (s)', '9rem', 'Time_Delta_Seconds', 'right'),
+    col('conf', 'Match basis', '14rem', 'Bridge_Confidence'), col('fapp', 'Payment app', '9rem', 'Fiat_App'), col('cplat', 'Crypto platform', '10rem', 'Crypto_Platform'),
+    col('device', 'Device', '7rem', 'Evidence_Item'), col('prov', 'Where it came from', 'minmax(12rem,1fr)', 'Forensic_Provenance'),
+  ],
+  crypto_addresses: [
+    col('addr', 'Address', 'minmax(16rem,2fr)', 'Address'), col('net', 'Network', '9rem', 'Network'), col('label', 'Label', '10rem', 'Label'),
+    col('file', 'Source file', 'minmax(12rem,1fr)', 'Source_File'),
+    { key: 'offset', label: 'Byte offset', width: '9rem', cell: (r) => formatOffset(r.Byte_Offset), text: (r) => formatOffset(r.Byte_Offset) },
+    col('device', 'Device', '7rem', 'Evidence_Item'),
+  ],
+};
+
+const EXPORT_NAME: Record<Tab, string> = { custodial_wallets: 'wallet_accounts.csv', p2p_orders: 'p2p_orders.csv', fiat_crypto_bridge: 'rupee_crypto_links.csv', crypto_addresses: 'crypto_addresses.csv' };
+
+async function fetchAll(category: string, signal: AbortSignal): Promise<Row[]> {
+  const out: Row[] = [];
+  const PAGE = 500;
+  for (let offset = 0; offset < 1_000_000; offset += PAGE) {
+    const res: any = await forensicClient.queryArtifacts(category, undefined, undefined, undefined, undefined, PAGE, offset, undefined, false, signal);
+    const rows: Row[] = Array.isArray(res?.rows) ? res.rows : [];
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
+/**
+ * What the evidence holds about crypto: accounts, peer-to-peer orders, links between rupee payments and orders, and
+ * addresses found as text. Each kind has its own columns. Nothing is labelled beyond what was recorded.
+ */
+export const CryptoWalletView: React.FC<CryptoWalletViewProps> = () => {
+  const store = useWorkbenchStore();
+  const manifest = useWorkbenchStore((s) => s.caseManifest);
+  const selected = useWorkbenchStore((s) => s.selectedArtifact);
+  usePreferences((s) => s.hiddenColumns);
+  const [tab, setTab] = useState<Tab>('custodial_wallets');
+  const [data, setData] = useState<Record<Tab, Row[]>>({ custodial_wallets: [], p2p_orders: [], fiat_crypto_bridge: [], crypto_addresses: [] });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
-    let isMounted = true;
-    const fetchCryptoData = async () => {
-      setLoading(true);
+    if (!manifest) { setData({ custodial_wallets: [], p2p_orders: [], fiat_crypto_bridge: [], crypto_addresses: [] }); return; }
+    const ctl = new AbortController();
+    setLoading(true); setError('');
+    (async () => {
       try {
-        const [custodialRes, p2pRes, bridgeRes, addrRes] = await Promise.all([
-          forensicClient.queryArtifacts('custodial_wallets', undefined, undefined, undefined, undefined, 200, 0),
-          forensicClient.queryArtifacts('p2p_orders', undefined, undefined, undefined, undefined, 200, 0),
-          forensicClient.queryArtifacts('fiat_crypto_bridge', undefined, undefined, undefined, undefined, 200, 0),
-          forensicClient.queryArtifacts('crypto_addresses', undefined, undefined, undefined, undefined, 200, 0)
-        ]);
-
-        if (isMounted) {
-          if (custodialRes && custodialRes.rows) setCustodialRecords(custodialRes.rows);
-          if (p2pRes && p2pRes.rows) setP2pRecords(p2pRes.rows);
-          if (bridgeRes && bridgeRes.rows) setBridgeRecords(bridgeRes.rows);
-          if (addrRes && addrRes.rows) setAddressRecords(addrRes.rows);
-        }
-      } catch {
-        // Fallback safely
+        const [a, b, c, d] = await Promise.all(TABS.map((t) => fetchAll(t.id, ctl.signal)));
+        setData({ custodial_wallets: a, p2p_orders: b, fiat_crypto_bridge: c, crypto_addresses: d });
+      } catch (e: any) {
+        if (e?.name !== 'AbortError') setError(e?.message || 'The crypto records could not be loaded.');
       } finally {
-        if (isMounted) setLoading(false);
+        setLoading(false);
       }
-    };
+    })();
+    return () => ctl.abort();
+  }, [manifest?.caseId, manifest?.evidenceFileName]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    fetchCryptoData();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const meta = TABS.find((t) => t.id === tab)!;
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return data[tab];
+    return data[tab].filter((r) => Object.values(r).some((v) => v !== null && String(v).toLowerCase().includes(q)));
+  }, [data, tab, query]);
 
-  // Filter Active Tab Rows
-  const currentRows = useMemo(() => {
-    let rows: any[] = [];
-    if (activeSubTab === 'CUSTODIAL') rows = custodialRecords;
-    else if (activeSubTab === 'P2P') rows = p2pRecords;
-    else if (activeSubTab === 'BRIDGE') rows = bridgeRecords;
-    else if (activeSubTab === 'ADDRESSES') rows = addressRecords;
-
-    if (!searchQuery.trim()) return rows;
-    const q = searchQuery.toLowerCase();
-    return rows.filter((r) => {
-      return Object.values(r).some((val) => String(val).toLowerCase().includes(q));
-    });
-  }, [activeSubTab, custodialRecords, p2pRecords, bridgeRecords, addressRecords, searchQuery]);
-
-  // Address list CSV export
-  const handleExportAddressList = () => {
-    const recordsToExport = addressRecords.length > 0 ? addressRecords : currentRows;
-    if (recordsToExport.length === 0) return;
-
-    const headers = [
-      'Address',
-      'Currency_Blockchain',
-      'Exchange_Wallet_App',
-      'Entity_Label',
-      'Detection_Context',
-      'Validation_Status',
-      'Byte_Offset_Hex'
-    ];
-
-    const csvRows = recordsToExport.map((r) => {
-      const addr = r.Address || r.crypto_address || r.destination_address || r.wallet_address || '';
-      const coin = r.Currency || r.coin || r.asset || r.blockchain || 'Unknown';
-      const app = r.Exchange || r.wallet_app || r.source_app || 'Unknown';
-      const label = r.Label || r.entity || 'Not labelled';
-      const ctx = r.Context || r.source_table || r.notes || 'Not recorded';
-      const valid = r.is_valid === true ? 'CHECKSUM VALID' : (r.is_valid === false ? 'CHECKSUM INVALID' : 'NOT CHECKED');
-      const offset = formatOffset(r.byte_offset ?? r.Byte_Offset);
-
-      return [
-        csvCell(addr),
-        csvCell(coin),
-        csvCell(app),
-        csvCell(label),
-        csvCell(ctx),
-        csvCell(valid),
-        csvCell(offset)
-      ].join(',');
-    });
-
-    const csvContent = [headers.join(','), ...csvRows].join('\r\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Crypto_Addresses_${new Date().toISOString().substring(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleSelectRow = (row: any) => {
-    const offset = Number(row.byte_offset || row.Byte_Offset || 0);
-    const prov: ForensicProvenance = {
-      evidenceId: 'CRYPTO_ARTIFACT',
-      archivePath: row.source_file || row.Source_File || 'Crypto Wallet DB',
-      vfsInternalPath: row.vfs_path || row.Source_Table || 'custodial_wallets',
-      containerType: 'SQLITE',
-      byteOffset: offset,
-      byteLength: 64,
-      recoveryState: 'ACTIVE',
-      rawPayloadHex: ''
-    };
-
-    store.setSelectedArtifact({
-      id: `CRYPTO_${row.id || offset || Date.now()}`,
-      provenance: prov,
-      notes: `Crypto Record: ${row.wallet_app || row.Exchange || 'Wallet'} | Address: ${row.Address || row.crypto_address || 'N/A'} | Asset: ${row.coin || row.Currency || 'USDT'}`,
-      itemType: 'Crypto Asset Record',
-      rawData: row
+  const select = (r: Row) => {
+    const summary = { case_id: manifest?.caseId ?? '', evidence_path: manifest?.evidencePath ?? '' };
+    void store.setSelectedArtifact({
+      id: `CRYPTO_${tab}_${r.id}`,
+      provenance: parseProvenance(r.Forensic_Provenance, summary, tab, r.Source_File || ''),
+      itemType: 'Crypto record',
+      notes: `${meta.title}: ${text(r.Wallet_App || r.Platform || r.Network || r.Fiat_App) || 'app not recorded'}`,
+      rawData: r,
     });
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-900 text-slate-100 overflow-hidden select-text font-sans">
-      {/* 1. Header Toolbar */}
-      <div className="h-11 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between shrink-0 select-none text-xs">
-        <div className="flex items-center space-x-1.5">
-          <button
-            onClick={() => setActiveSubTab('CUSTODIAL')}
-            className={`px-3 py-1.5 rounded-md font-semibold text-xs flex items-center space-x-2 transition-colors cursor-pointer ${
-              activeSubTab === 'CUSTODIAL'
-                ? 'bg-amber-600 text-slate-950 font-bold shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-          >
-            <Wallet className="w-4 h-4" />
-            <span>15 Custodial Wallets</span>
-            <span className="text-[0.6875rem] px-1.5 py-0.2 rounded-full bg-black/20 font-mono">
-              {custodialRecords.length}
-            </span>
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-slate-950">
+      <div className="shrink-0 flex flex-wrap items-center gap-2 px-4 pt-3" role="tablist" aria-label="Kinds of crypto record">
+        {TABS.map((t) => (
+          <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => { setTab(t.id); setQuery(''); }}
+            className={`h-8 px-3 rounded border ${tab === t.id ? 'border-cyan-600 bg-slate-800 text-slate-50' : 'border-slate-700 text-slate-300 hover:bg-slate-800'}`}>
+            {t.label} ({data[t.id].length})
           </button>
-
-          <button
-            onClick={() => setActiveSubTab('P2P')}
-            className={`px-3 py-1.5 rounded-md font-semibold text-xs flex items-center space-x-2 transition-colors cursor-pointer ${
-              activeSubTab === 'P2P'
-                ? 'bg-amber-600 text-slate-950 font-bold shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-          >
-            <Coins className="w-4 h-4" />
-            <span>P2P Escrow Orders</span>
-            <span className="text-[0.6875rem] px-1.5 py-0.2 rounded-full bg-black/20 font-mono">
-              {p2pRecords.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab('BRIDGE')}
-            className={`px-3 py-1.5 rounded-md font-semibold text-xs flex items-center space-x-2 transition-colors cursor-pointer ${
-              activeSubTab === 'BRIDGE'
-                ? 'bg-amber-600 text-slate-950 font-bold shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-          >
-            <Link className="w-4 h-4" />
-            <span>Fiat-to-Crypto Temporal Bridge</span>
-            <span className="text-[0.6875rem] px-1.5 py-0.2 rounded-full bg-black/20 font-mono">
-              {bridgeRecords.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveSubTab('ADDRESSES')}
-            className={`px-3 py-1.5 rounded-md font-semibold text-xs flex items-center space-x-2 transition-colors cursor-pointer ${
-              activeSubTab === 'ADDRESSES'
-                ? 'bg-amber-600 text-slate-950 font-bold shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-          >
-            <ShieldAlert className="w-4 h-4" />
-            <span>Harvested TRC-20 / BTC Addresses</span>
-            <span className="text-[0.6875rem] px-1.5 py-0.2 rounded-full bg-black/20 font-mono">
-              {addressRecords.length}
-            </span>
-          </button>
-        </div>
-
-        {/* Right Search & Export Manifest */}
-        <div className="flex items-center space-x-2">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2 top-2 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search address, coin, tx..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-48 bg-slate-950 border border-slate-700 rounded pl-7 pr-2 py-1 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-amber-500 font-mono"
-            />
-          </div>
-
-          <button
-            onClick={handleExportAddressList}
-            className="px-2.5 py-1 bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-700/80 rounded font-medium text-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
-            title="Download the harvested addresses as a CSV file"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Export address list (CSV)</span>
-          </button>
-        </div>
+        ))}
       </div>
-
-      {/* 2. Content Table */}
-      <div className="flex-1 overflow-auto bg-slate-950 font-mono text-xs">
-        {loading ? (
-          <div className="h-full flex items-center justify-center text-slate-400 space-x-2">
-            <span className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-            <span>Querying case crypto repositories...</span>
-          </div>
-        ) : currentRows.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-slate-500 space-y-2 p-8">
-            <Coins className="w-12 h-12 text-slate-700 stroke-[1.5]" />
-            <span className="text-sm font-semibold text-slate-400">No Crypto Artifacts Found</span>
-            <p className="text-xs text-slate-600 max-w-sm text-center">
-              {Boolean(store.caseManifest || store.upiTransactions.length > 0)
-                ? 'No crypto transactions or harvested addresses identified in this evidence dump.'
-                : 'No evidence dump loaded. Ingest an evidence container to harvest crypto wallet & P2P records.'}
-            </p>
-          </div>
-        ) : (
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-900 text-slate-400 text-[0.6875rem] uppercase tracking-wider sticky top-0 border-b border-slate-800 z-10 select-none">
-              <tr>
-                <th className="py-2.5 px-3 w-10 text-slate-500">#</th>
-                <th className="py-2.5 px-3 w-32">App / Exchange</th>
-                <th className="py-2.5 px-3 w-28">Asset</th>
-                <th className="py-2.5 px-3 w-32 text-right">Amount</th>
-                <th className="py-2.5 px-3 w-28 text-center">Type</th>
-                <th className="py-2.5 px-3">Address / Order ID</th>
-                <th className="py-2.5 px-3 w-44">Timestamp (IST)</th>
-                <th className="py-2.5 px-3 w-28">Byte Offset</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {currentRows.map((r, idx) => {
-                const hexOffset = formatOffset(r.byte_offset ?? r.Byte_Offset);
-                const app = r.wallet_app || r.Exchange || r.source_app || r.app_name || 'Unknown';
-                const asset = r.coin || r.Currency || r.asset || 'Unknown';
-                const amt = r.amount ?? r.Amount ?? r.crypto_amount ?? null;
-                const addr = r.Address || r.crypto_address || r.destination_address || r.order_id || '-';
-                const ts = r.timestamp_ist || r.Timestamp_IST || r.created_at || '-';
-
-                return (
-                  <tr
-                    key={idx}
-                    onClick={() => handleSelectRow(r)}
-                    className="cursor-pointer hover:bg-slate-900 text-slate-300 transition-colors"
-                  >
-                    <td className="py-2 px-3 text-slate-500">{idx + 1}</td>
-                    <td className="py-2 px-3 text-amber-300 font-bold">{app}</td>
-                    <td className="py-2 px-3 text-slate-200 font-semibold">{asset}</td>
-                    <td className="py-2 px-3 text-right font-bold text-slate-100">
-                      {amt === null || amt === '' || Number.isNaN(Number(amt)) ? 'n/a' : Number(amt).toLocaleString('en-US', { maximumFractionDigits: 6 })}
-                    </td>
-                    <td className="py-2 px-3 text-center">
-                      <span className="px-1.5 py-0.5 rounded text-[0.6875rem] font-bold bg-amber-950 text-amber-300 border border-amber-800/80">
-                        P2P / ON-RAMP
-                      </span>
-                    </td>
-                    <td className="py-2 px-3 text-teal-300 font-mono truncate max-w-md" title={addr}>
-                      {addr}
-                    </td>
-                    <td className="py-2 px-3 text-slate-400 text-[0.6875rem]">{String(ts).substring(0, 19)}</td>
-                    <td className="py-2 px-3 text-amber-400 text-[0.6875rem] font-mono">{hexOffset}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {meta.note && <p className="shrink-0 px-4 pt-2 text-slate-400 text-xs">{meta.note}</p>}
+      {error && <p className="shrink-0 px-4 pt-2 text-rose-300">{error}</p>}
+      {loading ? <div className="flex-1 p-10 text-center text-slate-400" role="status">Loading crypto records…</div> : (
+        <DataGrid<Row>
+          key={tab} tableId={`crypto_${tab}`} title={meta.title} columns={COLUMNS[tab]} rows={rows} totalBeforeFilter={data[tab].length}
+          rowKey={(r, i) => `${tab}-${r.id ?? i}`} selectedKey={selected?.id?.startsWith(`CRYPTO_${tab}_`) ? `${tab}-${selected.id.split('_').pop()}` : null}
+          onSelect={select} exportName={EXPORT_NAME[tab]}
+          toolbar={(
+            <>
+              <FilterInput label="Search these records" value={query} onChange={setQuery} placeholder="Address, order, name…" />
+              <SavedFilters scope={meta.scope} current={{ query }} onApply={(s) => setQuery(String(s.query ?? ''))} isDefault={!query} />
+            </>
+          )}
+          empty={data[tab].length === 0 ? (manifest ? meta.empty : 'No case is open.') : 'No record matches this search.'}
+        />
+      )}
     </div>
   );
 };
