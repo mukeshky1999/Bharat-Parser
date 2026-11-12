@@ -847,7 +847,7 @@ def _execute_ingestion_pipeline(
 
     # Update active store and state
     _active_store = store
-    counts = _active_store.get_pa_project_tree_counts()
+    counts = _active_store.get_project_tree_counts()
 
     # Clean serializable dossier
     serializable_dossier = {
@@ -959,7 +959,7 @@ def get_case_state():
         "case_name": _case_state["case_name"],
         "evidence_path": _case_state["evidence_path"],
         "extractions": _case_state["extractions"],
-        "counts": _active_store.get_pa_project_tree_counts(),
+        "counts": _active_store.get_project_tree_counts(),
         "owner_dossier": _case_state["owner_dossier"],
         "hashes": _case_state["hashes"],
     }
@@ -1069,7 +1069,7 @@ def get_case_summary():
         "device_metadata": _case_state["device_metadata"],
         "mule_alerts": _case_state["mule_alerts"],
         "syndicate_roles": _case_state["syndicate_roles"],
-        "counts": _active_store.get_pa_project_tree_counts(),
+        "counts": _active_store.get_project_tree_counts(),
         "extractions": _case_state["extractions"],
     }
 
@@ -1134,11 +1134,11 @@ async def ingest_evidence_case(req: IngestCaseRequest):
 
 @app.get("/api/case/tree-counts")
 def get_tree_counts():
-    """Returns live (Active / WAL+Carved) badge counts for Physical Analyzer Analyzed Data tree."""
+    """Returns live (Active / WAL+Carved) badge counts for the evidence tree."""
     if not _case_state["loaded"]:
         return {"success": True, "counts": {}}
     try:
-        counts = _active_store.get_pa_project_tree_counts()
+        counts = _active_store.get_project_tree_counts()
         return {"success": True, "counts": counts}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1708,7 +1708,7 @@ def _build_sec63_response(officer: Optional[Dict[str, Any]] = None):
     post_md5 = hashes.get("postIngestionMd5")
     size_bytes = int(hashes.get("fileSizeBytes", 0) or 0)
     dev_meta = _case_state.get("device_metadata") or {}
-    counts = _active_store.get_pa_project_tree_counts()
+    counts = _active_store.get_project_tree_counts()
     processing_log = _case_state.get("processing_log") or []
     failed_files = [x for x in processing_log if x.get("status") == "FAILED"]
 
@@ -2275,7 +2275,7 @@ async def open_case_workspace(req: CaseOpenRequest):
             "examiner_name": meta.get("examiner_name", ""),
             "agency_name": meta.get("agency_name", ""),
             "extractions": [{"evidenceId": recovered_case_id, "sourcePath": evidence_path}],
-            "counts": _active_store.get_pa_project_tree_counts(),
+            "counts": _active_store.get_project_tree_counts(),
             "owner_dossier": json.loads(meta.get("owner_dossier", "{}")),
             "device_metadata": json.loads(meta.get("device_metadata", "{}")),
             "hashes": json.loads(meta.get("hashes", "{}")),
@@ -2508,7 +2508,7 @@ async def run_benchmark(req: BenchmarkRequest):
             dump_path=abs_dump,
             output_dir=abs_out,
             ledger_path=os.path.join(abs_out, "benchmark_telemetry_ledger.json"),
-            report_path=os.path.join(abs_out, "PARITY_GAP_REPORT.md"),
+            report_path=os.path.join(abs_out, "COVERAGE_COMPARISON_REPORT.md"),
             duration_seconds=elapsed,
             executive_summary=exec_summary,
             vendor_differential=telemetry.get("stage4_vendor_differential", {}),

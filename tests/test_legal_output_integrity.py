@@ -216,7 +216,7 @@ def test_recovered_counts_ignore_file_names_containing_wal_or_carved(tmp_path):
         {"Application": "WhatsApp", "Message_ID": "3", "Thread_ID": "T1", "Is_Revoked_Deleted": 0,
          "Forensic_Provenance": "msgstore.db :: Page_1 :: Offset=0x3000 :: State=CARVED_FREELIST"},
     ]))
-    counts = store.get_pa_project_tree_counts()
+    counts = store.get_project_tree_counts()
     node = counts["chats_whatsapp"] if "chats_whatsapp" in counts else next(iter(counts.values()))
     flat = {k: v for k, v in counts.items()}
     # Find the WhatsApp node regardless of its key name
@@ -390,7 +390,7 @@ def test_truncated_column_does_not_shift_following_values():
 def test_generic_classifier_does_not_invent_direction_status_counterparty_or_coordinates():
     import pandas as pd
 
-    from parsers.commercial_parity_engine import app_genie_classify_table
+    from parsers.generic_table_engine import app_genie_classify_table
 
     chat = pd.DataFrame({"msg_id": [1, 2], "message_text": ["hello there", "ok fine"],
                          "sender": ["a", "b"], "msg_time": [1700000000, 1700000100]})

@@ -221,7 +221,7 @@ python -m unittest discover tests -v
 # Individual high-value suites:
 python -m unittest tests/test_hardened_api_server.py -v
 python -m unittest tests/test_ui_fts5_paginator.py -v
-python -m unittest tests/test_commercial_parity_engine.py -v
+python -m unittest tests/test_generic_table_engine.py -v
 python -m unittest tests/test_enterprise_1tb_engine.py -v
 python -m unittest tests/test_hardened_freelist_wal_carver.py -v
 python -m unittest tests/test_social_interaction_comms_parsers.py -v
@@ -276,7 +276,7 @@ cd "E:\v8\combined"
   --output-dir ".\.workspace_tmp\case_benchmark" `
   --verbose
 ```
-Generates `PARITY_GAP_REPORT.md` and `benchmark_telemetry_ledger.json`.
+Generates `COVERAGE_COMPARISON_REPORT.md` and `benchmark_telemetry_ledger.json`.
 
 ### 6.2 Container VFS Indexing, Querying & Dual SHA-256 Product A Hashing
 ```powershell

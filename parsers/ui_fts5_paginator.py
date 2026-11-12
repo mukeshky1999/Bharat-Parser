@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
-from parsers.enterprise_1tb_chat_and_container_engine import PA_CATEGORIZED_CHAT_COLUMNS
+from parsers.enterprise_1tb_chat_and_container_engine import CHAT_COLUMNS
 from parsers.freelist_carver import STANDARD_TX_COLUMNS
 
 # Target App Groupings for PA Analyzed Data Tree
@@ -514,10 +514,10 @@ class CaseUIPaginatorStore:
     # FAST UI QUERY ENDPOINTS
     # ==========================================================================
 
-    def get_pa_project_tree_counts(self) -> Dict[str, Dict[str, int]]:
+    def get_project_tree_counts(self) -> Dict[str, Dict[str, int]]:
         """
         Returns live (total, active, wal_and_carved) counts for every node in the
-        Left Physical Analyzer Project Tree.
+        the case evidence tree.
         """
         conn = self._get_connection()
         try:

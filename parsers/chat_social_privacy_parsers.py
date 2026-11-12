@@ -1,5 +1,5 @@
 """
-Cellebrite Physical Analyzer-Grade Deep Artifact Parsers for Global, Indian,
+Deep Artifact Parsers for Global, Indian,
 Privacy, Ephemeral, Social, and Dating Applications.
 
 Covers:

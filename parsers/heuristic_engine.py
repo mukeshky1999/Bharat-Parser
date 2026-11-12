@@ -1,5 +1,5 @@
 """
-Forensic SQLite Heuristic Engine (Cellebrite Chat & Clean Contact Edition).
+Forensic SQLite Heuristic Engine (Chat & Clean Contact Edition).
 Fixes:
 - Eliminates raw Python bytes repr (`b'\\n\\x00\\x12...'`) and internal sync keys
   (`a:conversation_info_fetch:...`, `a:offers_rewards:...`) from In-App Chats.
@@ -458,7 +458,7 @@ def _normalize_chat_dataframe(
     local_owners: Set[str],
 ) -> pd.DataFrame:
     """
-    Builds a clean, Cellebrite-Reader-ready Chat DataFrame with columns:
+    Builds a clean Chat DataFrame with columns:
     ['Timestamp', 'Chat_Type', 'Direction', 'Contact_Thread', 'Sender', 'Recipient', 'Message']
     """
     out_cols = ['Timestamp', 'Chat_Type', 'Direction', 'Contact_Thread', 'Sender', 'Recipient', 'Message']

@@ -62,7 +62,7 @@ class TestTier1UIBridge(unittest.TestCase):
         T1.8.2: Validates live 37-node Category Tree badge counts across 18 forensic categories.
         Authoritative source: Cellebrite Physical Analyzer Analyzed Data Tree Model.
         """
-        counts = self.store.get_pa_project_tree_counts()
+        counts = self.store.get_project_tree_counts()
 
         # Invariant: Must contain all primary Indian Forensic categories
         expected_categories = [

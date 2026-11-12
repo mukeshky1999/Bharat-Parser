@@ -275,7 +275,7 @@ class TestForensicBenchmarkPipeline(unittest.TestCase):
 
         # STAGE 5 CHECKS (Report generation & PII Sanitization)
         json_path = os.path.join(self.output_dir, "benchmark_telemetry_ledger.json")
-        md_path = os.path.join(self.output_dir, "PARITY_GAP_REPORT.md")
+        md_path = os.path.join(self.output_dir, "COVERAGE_COMPARISON_REPORT.md")
         self.assertTrue(os.path.exists(json_path))
         self.assertTrue(os.path.exists(md_path))
 
@@ -317,7 +317,7 @@ class TestForensicBenchmarkPipeline(unittest.TestCase):
         res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         self.assertEqual(res.returncode, 0, f"CLI exited with error: {res.stderr}")
         self.assertTrue(os.path.exists(os.path.join(cli_out_dir, "benchmark_telemetry_ledger.json")))
-        self.assertTrue(os.path.exists(os.path.join(cli_out_dir, "PARITY_GAP_REPORT.md")))
+        self.assertTrue(os.path.exists(os.path.join(cli_out_dir, "COVERAGE_COMPARISON_REPORT.md")))
 
 
 if __name__ == "__main__":

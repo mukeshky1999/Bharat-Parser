@@ -13,7 +13,7 @@ import zipfile
 import pandas as pd
 
 from parsers.enterprise_1tb_chat_and_container_engine import (
-    PA_CATEGORIZED_CHAT_COLUMNS,
+    CHAT_COLUMNS,
     CaseArtifactStore,
     TerabyteForensicContainerEngine,
     carve_sqlite_freelists_1tb_mmap,
@@ -187,7 +187,7 @@ class TestEnterprise1TBEngine(unittest.TestCase):
                 "Forensic_Provenance": "msgstore.db :: /path/msgstore.db :: message :: RowID=1 :: Offset=0x1000 :: State=Allocated B-Tree",
             }
         ]
-        df_chats = pd.DataFrame(chat_rows, columns=PA_CATEGORIZED_CHAT_COLUMNS)
+        df_chats = pd.DataFrame(chat_rows, columns=CHAT_COLUMNS)
         store.insert_chat_batch(df_chats)
 
         # FTS5 search for "ransom"

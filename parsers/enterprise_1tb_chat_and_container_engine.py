@@ -1,7 +1,7 @@
 """
 Enterprise 1 TB+ Forensic Chat, Privacy, Social & Container Engine.
 Zero-OOM streaming ingestion for UFDR, XRY, Oxygen & raw images,
-with SQLite FTS5 artifact store, mmap freelist carver, and 28-column Cellebrite PA schema.
+with SQLite FTS5 artifact store, mmap freelist carver, and the 28-column canonical chat schema.
 """
 
 from __future__ import annotations
@@ -44,8 +44,8 @@ IST = timezone(timedelta(hours=5, minutes=30))
 _COCOA_OFFSET_SECONDS = 978307200  # Seconds between 1970-01-01 and 2001-01-01
 _WEBKIT_OFFSET_SECONDS = 11644473600  # Seconds between 1601-01-01 and 1970-01-01
 
-# Exact 28-Column Cellebrite Physical Analyzer (PA) Categorized Schema
-PA_CATEGORIZED_CHAT_COLUMNS: List[str] = [
+# 28-column canonical chat schema
+CHAT_COLUMNS: List[str] = [
     # Category 1 — Message & Artifact Details
     'Application',
     'Message_ID',
@@ -158,7 +158,7 @@ def _empty_pa_row(
     recovery_state: str = 'Allocated B-Tree',
 ) -> Dict[str, Any]:
     """
-    Initializes a full 28-column PA schema row with forensic provenance.
+    Initializes a full 28-column chat row with forensic provenance.
     A byte offset is only stated when a real one is known (C-09); otherwise table + rowid only.
     """
     bname = os.path.basename(source_file)
@@ -1019,7 +1019,7 @@ class CaseArtifactStore:
             return
         conn = sqlite3.connect(self.store_db_path)
         try:
-            cols = [c for c in PA_CATEGORIZED_CHAT_COLUMNS if c in df_chunk.columns]
+            cols = [c for c in CHAT_COLUMNS if c in df_chunk.columns]
             placeholders = ','.join(['?'] * len(cols))
             col_names = ','.join(cols)
             records = [
@@ -1233,7 +1233,7 @@ def parse_telegram_cache4(db_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     conn = _open_ro_sqlite(db_path)
     if not conn:
-        return pd.DataFrame(columns=PA_CATEGORIZED_CHAT_COLUMNS), pd.DataFrame()
+        return pd.DataFrame(columns=CHAT_COLUMNS), pd.DataFrame()
 
     tables = _get_tables(conn)
     rows: List[Dict[str, Any]] = []
@@ -1363,7 +1363,7 @@ def parse_telegram_cache4(db_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
                     row['Timestamp_IST'] = ist_ts
                     rows.append(row)
 
-        df_chats = pd.DataFrame(rows, columns=PA_CATEGORIZED_CHAT_COLUMNS)
+        df_chats = pd.DataFrame(rows, columns=CHAT_COLUMNS)
         df_contacts = pd.DataFrame(contacts).drop_duplicates() if contacts else pd.DataFrame(columns=['Contact_Name', 'Identifier', 'Application', 'Source_File'])
         return df_chats, df_contacts
     finally:
@@ -1386,7 +1386,7 @@ def parse_whatsapp_full_forensics(
     """
     conn = _open_ro_sqlite(db_path)
     if not conn:
-        return pd.DataFrame(columns=PA_CATEGORIZED_CHAT_COLUMNS), pd.DataFrame()
+        return pd.DataFrame(columns=CHAT_COLUMNS), pd.DataFrame()
 
     tables = _get_tables(conn)
     rows: List[Dict[str, Any]] = []
@@ -1631,7 +1631,7 @@ def parse_whatsapp_full_forensics(
         if c_conn != conn:
             c_conn.close()
 
-        df_chats = pd.DataFrame(rows, columns=PA_CATEGORIZED_CHAT_COLUMNS)
+        df_chats = pd.DataFrame(rows, columns=CHAT_COLUMNS)
         df_contacts = pd.DataFrame(contacts).drop_duplicates() if contacts else pd.DataFrame(columns=['Contact_Name', 'Identifier', 'Application', 'Source_File'])
         return df_chats, df_contacts
     finally:
@@ -1649,7 +1649,7 @@ def parse_snapchat_arroyo(db_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     conn = _open_ro_sqlite(db_path)
     if not conn:
-        return pd.DataFrame(columns=PA_CATEGORIZED_CHAT_COLUMNS), pd.DataFrame()
+        return pd.DataFrame(columns=CHAT_COLUMNS), pd.DataFrame()
 
     tables = _get_tables(conn)
     rows: List[Dict[str, Any]] = []
@@ -1750,7 +1750,7 @@ def parse_snapchat_arroyo(db_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
                     rows.append(row)
 
-        df_chats = pd.DataFrame(rows, columns=PA_CATEGORIZED_CHAT_COLUMNS)
+        df_chats = pd.DataFrame(rows, columns=CHAT_COLUMNS)
         df_contacts = pd.DataFrame(contacts).drop_duplicates() if contacts else pd.DataFrame(columns=['Contact_Name', 'Identifier', 'Application', 'Source_File'])
         return df_chats, df_contacts
     finally:
@@ -1768,7 +1768,7 @@ def parse_signal_database(db_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     conn = _open_ro_sqlite(db_path)
     if not conn:
-        return pd.DataFrame(columns=PA_CATEGORIZED_CHAT_COLUMNS), pd.DataFrame()
+        return pd.DataFrame(columns=CHAT_COLUMNS), pd.DataFrame()
 
     tables = _get_tables(conn)
     rows: List[Dict[str, Any]] = []
@@ -1860,7 +1860,7 @@ def parse_signal_database(db_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
                     row['Timestamp_IST'] = ist_ts
                     rows.append(row)
 
-        df_chats = pd.DataFrame(rows, columns=PA_CATEGORIZED_CHAT_COLUMNS)
+        df_chats = pd.DataFrame(rows, columns=CHAT_COLUMNS)
         df_contacts = pd.DataFrame(contacts).drop_duplicates() if contacts else pd.DataFrame(columns=['Contact_Name', 'Identifier', 'Application', 'Source_File'])
         return df_chats, df_contacts
     finally:
@@ -1878,7 +1878,7 @@ def parse_zangi_database(db_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     conn = _open_ro_sqlite(db_path)
     if not conn:
-        return pd.DataFrame(columns=PA_CATEGORIZED_CHAT_COLUMNS), pd.DataFrame()
+        return pd.DataFrame(columns=CHAT_COLUMNS), pd.DataFrame()
 
     tables = _get_tables(conn)
     rows: List[Dict[str, Any]] = []
@@ -1955,7 +1955,7 @@ def parse_zangi_database(db_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
                     'Source_File': db_path,
                 })
 
-        df_chats = pd.DataFrame(rows, columns=PA_CATEGORIZED_CHAT_COLUMNS)
+        df_chats = pd.DataFrame(rows, columns=CHAT_COLUMNS)
         df_contacts = pd.DataFrame(contacts).drop_duplicates() if contacts else pd.DataFrame(columns=['Contact_Name', 'Identifier', 'Application', 'Source_File'])
         return df_chats, df_contacts
     finally:
@@ -2050,7 +2050,7 @@ def parse_element_matrix_store(db_path: str) -> Tuple[pd.DataFrame, pd.DataFrame
         except Exception:
             pass
 
-    df_chats = pd.DataFrame(rows, columns=PA_CATEGORIZED_CHAT_COLUMNS)
+    df_chats = pd.DataFrame(rows, columns=CHAT_COLUMNS)
     return df_chats, pd.DataFrame(contacts)
 
 
@@ -2066,7 +2066,7 @@ def parse_privacy_messengers(
     """
     conn = _open_ro_sqlite(db_path)
     if not conn:
-        return pd.DataFrame(columns=PA_CATEGORIZED_CHAT_COLUMNS), pd.DataFrame()
+        return pd.DataFrame(columns=CHAT_COLUMNS), pd.DataFrame()
 
     tables = _get_tables(conn)
     rows: List[Dict[str, Any]] = []
@@ -2168,7 +2168,7 @@ def parse_privacy_messengers(
                         row['Timestamp_IST'] = ist_ts
                         rows.append(row)
 
-        df_chats = pd.DataFrame(rows, columns=PA_CATEGORIZED_CHAT_COLUMNS)
+        df_chats = pd.DataFrame(rows, columns=CHAT_COLUMNS)
         df_contacts = pd.DataFrame(contacts).drop_duplicates() if contacts else pd.DataFrame(columns=['Contact_Name', 'Identifier', 'Application', 'Source_File'])
         return df_chats, df_contacts
     finally:
@@ -2186,7 +2186,7 @@ def parse_instagram_direct(db_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     conn = _open_ro_sqlite(db_path)
     if not conn:
-        return pd.DataFrame(columns=PA_CATEGORIZED_CHAT_COLUMNS), pd.DataFrame()
+        return pd.DataFrame(columns=CHAT_COLUMNS), pd.DataFrame()
 
     tables = _get_tables(conn)
     rows: List[Dict[str, Any]] = []
@@ -2270,7 +2270,7 @@ def parse_instagram_direct(db_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
                     row['Timestamp_IST'] = ist_ts
                     rows.append(row)
 
-        df_chats = pd.DataFrame(rows, columns=PA_CATEGORIZED_CHAT_COLUMNS)
+        df_chats = pd.DataFrame(rows, columns=CHAT_COLUMNS)
         df_contacts = pd.DataFrame(contacts).drop_duplicates() if contacts else pd.DataFrame(columns=['Contact_Name', 'Identifier', 'Application', 'Source_File'])
         return df_chats, df_contacts
     finally:
@@ -2290,7 +2290,7 @@ def parse_dating_apps(
     """
     conn = _open_ro_sqlite(db_path)
     if not conn:
-        return pd.DataFrame(columns=PA_CATEGORIZED_CHAT_COLUMNS), pd.DataFrame()
+        return pd.DataFrame(columns=CHAT_COLUMNS), pd.DataFrame()
 
     tables = _get_tables(conn)
     rows: List[Dict[str, Any]] = []
@@ -2377,7 +2377,7 @@ def parse_dating_apps(
                         rows.append(row)
                 break
 
-        df_chats = pd.DataFrame(rows, columns=PA_CATEGORIZED_CHAT_COLUMNS)
+        df_chats = pd.DataFrame(rows, columns=CHAT_COLUMNS)
         df_contacts = pd.DataFrame(matches_dossier).drop_duplicates() if matches_dossier else pd.DataFrame(columns=['Contact_Name', 'Identifier', 'Application', 'Source_File'])
         return df_chats, df_contacts
     finally:
@@ -2395,7 +2395,7 @@ def harvest_os_privacy_spillover(db_path: str) -> pd.DataFrame:
     """
     conn = _open_ro_sqlite(db_path)
     if not conn:
-        return pd.DataFrame(columns=PA_CATEGORIZED_CHAT_COLUMNS)
+        return pd.DataFrame(columns=CHAT_COLUMNS)
 
     tables = _get_tables(conn)
     rows: List[Dict[str, Any]] = []
@@ -2444,7 +2444,7 @@ def harvest_os_privacy_spillover(db_path: str) -> pd.DataFrame:
                     rows.append(row)
                 break
 
-        return pd.DataFrame(rows, columns=PA_CATEGORIZED_CHAT_COLUMNS)
+        return pd.DataFrame(rows, columns=CHAT_COLUMNS)
     finally:
         conn.close()
 

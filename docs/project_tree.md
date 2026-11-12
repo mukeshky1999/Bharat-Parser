@@ -48,7 +48,7 @@ E:\v8\combined\
 │   ├── api_server.py                               # FastAPI REST engine (31 endpoints, Port 8000, concurrency locks)
 │   ├── app_overrides.py                            # Per-app schema overrides, Indian bank SMS rules & spam blocker
 │   ├── chat_social_privacy_parsers.py              # PA-grade WhatsApp, Telegram TL, Signal, Zangi, Element, Session parsers
-│   ├── commercial_parity_engine.py                 # Recursive LZ4/CBOR/MsgPack/NSKeyedArchiver unpacker + App Genie + mmap carver
+│   ├── generic_table_engine.py                 # Recursive LZ4/CBOR/MsgPack/NSKeyedArchiver unpacker + App Genie + mmap carver
 │   ├── corroboration_engine.py                     # Multi-source signal harvester, RCS split-table joiner & counterparty healer
 │   ├── corrupt_db_carver.py                        # Raw SQLite corrupted page carver & regression fault simulator
 │   ├── crypto_address_validator.py                 # Byte-level EVM EIP-55, TRON, Bitcoin Base58/Bech32 validators
@@ -643,7 +643,7 @@ E:\v8\combined\
     │       ├── runner.ts
     │       └── test_forensic_client.ts
     ├── tests/                                      # Unique Hardened API/Parity/FTS5 Tests (10 files)
-    │   ├── test_commercial_parity_engine.py
+    │   ├── test_generic_table_engine.py
     │   ├── test_e01_adapter.py
     │   ├── test_enterprise_1tb_engine.py
     │   ├── test_forensic_benchmark_recorder.py

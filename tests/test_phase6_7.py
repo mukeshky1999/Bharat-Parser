@@ -661,7 +661,7 @@ class TestHeuristicEngineCategorizedRouting(unittest.TestCase):
 
     def test_heuristic_engine_whatsapp_routing_never_flattens(self):
         from parsers.heuristic_engine import parse_database_artifacts
-        from parsers.enterprise_1tb_chat_and_container_engine import PA_CATEGORIZED_CHAT_COLUMNS
+        from parsers.enterprise_1tb_chat_and_container_engine import CHAT_COLUMNS
 
         db_path = os.path.join(self.test_dir, "msgstore.db")
         conn = sqlite3.connect(db_path)
@@ -694,7 +694,7 @@ class TestHeuristicEngineCategorizedRouting(unittest.TestCase):
         self.assertEqual(len(chats_df), 1)
 
         # The case store and UI use the canonical categorized chat schema; it must never be flattened.
-        for col in PA_CATEGORIZED_CHAT_COLUMNS:
+        for col in CHAT_COLUMNS:
             self.assertIn(col, chats_df.columns, f"Missing categorized column: {col}")
 
         # Real values, not just column presence.

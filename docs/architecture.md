@@ -203,7 +203,7 @@ To process 1 TB+ extractions within tight RAM limits, `CaseUIPaginatorStore` rep
 | `crypto_addresses` | *(indexed on `Address`)* | `Address`, `Network`, `Label`, `Source_File`, `Byte_Offset`, `Forensic_Provenance` |
 | `vfs_files` | *(indexed on `vfs_path`, `file_name`)* | `vfs_path`, `container_format`, `file_name`, `file_size`, `archive_offset`, `is_materialized`, `local_disk_path` |
 
-### 5.2 The Exact 28-Column PA Categorized Chat Schema (`PA_CATEGORIZED_CHAT_COLUMNS`)
+### 5.2 The Exact 28-Column PA Categorized Chat Schema (`CHAT_COLUMNS`)
 1. **Message & Artifact Details (11 cols):** `Application`, `Message_ID`, `Thread_ID`, `Chat_Type`, `Direction`, `Message_Type`, `Delivery_Status`, `Message_Body`, `Quoted_Message_ID`, `Quoted_Text`, `Forwarding_Score`
 2. **Party & Participant Details (6 cols):** `Thread_Title`, `Sender_Name`, `Sender_Identifier`, `Recipient_Name`, `Recipient_Identifier`, `Participant_Bio_Meta`
 3. **Privacy & Ephemeral Flags (3 cols):** `Is_View_Once`, `Disappearing_TTL_Sec`, `Is_Revoked_Deleted`

@@ -48,12 +48,12 @@ This document catalogs every application, operating system artifact, extraction 
   - Verifies WAL magic (`0x377f0682` / `0x377f0683`), salt-1/salt-2, and cumulative checksum chains (Big-Endian / Little-Endian).
   - Classifies frames into 4 forensic states: **Active/Committed**, **Uncommitted (Crash/Pending)**, **Superseded/Historical Revision**, and **Orphaned/Salt-Mismatched**, reconstructing pre-deletion and pre-edit row versions.
 - **Rollback Journal Reader (`src/sqlite/journal.py`):** Parses `-journal` hot/cold sector headers and pre-modification database page images (`JournalPage`).
-- **4-Zone Freelist, Freeblock & Unallocated Carver (`src/sqlite/carver.py`, `parsers/freelist_carver.py`, `parsers/corrupt_db_carver.py`, `parsers/commercial_parity_engine.py`, `src/main/carvers/sqlite-binary-carver.ts`):**
+- **4-Zone Freelist, Freeblock & Unallocated Carver (`src/sqlite/carver.py`, `parsers/freelist_carver.py`, `parsers/corrupt_db_carver.py`, `parsers/generic_table_engine.py`, `src/main/carvers/sqlite-binary-carver.ts`):**
   - Traverses Freelist trunk/leaf chains, intra-page freeblock linked lists (`freeblock_carver.ts`), unallocated slack space between cell content area and page header, and mmap-sliced raw image carving (`carve_deleted_all_categories_mmap`).
   - Enforces Indian FinTech sanity validation (exact `KNOWN_UPI_SUFFIXES` regex `VPA_VALID_RE`, 12-digit UTR & PhonePe `T`-ID validator `UTR_VALID_RE`, realistic INR bounds) to prevent binary noise false positives.
 - **Zero-Knowledge & Zero-Code Schema Discovery:**
   - `parsers/zero_knowledge_miner.py`: Unsupervised extraction of financial, chat, URL, VPA, and mobile artifacts from unrecognized SQLite tables.
-  - `parsers/commercial_parity_engine.py` (`app_genie_classify_table`): Universal 6-model classifier categorizing arbitrary tables into Chats, Transactions, Contacts, Calls, Locations, or Credentials.
+  - `parsers/generic_table_engine.py` (`app_genie_classify_table`): Universal 6-model classifier categorizing arbitrary tables into Chats, Transactions, Contacts, Calls, Locations, or Credentials.
   - `src/unk_triage_and_bsa_studio/schema_mapper.py` (`ZeroCodeSchemaMapper`): Lets examiners interactively promote unknown SQLite columns to `SemanticColumnRole` (`TIMESTAMP_EPOCH`, `ACTOR_SOURCE_IDENTIFIER`, `ACTOR_TARGET_IDENTIFIER`, `MESSAGE_OR_EVENT_BODY_TEXT`, `FINANCIAL_OR_CRYPTO_AMOUNT`) into the Unified Super-Timeline.
 
 ### 3.2 Non-SQLite, Wire-Format & Browser Storage Engines
@@ -63,8 +63,8 @@ This document catalogs every application, operating system artifact, extraction 
 | **Tencent MMKV** | Protobuf-framed key-value parsing, append-history overwrite tracking (Layer 1 vs historical Layer 2), mmap slack carving beyond valid length markers | `src/nonsqlite/mmkv.py`, `src/main/binary_decoders/mmkv_decoder.ts` |
 | **Apple Biome `SEGB` v1 & v2** | Binary `SEGB` header/frame walker, event timestamps, state flags, Protobuf payload extraction across 84+ Biome behavioral event types | `src/nonsqlite/segb.py`, `src/ios_telemetry/biome_screentime_decoder.py` |
 | **Schema-Less Protocol Buffers** | Recursive wire-format decoder (Varint, 64-bit, Length-Delimited, 32-bit, ZigZag) with schema inference & `google.type.Money` (`units`+`nanos`) financial extraction | `src/nonsqlite/protobuf.py`, `src/nonsqlite/varint.py`, `parsers/protobuf_decoder.py`, `src/main/binary_decoders/protobuf_decoder.ts` |
-| **MessagePack, CBOR, LZ4, Zstd, Brotli, Zlib** | Pure-Python LZ4 Block & Frame decompressors, CBOR tag/byte decoder, MessagePack stream parser, Zlib/Gzip/Zstd/Brotli recursive multi-layer container unpacker | `parsers/commercial_parity_engine.py`, `parsers/app_overrides.py` |
-| **Apple Plist, NSKeyedArchiver & typedstream** | Binary `bplist00` unpacking, recursive `$objects` `NSKeyedArchiver` UID graph resolution, iOS `attributedBody` `NSAttributedString` `typedstream` unpacker | `parsers/commercial_parity_engine.py`, `src/dlt/attributed_body.py` |
+| **MessagePack, CBOR, LZ4, Zstd, Brotli, Zlib** | Pure-Python LZ4 Block & Frame decompressors, CBOR tag/byte decoder, MessagePack stream parser, Zlib/Gzip/Zstd/Brotli recursive multi-layer container unpacker | `parsers/generic_table_engine.py`, `parsers/app_overrides.py` |
+| **Apple Plist, NSKeyedArchiver & typedstream** | Binary `bplist00` unpacking, recursive `$objects` `NSKeyedArchiver` UID graph resolution, iOS `attributedBody` `NSAttributedString` `typedstream` unpacker | `parsers/generic_table_engine.py`, `src/dlt/attributed_body.py` |
 | **Embedded WebViews & Caches** | Chromium Simple Cache (`*_0`, `*_1`, `*_s`), iOS `NSURLCache` (`Cache.db` + `fsCachedData/<UUID>`), `Cookies.binarycookies` hybrid-endian parser, IndexedDB/LocalStorage LevelDB, JWT token header/claim decoder | `src/webview/*` (7 modules) |
 
 ### 3.3 Cryptographic Key Broker & Decryption
@@ -267,7 +267,7 @@ Covers **Tier 1 (High Prevalence)** and **Tier 2 (Emerging / Regional)**:
    - **Synchronized 3-Pane Hex, ASCII & Data Interpreter Inspector (`SyncedHexViewer`, `EvidenceCard`):** Jumps directly to the exact `mmap` byte offset / SQLite page inside evidence files and decodes little/big endian ints, Unix/Cocoa/WebKit epochs, Varints, and raw text on hover.
    - **SQLite B-Tree Query Wizard, VFS Explorer & 4 KB Shannon Entropy Skyline (`SQLiteWizardTab`, `FileSystemExplorerTab`, `entropy_profiler.py`):** Interactive read-only SQL/table browser and Chi-Square randomness profiler distinguishing AES-encrypted ciphertexts from compressed streams and plaintext.
 4. **Vendor Differential Benchmark Recorder (`tools/forensic_benchmark_recorder.py`):**
-   - 5-stage diagnostic pipeline benchmarking coverage & performance against UFDR/XRY/Oxygen reports with automatic **PII sanitization** (`[Aadhaar Redacted]`, `[PAN Redacted]`) generating `PARITY_GAP_REPORT.md` & `benchmark_telemetry_ledger.json`.
+   - 5-stage diagnostic pipeline benchmarking coverage & performance against UFDR/XRY/Oxygen reports with automatic **PII sanitization** (`[Aadhaar Redacted]`, `[PAN Redacted]`) generating `COVERAGE_COMPARISON_REPORT.md` & `benchmark_telemetry_ledger.json`.
 
 ---
 

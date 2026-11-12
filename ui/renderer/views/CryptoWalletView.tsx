@@ -86,8 +86,8 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
     });
   }, [activeSubTab, custodialRecords, p2pRecords, bridgeRecords, addressRecords, searchQuery]);
 
-  // Chainalysis / TRM Manifest CSV Export
-  const handleExportChainalysisManifest = () => {
+  // Address list CSV export
+  const handleExportAddressList = () => {
     const recordsToExport = addressRecords.length > 0 ? addressRecords : currentRows;
     if (recordsToExport.length === 0) return;
 
@@ -126,7 +126,7 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `BharatAnalyzer_Crypto_TRM_Chainalysis_Manifest_${new Date().toISOString().substring(0, 10)}.csv`);
+    link.setAttribute('download', `Crypto_Addresses_${new Date().toISOString().substring(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -235,12 +235,12 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = ({
           </div>
 
           <button
-            onClick={handleExportChainalysisManifest}
+            onClick={handleExportAddressList}
             className="px-2.5 py-1 bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-700/80 rounded font-medium text-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
-            title="Download harvested addresses formatted for Chainalysis Reactor & TRM Labs ingestion"
+            title="Download the harvested addresses as a CSV file"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Export Chainalysis / TRM Manifest</span>
+            <span className="hidden sm:inline">Export address list (CSV)</span>
           </button>
         </div>
       </div>

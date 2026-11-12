@@ -52,7 +52,7 @@ function walk(dir: string, out: string[] = []): string[] {
 const root = path.join(__dirname, '..', 'renderer');
 const files = walk(root);
 const banned: Array<[RegExp, string]> = [
-  [/PhysicalAnalyzer|Physical Analyzer|Cellebrite|PAWorkbench|PAField|PATable|PA Table/, 'names from the product this design must not resemble'],
+  [/PhysicalAnalyzer|Physical Analyzer|Cellebrite|Magnet AXIOM|Oxygen Forensic|Chainalysis|TRM Labs|PAWorkbench|PAField|PATable|PA Table/, 'names from the product this design must not resemble'],
   [/-\[#[0-9a-fA-F]{3,8}\]/, 'hard-coded colour in a class (use the theme scale)'],
   [/text-\[(?:[0-9]|10)(?:\.\d+)?px\]/, 'text smaller than 11px'],
   [/animate-(?:pulse|ping|bounce)/, 'blinking or pulsing animation'],

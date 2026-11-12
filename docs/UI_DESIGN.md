@@ -103,3 +103,11 @@ The code can make the layout original and keep a dated record of how it was desi
 * A **design registration** concerns appearance: the eight-stage navigator with the evidence card and case bar as shown.
 
 Do not publish or demonstrate the interface publicly before taking that advice, because disclosure can affect registrability.
+
+### Clean-room rules (added 2026-11-12, Phase 5P)
+
+* Design from the examiner's tasks. Do not use another vendor's screenshots, manuals, layouts, schema files or terms as a source.
+* Do not name another product as a design target in code, interface text or shipped documents. `tests/test_independence_guard.py` and `ui/tests/ui_shell_test.ts` fail if that happens.
+* Reading another tool's export container (.ufdr, .xry, .ofb) is interoperability and stays as import only.
+* Keep `docs/INVENTION_RECORD.md` private; add an entry before building a feature that may be a candidate method, and do not disclose it before an attorney has filed.
+* Licences of dependencies are in `docs/THIRD_PARTY_LICENSES.md`.

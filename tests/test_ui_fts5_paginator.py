@@ -10,7 +10,7 @@ import tempfile
 import unittest
 import pandas as pd
 
-from parsers.enterprise_1tb_chat_and_container_engine import PA_CATEGORIZED_CHAT_COLUMNS
+from parsers.enterprise_1tb_chat_and_container_engine import CHAT_COLUMNS
 from parsers.ui_fts5_paginator import CaseUIPaginatorStore
 
 
@@ -183,7 +183,7 @@ class TestCaseUIPaginatorStore(unittest.TestCase):
         ])
         self.store.ingest_dataframe_chunked("transactions", df_tx)
 
-        counts = self.store.get_pa_project_tree_counts()
+        counts = self.store.get_project_tree_counts()
 
         # WhatsApp: 1 active, 1 carved/WAL, 2 total
         self.assertEqual(counts["chats_whatsapp"]["total"], 2)

@@ -1,8 +1,8 @@
 """
 Automated Real-Data Forensic Benchmark, Compatibility Tester & Parity Recorder
 Performs a 5-Stage Diagnostic Pipeline comparing our forensic parsers against
-Cellebrite (.ufdr), MSAB XRY (.xry), and Oxygen Forensic Detective (.ofb) dumps.
-Generates PARITY_GAP_REPORT.md and benchmark_telemetry_ledger.json with strict PII sanitization.
+the record counts in other tools' .ufdr, .xry and .ofb exports (developer tool, off by default).
+Generates COVERAGE_COMPARISON_REPORT.md and benchmark_telemetry_ledger.json with strict PII sanitization.
 """
 
 from __future__ import annotations
@@ -30,13 +30,13 @@ try:
 except ImportError:
     HAS_PSUTIL = False
 
-from parsers.commercial_parity_engine import (
+from parsers.generic_table_engine import (
     app_genie_classify_table,
     carve_deleted_all_categories_mmap,
     recursive_forensic_unpack,
 )
 from parsers.enterprise_1tb_chat_and_container_engine import (
-    PA_CATEGORIZED_CHAT_COLUMNS,
+    CHAT_COLUMNS,
     TerabyteForensicContainerEngine,
     carve_sqlite_freelists_1tb_mmap,
     dispatch_all_chat_and_privacy_apps,
@@ -935,7 +935,7 @@ class ForensicBenchmarkRecorder:
     # --------------------------------------------------------------------------
     def run_stage5_generate_reports(self) -> Tuple[str, str]:
         """
-        Writes benchmark_telemetry_ledger.json and PARITY_GAP_REPORT.md into output_dir.
+        Writes benchmark_telemetry_ledger.json and COVERAGE_COMPARISON_REPORT.md into output_dir.
         All PII is sanitized and redacted.
         """
         self.log("STAGE 5: Writing Sanitized Reports & Telemetry Ledger...")
@@ -981,7 +981,7 @@ class ForensicBenchmarkRecorder:
             json.dump(sanitized_telemetry, f_json, indent=2, ensure_ascii=False)
 
         # 3. Write Formatted Markdown Report
-        md_path = os.path.join(self.output_dir, 'PARITY_GAP_REPORT.md')
+        md_path = os.path.join(self.output_dir, 'COVERAGE_COMPARISON_REPORT.md')
         raw_report_md = self._render_markdown_report(exec_summary)
         report_md = sanitize_pii(raw_report_md)
         with open(md_path, 'w', encoding='utf-8') as f_md:
@@ -993,7 +993,7 @@ class ForensicBenchmarkRecorder:
         return json_path, md_path
 
     def _render_markdown_report(self, s: Dict[str, Any]) -> str:
-        """Renders comprehensive, court-grade PARITY_GAP_REPORT.md."""
+        """Renders comprehensive, court-grade COVERAGE_COMPARISON_REPORT.md."""
         diff = self.telemetry.get('stage4_vendor_differential', {}).get('comparison_matrix', {})
         unparsed = self.telemetry.get('stage3_unparsed_schema_catalog', [])
         matrix = self.telemetry.get('stage2_db_execution_matrix', [])
@@ -1144,7 +1144,7 @@ def main() -> None:
     parser.add_argument(
         '--output-dir', '-o',
         required=True,
-        help="Output directory to write PARITY_GAP_REPORT.md and benchmark_telemetry_ledger.json",
+        help="Output directory to write COVERAGE_COMPARISON_REPORT.md and benchmark_telemetry_ledger.json",
     )
     parser.add_argument(
         '--verbose', '-v',

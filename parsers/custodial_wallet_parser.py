@@ -1182,7 +1182,7 @@ def dispatch_custodial_wallet(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Chainalysis/TRM-compatible address manifest
+# Address manifest (plain CSV: address, network, source)
 # ═══════════════════════════════════════════════════════════════════════════
 
 def build_address_manifest(wallet_df: pd.DataFrame) -> pd.DataFrame:

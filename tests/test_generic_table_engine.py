@@ -1,5 +1,5 @@
 """
-Unit Tests for commercial_parity_engine.py
+Unit Tests for generic_table_engine.py
 Verifies recursive multi-layer binary unpacker, universal App Genie classifier,
 and universal all-category B-Tree / WAL carver.
 """
@@ -17,7 +17,7 @@ import unittest
 import zlib
 import pandas as pd
 
-from parsers.commercial_parity_engine import (
+from parsers.generic_table_engine import (
     MODEL_CALL_LOG,
     MODEL_CHAT_MESSAGE,
     MODEL_FINANCIAL_TRANSACTION,

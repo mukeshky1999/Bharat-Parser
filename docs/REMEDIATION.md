@@ -115,3 +115,8 @@ Fixed with regression tests: R-20a..R-20f. Python: 515 passed. Open: Hive box fo
 Done: eight-stage shell, three themes with a contrast test, preferences (theme, density, text size, time zone, rest reminder), evidence card with source bytes and pinning (`/api/case/findings`), command palette, Court output page, RecordTable; U-01..U-06, U-09..U-11, X-15..X-17 fixed; old shell, APK and remote-access views, duplicate chat bubble view removed; `cellebrite-alternative` keyword removed.
 Python 517 passed; `npm run test:ts` passes (adds contrast and shell tests); `tsc` clean; `vite build` OK; looked at in Electron in all three themes.
 Open: older views not redesigned (chat table, ledger, graph, wizard); generators do not read findings; Phase 4 (wire `src/`, X-13).
+
+### Phase 5P: independence and patent readiness (2026-11-12, branch `feature/parity-and-independence`)
+Done: vendor-derived names removed from product code (`PA_CATEGORIZED_CHAT_COLUMNS` to `CHAT_COLUMNS`, `get_pa_project_tree_counts` to `get_project_tree_counts`, `commercial_parity_engine` to `generic_table_engine`, `PARITY_GAP_REPORT.md` to `COVERAGE_COMPARISON_REPORT.md`, the "Chainalysis / TRM" export label to "Export address list (CSV)"); comments citing another product as the design target reworded; guard tests added (Python and TypeScript); `docs/THIRD_PARTY_LICENSES.md` and `docs/INVENTION_RECORD.md` created.
+Python 518 passed; `npm run test:ts` passes. Open for the attorney: the 28-column chat schema's origin, libewf LGPL handling, inventorship.
+Next: Phase 5A (replace court outputs with the examination report, facts annexure, audit log and portable package).

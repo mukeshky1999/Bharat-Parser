@@ -1,7 +1,7 @@
 """
-Commercial Forensic Parity Engine: Recursive Multi-Layer Unpacker,
+Generic Table Engine: Recursive Multi-Layer Unpacker,
 Universal 'App Genie' Table Classifier, and All-Category B-Tree / WAL Carver.
-Cellebrite Physical Analyzer, Oxygen Forensic Detective, and Magnet AXIOM parity.
+Reads app databases the product has no dedicated parser for.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import pandas as pd
 
 from parsers.app_overrides import normalize_timestamp_value
 from parsers.enterprise_1tb_chat_and_container_engine import (
-    PA_CATEGORIZED_CHAT_COLUMNS,
+    CHAT_COLUMNS,
     _empty_pa_row,
     format_timestamp_triplet,
 )
@@ -800,7 +800,7 @@ def recursive_forensic_unpack(
 # SECTION 3: MODULE 2 — UNIVERSAL "APP GENIE" HEURISTIC TABLE CLASSIFIER
 # ==============================================================================
 
-# Model definitions matching Cellebrite Physical Analyzer
+# Record models this engine can assign a table to
 MODEL_CHAT_MESSAGE = 'MODEL_CHAT_MESSAGE'
 MODEL_CALL_LOG = 'MODEL_CALL_LOG'
 MODEL_LOCATION_PIN = 'MODEL_LOCATION_PIN'
@@ -829,7 +829,7 @@ def app_genie_classify_table(
 ) -> Dict[str, Any]:
     """
     Inspects any unknown SQLite table from any unlisted application and classifies
-    it into one of 6 Cellebrite Physical Analyzer Models based on column names
+    it into one of 6 record models based on column names
     and cell content distributions.
     """
     empty_result = {
@@ -996,7 +996,7 @@ def app_genie_classify_table(
             row['Timestamp_UTC'] = utc_ts
             row['Timestamp_IST'] = ist_ts
             rows.append(row)
-        extracted_df = pd.DataFrame(rows, columns=PA_CATEGORIZED_CHAT_COLUMNS)
+        extracted_df = pd.DataFrame(rows, columns=CHAT_COLUMNS)
 
     # ---------------- BUILD MODEL_CALL_LOG ----------------
     elif best_model == MODEL_CALL_LOG:
@@ -1341,13 +1341,13 @@ def carve_deleted_all_categories_mmap(db_path: str) -> Dict[str, pd.DataFrame]:
     freeblocks and unallocated slack, and all .db-wal frames using mmap.ACCESS_READ.
     Recovers deleted records across 4 categories:
     1. deleted_transactions
-    2. deleted_chats (28-Column Cellebrite PA Categorized Schema)
+    2. deleted_chats (28-column canonical chat schema)
     3. deleted_calls
     4. deleted_locations
     """
     empty_result = {
         'deleted_transactions': pd.DataFrame(columns=STANDARD_TX_COLUMNS + ['Page_Number', 'Byte_Offset', 'Recovery_Method']),
-        'deleted_chats': pd.DataFrame(columns=PA_CATEGORIZED_CHAT_COLUMNS),
+        'deleted_chats': pd.DataFrame(columns=CHAT_COLUMNS),
         'deleted_calls': pd.DataFrame(columns=['Timestamp', 'Timestamp_IST', 'Peer', 'Duration_Sec', 'Direction', 'Forensic_Provenance']),
         'deleted_locations': pd.DataFrame(columns=['Latitude', 'Longitude', 'Timestamp', 'Timestamp_IST', 'Geo_Coordinates', 'Forensic_Provenance']),
     }
@@ -1495,7 +1495,7 @@ def carve_deleted_all_categories_mmap(db_path: str) -> Dict[str, pd.DataFrame]:
 
     # Construct and deduplicate output DataFrames
     df_tx = pd.DataFrame(all_tx).drop_duplicates(subset=['Counterparty', 'Transaction_ID']) if all_tx else pd.DataFrame(columns=STANDARD_TX_COLUMNS + ['Page_Number', 'Byte_Offset', 'Recovery_Method'])
-    df_chats = pd.DataFrame(all_chats, columns=PA_CATEGORIZED_CHAT_COLUMNS).drop_duplicates(subset=['Sender_Identifier', 'Message_Body', 'Raw_Timestamp_Value']) if all_chats else pd.DataFrame(columns=PA_CATEGORIZED_CHAT_COLUMNS)
+    df_chats = pd.DataFrame(all_chats, columns=CHAT_COLUMNS).drop_duplicates(subset=['Sender_Identifier', 'Message_Body', 'Raw_Timestamp_Value']) if all_chats else pd.DataFrame(columns=CHAT_COLUMNS)
     df_calls = pd.DataFrame(all_calls).drop_duplicates(subset=['Peer', 'Timestamp', 'Duration_Sec']) if all_calls else pd.DataFrame(columns=['Timestamp', 'Timestamp_IST', 'Peer', 'Duration_Sec', 'Direction', 'Forensic_Provenance'])
     df_locs = pd.DataFrame(all_locs).drop_duplicates(subset=['Latitude', 'Longitude', 'Timestamp']) if all_locs else pd.DataFrame(columns=['Latitude', 'Longitude', 'Timestamp', 'Timestamp_IST', 'Geo_Coordinates', 'Forensic_Provenance'])
 
