@@ -50,3 +50,27 @@ def test_missing_corpus_manifest_is_error(tmp_path):
 def test_cli_exit_status_reflects_result(tmp_path):
     assert validation.main(["--out", str(tmp_path / "r")]) == 0
     assert validation.main(["--out", str(tmp_path / "r2"), "--corpus", str(tmp_path / "nope")]) == 1
+
+
+def test_running_the_validation_leaves_the_open_case_alone(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import sqlite3
+    monkeypatch.setattr(api_server, "_case_state", dict(api_server._case_state))
+    monkeypatch.setattr(api_server, "DEFAULT_WORKSPACE_ROOT", str(tmp_path / "cases"))
+    ev = tmp_path / "ev"; ev.mkdir()
+    c = sqlite3.connect(ev / "p.db")
+    c.execute('CREATE TABLE "Transaction" (id TEXT, amount REAL, sender_vpa TEXT, receiver_vpa TEXT, utr TEXT, timestamp TEXT)')
+    c.execute('INSERT INTO "Transaction" VALUES (?,?,?,?,?,?)', ("t", 10.0, "a@ybl", "b@ybl", "100000000011", "2026-02-01 09:00:00")); c.commit(); c.close()
+    client = TestClient(api_server.app)
+    assert client.post("/api/case/ingest", json={"evidence_path": str(ev), "case_id": "KEEP-1"}).json()["success"]
+    store, state_id = api_server._active_store, api_server._case_state.get("case_id")
+    r = client.post("/api/validation/run")
+    assert r.status_code == 200 and r.json()["report"]["result"] == "ALL CHECKS PASSED" and "Validation record" in r.json()["html"]
+    assert api_server._active_store is store and api_server._case_state.get("case_id") == state_id == "KEEP-1"
+    assert client.get("/api/artifacts/query", params={"category": "upi_transactions"}).json()["rows"]        # the case still answers
+
+
+def test_validation_refuses_while_an_ingest_is_running(monkeypatch):
+    from fastapi.testclient import TestClient
+    monkeypatch.setattr(api_server._ingest_progress, "state", "running")
+    assert TestClient(api_server.app).post("/api/validation/run").status_code == 409

@@ -22,6 +22,7 @@ Run:  python -m parsers.validation [--out DIR] [--corpus DIR]    (exit status 1 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import html
 import json
@@ -51,6 +52,8 @@ def _check(cid: str, what: str, how: str, expected: Any, fn: Callable[[], Any]) 
         actual = fn()
         row["actual"] = actual
         row["status"] = "PASS" if actual == expected else "FAIL"
+    except ValidationBusy:
+        raise
     except Exception as exc:                                     # an error is not a pass
         row["actual"] = None
         row["status"] = "ERROR"
@@ -159,15 +162,37 @@ def _case_media_hashes_and_status(tmp: str) -> Any:
         conn.close()
 
 
+class ValidationBusy(RuntimeError):
+    """An ingest is running, so the validation cannot borrow the server's state."""
+
+
+@contextlib.contextmanager
+def isolated_api(workspace_root: str):
+    """Lets the validation run the real ingest in a scratch workspace and puts the server's own state back afterwards:
+    the open case, the case store, the progress record and the workspace root."""
+    from parsers import api_server
+    if getattr(api_server._ingest_progress, "state", "") == "running":
+        raise ValidationBusy("An evidence ingest is running. Run the validation after it has finished.")
+    saved = (api_server._case_state, dict(api_server._case_state), api_server._active_store,
+             api_server._ingest_progress, api_server.DEFAULT_WORKSPACE_ROOT)
+    api_server.DEFAULT_WORKSPACE_ROOT = workspace_root
+    try:
+        yield api_server
+    finally:
+        state_obj, state_copy, store, progress, root = saved
+        state_obj.clear()
+        state_obj.update(state_copy)
+        api_server._case_state = state_obj
+        api_server._active_store = store
+        api_server._ingest_progress = progress
+        api_server.DEFAULT_WORKSPACE_ROOT = root
+
+
 def _case_pipeline(tmp: str) -> Any:
     """End to end through the real ingest: three payments, one file that cannot be decoded."""
     from fastapi.testclient import TestClient
-    from parsers import api_server
 
-    old_root = api_server.DEFAULT_WORKSPACE_ROOT
-    old_state = dict(api_server._case_state)
-    api_server.DEFAULT_WORKSPACE_ROOT = os.path.join(tmp, "cases")
-    try:
+    with isolated_api(os.path.join(tmp, "cases")) as api_server:
         ev = os.path.join(tmp, "evidence")
         os.makedirs(ev, exist_ok=True)
         c = sqlite3.connect(os.path.join(ev, "payments.db"))
@@ -192,10 +217,6 @@ def _case_pipeline(tmp: str) -> Any:
             "coverage_by_outcome": cov.get("summary", {}).get("by_outcome"),
             "audit_chain_verified": bool(audit.get("verified")),
         }
-    finally:
-        api_server.DEFAULT_WORKSPACE_ROOT = old_root
-        api_server._case_state.clear()
-        api_server._case_state.update(old_state)
 
 
 BUILTIN = [
@@ -256,22 +277,13 @@ def _corpus_checks(corpus_dir: str) -> List[Dict[str, Any]]:
     if expected_counts:
         def run() -> Any:
             from fastapi.testclient import TestClient
-            from parsers import api_server
-            old_root = api_server.DEFAULT_WORKSPACE_ROOT
-            old_state = dict(api_server._case_state)
-            with tempfile.TemporaryDirectory() as tmp:
-                api_server.DEFAULT_WORKSPACE_ROOT = os.path.join(tmp, "cases")
-                try:
-                    client = TestClient(api_server.app)
-                    res = client.post("/api/case/ingest", json={"evidence_path": corpus_dir, "case_id": "VALIDATION-CORPUS"}).json()
-                    if not res.get("success"):
-                        raise RuntimeError(res.get("error") or "ingest failed")
-                    counts = res.get("counts") or {}
-                    return {k: (counts.get(k) or {}).get("total") for k in expected_counts}
-                finally:
-                    api_server.DEFAULT_WORKSPACE_ROOT = old_root
-                    api_server._case_state.clear()
-                    api_server._case_state.update(old_state)
+            with tempfile.TemporaryDirectory() as tmp, isolated_api(os.path.join(tmp, "cases")) as api_server:
+                client = TestClient(api_server.app)
+                res = client.post("/api/case/ingest", json={"evidence_path": corpus_dir, "case_id": "VALIDATION-CORPUS"}).json()
+                if not res.get("success"):
+                    raise RuntimeError(res.get("error") or "ingest failed")
+                counts = res.get("counts") or {}
+                return {k: (counts.get(k) or {}).get("total") for k in expected_counts}
         out.append(_check("CORPUS-COUNTS", "Record counts after ingesting the corpus",
                           "Declared in the corpus manifest", dict(expected_counts), run))
     return out

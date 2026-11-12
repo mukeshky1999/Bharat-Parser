@@ -527,6 +527,8 @@ export interface PackageResult {
   included: number;
   withheld: number;
   merkle_root: string;
+  /** SHA-256 of the package manifest; a reviewer's marks file names it. */
+  package_id?: string;
   error?: string;
 }
 
@@ -1555,6 +1557,20 @@ class ForensicClient {
   /** Accounts from payment records the examiner tagged; those shared with complainant / excluded / privileged records come back in `left_out`. */
   public async getAccountsOfInterest(): Promise<{ data: { accounts: Array<Record<string, string | number>>; left_out: Array<Record<string, string | number>>; note: string } | null; error: string | null }> {
     return this.fetchApi('/api/report/accounts-of-interest');
+  }
+
+  /** Runs the known-answer checks on scratch inputs; the open case is left alone. */
+  public async runValidation(): Promise<{ data: { report: Record<string, unknown>; html: string } | null; error: string | null }> {
+    return this.fetchApi('/api/validation/run', { method: 'POST' });
+  }
+
+  /** Import the marks file a reviewer saved from a package this case built. The marks are suggestions, never tags. */
+  public async importReviewerMarks(text: string): Promise<{ data: { imported: number; package_id: string; reviewer: string | null; marks_file_sha256: string } | null; error: string | null }> {
+    return this.fetchApi('/api/review/marks/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  }
+
+  public async getReviewerMarks(): Promise<{ data: { marks: Array<Record<string, unknown>>; note: string } | null; error: string | null }> {
+    return this.fetchApi('/api/review/marks');
   }
 
   public async getAuditLog(signal?: AbortSignal): Promise<AuditSummary> {

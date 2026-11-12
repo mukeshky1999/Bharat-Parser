@@ -2594,9 +2594,70 @@ def build_review_package(req: PackageRequest):
     except review_package.PackageRefused as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     _audit_event("package_built", {"included": res.included, "withheld": res.withheld, "merkle_root": res.merkle_root,
+                                   "package_id": res.package_id, "items": res.entries,
                                    "tag_warning_acknowledged": bool(req.acknowledge_tagged and any(i.tag_flags and i.disposition == "INCLUDE" for i in items))})
     return {"success": True, "directory": res.directory, "viewer_path": res.viewer_path,
-            "included": res.included, "withheld": res.withheld, "merkle_root": res.merkle_root}
+            "included": res.included, "withheld": res.withheld, "merkle_root": res.merkle_root, "package_id": res.package_id}
+
+
+# ---------------------------------------------------------------------------
+# Validation record (5B.10): run the known-answer checks from the app
+# ---------------------------------------------------------------------------
+@app.post("/api/validation/run")
+def validation_run():
+    """Runs the built-in known-answer checks in a scratch workspace and returns the report. The open case is left as it was."""
+    from parsers import validation
+    try:
+        report = validation.run_validation()
+    except validation.ValidationBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return {"report": report, "html": validation.render_html(report)}
+
+
+# ---------------------------------------------------------------------------
+# Reviewer round trip (5C.10): marks the reviewer made on a package, returned as a file
+# ---------------------------------------------------------------------------
+class ReviewerMarksIn(BaseModel):
+    text: str
+
+
+def _known_packages() -> Dict[str, Dict[str, Any]]:
+    out: Dict[str, Dict[str, Any]] = {}
+    for e in _audit_summary().get("entries", []):
+        p = e.get("payload") or {}
+        if e.get("action") == "package_built" and p.get("package_id") and isinstance(p.get("items"), list):
+            out[str(p["package_id"])] = {"items": p["items"]}
+    return out
+
+
+@app.post("/api/review/marks/import")
+def review_marks_import(body: ReviewerMarksIn):
+    """Import the marks file a reviewer saved from a package this case built. The marks are suggestions, never tags."""
+    from parsers import review_marks
+    _require_case()
+    conn = _active_store._get_connection()
+    try:
+        conn.executescript(review_marks.SCHEMA)
+        res = review_marks.import_marks(conn, body.text, _known_packages())
+    except review_marks.MarksRefused as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    finally:
+        conn.close()
+    _audit_event("reviewer_marks_imported", {"package_id": res["package_id"], "count": res["imported"], "reviewer": res["reviewer"],
+                                             "marks_file_sha256": res["marks_file_sha256"]})
+    return res
+
+
+@app.get("/api/review/marks")
+def review_marks_list():
+    from parsers import review_marks
+    _require_case()
+    conn = _active_store._get_connection()
+    try:
+        conn.executescript(review_marks.SCHEMA)
+        return review_marks.list_marks(conn)
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------

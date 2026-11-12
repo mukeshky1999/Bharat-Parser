@@ -17,6 +17,7 @@ Rules, in the order they are applied:
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import html
 import json
@@ -41,6 +42,19 @@ _REASON = {
 }
 
 
+# The viewer's only script: it reads the marks the reviewer entered and offers them as a file. It makes no network call.
+_VIEWER_SCRIPT = """(function(){
+var PKG="__PACKAGE_ID__";
+function collect(){var out=[];document.querySelectorAll("tr[data-index]").forEach(function(tr){
+var label=tr.querySelector("select").value,note=tr.querySelector("input").value;
+if(label||note.trim()){out.push({index:tr.getAttribute("data-index"),sha256:tr.getAttribute("data-sha"),label:label,note:note});}});return out;}
+window.buildMarks=function(){return JSON.stringify({kind:"reviewer_marks",schema:1,package_id:PKG,reviewer:document.getElementById("rv").value,
+reviewer_clock:new Date().toISOString(),marks:collect()},null,2);};
+document.getElementById("save").onclick=function(){var b=new Blob([window.buildMarks()],{type:"application/json"});
+var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="reviewer_marks.json";document.body.appendChild(a);a.click();a.remove();};
+})();"""
+
+
 class PackageRefused(ValueError):
     """The package was not built; nothing was written."""
 
@@ -62,6 +76,8 @@ class PackageResult:
     included: int
     withheld: int
     merkle_root: str
+    package_id: str = ""                                   # SHA-256 of manifest.json: what the reviewer's marks are bound to
+    entries: Optional[List[Dict[str, str]]] = None         # index, name, sha256 of each item
 
 
 def _safe_component(name: str, index: int) -> str:
@@ -164,14 +180,20 @@ def build_package(
     }
     manifest_path = _write_inside(out, "manifest.json", json.dumps(meta, indent=2, sort_keys=True).encode("utf-8"))
 
+    package_id = hashlib.sha256(open(manifest_path, "rb").read()).hexdigest()
     rows = "".join(
-        f"<tr><td>{e['index']}</td><td>{esc(e['name'])}</td><td>{esc(e['disposition'])}</td>"
+        f"<tr data-index=\"{e['index']}\" data-sha=\"{e['sha256']}\"><td>{e['index']}</td><td>{esc(e['name'])}</td><td>{esc(e['disposition'])}</td>"
         f"<td><a href=\"{html.escape(e['file'], quote=True)}\">{html.escape(e['file'])}</a></td>"
-        f"<td class=\"m\">{e['sha256']}</td><td>{esc(e['note'])}{(' [records tagged: ' + esc(e['tagged_records']) + ']') if e['tagged_records'] else ''}</td></tr>" for e in entries
+        f"<td class=\"m\">{e['sha256']}</td><td>{esc(e['note'])}{(' [records tagged: ' + esc(e['tagged_records']) + ']') if e['tagged_records'] else ''}</td>"
+        "<td><select aria-label=\"Your mark\"><option value=\"\">no mark</option><option value=\"relevant\">relevant</option>"
+        "<option value=\"not_relevant\">not relevant</option><option value=\"needs_clarification\">needs clarification</option></select> "
+        "<input type=\"text\" maxlength=\"2000\" aria-label=\"Your note\" placeholder=\"note\"></td></tr>" for e in entries
     )
+    script = _VIEWER_SCRIPT.replace("__PACKAGE_ID__", package_id)
+    script_hash = base64.b64encode(hashlib.sha256(script.encode("utf-8")).digest()).decode("ascii")
     viewer = (
         "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\">"
-        "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\">"
+        f"<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-{script_hash}'\">"
         f"<title>Review package {esc(case_id)}</title><style>body{{font-family:sans-serif;margin:1.5rem}}"
         "table{border-collapse:collapse;width:100%}td,th{border:1px solid #666;padding:.3rem;text-align:left}"
         ".m{font-family:Consolas,monospace;font-size:.8rem;word-break:break-all}</style></head><body>"
@@ -179,8 +201,13 @@ def build_package(
         f"<p>{included} file(s) included, {withheld} withheld. {html.escape(meta['masking'])}</p>"
         f"<p>Merkle root of the originals: <span class=\"m\">{root}</span><br>"
         f"Audit log head hash: <span class=\"m\">{html.escape(meta['audit_head_hash'])}</span></p>"
-        "<table><tr><th>#</th><th>Name</th><th>Decision</th><th>File</th><th>SHA-256 of original</th><th>Note</th></tr>"
-        f"{rows}</table></body></html>"
+        "<p>Reviewer: you can mark each item and save your marks as a small file to send back to the examiner. "
+        "Your marks are suggestions; the examiner decides what to do with them. Your name and your computer's clock are recorded as you give them.</p>"
+        "<p><label>Your name <input id=\"rv\" type=\"text\" maxlength=\"120\"></label> "
+        "<button id=\"save\" type=\"button\">Save my marks</button></p>"
+        "<table><tr><th>#</th><th>Name</th><th>Decision</th><th>File</th><th>SHA-256 of original</th><th>Note</th><th>Your mark</th></tr>"
+        f"{rows}</table><p class=\"m\">Package id: {package_id}</p><script>{script}</script></body></html>"
     )
     viewer_path = _write_inside(out, "index.html", viewer.encode("utf-8"))
-    return PackageResult(out, viewer_path, manifest_path, included, withheld, root)
+    return PackageResult(out, viewer_path, manifest_path, included, withheld, root, package_id,
+                         [{"index": e["index"], "name": e["name"], "sha256": e["sha256"]} for e in entries])

@@ -49,8 +49,13 @@ ok(/the tool applies none/.test(insp('TagControls.tsx')), 'record panel says the
 // progress: no invented percentage
 const prog = view('IngestProgressPanel.tsx');
 ok(/cannot say how much is left/.test(prog) && /fraction === null/.test(prog), 'progress shows "working" when the step cannot be counted');
+// reviewer marks and validation say what they are
+const marksCard = view('ReviewerMarksCard.tsx');
+ok(/never become tags|not a tag|apart from your tags/.test(marksCard + fs.readFileSync(path.join(__dirname, '..', '..', 'parsers', 'review_marks.py'), 'utf8')), 'reviewer marks are kept apart from tags');
+ok(/not touched/.test(view('ValidationCard.tsx')) && /does not show the tool is right/.test(view('ValidationCard.tsx')), 'validation says it leaves the case alone and what it does not show');
+
 // none of the new screens keeps case data in browser storage
-for (const f of ['SearchView.tsx', 'TimelineView.tsx', 'TagsView.tsx', 'MediaLibraryView.tsx', 'IngestProgressPanel.tsx']) {
+for (const f of ['ReviewerMarksCard.tsx', 'ValidationCard.tsx', 'SearchView.tsx', 'TimelineView.tsx', 'TagsView.tsx', 'MediaLibraryView.tsx', 'IngestProgressPanel.tsx']) {
   ok(!/localStorage|sessionStorage|indexedDB/.test(view(f)), `${f} does not use browser storage`);
 }
 ok(!/localStorage|sessionStorage|indexedDB/.test(insp('RecordDetail.tsx') + insp('TagControls.tsx') + insp('BulkTagBar.tsx')), 'RecordDetail does not use browser storage');

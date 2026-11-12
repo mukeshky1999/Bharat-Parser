@@ -86,8 +86,13 @@ def test_viewer_is_escaped_and_blocks_scripts(tmp_path):
     res = rp.build_package("<img src=x onerror=alert(1)>", [PackageItem(p, INCLUDE, note="<script>alert(1)</script>")],
                            str(tmp_path / "pkg"))
     html = open(res.viewer_path, encoding="utf-8").read()
-    assert "<script>" not in html and "<img src=x" not in html
-    assert "default-src 'none'" in html
+    assert "<img src=x" not in html and "&lt;script&gt;alert(1)&lt;/script&gt;" in html     # injected text is escaped
+    assert html.count("<script>") == 1                                                     # only the viewer's own script
+    import base64, hashlib, re
+    body = re.search(r"<script>(.*?)</script>", html, re.S).group(1)
+    digest = base64.b64encode(hashlib.sha256(body.encode()).digest()).decode()
+    assert "default-src 'none'" in html and f"script-src 'sha256-{digest}'" in html       # the CSP allows that script and no other
+    assert "fetch(" not in body and "XMLHttpRequest" not in body and "http" not in body    # it makes no network call
 
 
 def test_existing_nonempty_folder_is_not_reused(tmp_path):

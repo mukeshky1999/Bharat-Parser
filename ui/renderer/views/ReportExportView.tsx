@@ -4,6 +4,8 @@ import { forensicClient, AuditSummary, PackageResult, ReportParticulars } from '
 import { useWorkbenchStore } from '../state/workbenchStore';
 import { useFindings } from '../state/findingsStore';
 import { csvCell } from '../utils/csv';
+import { ReviewerMarksCard } from './ReviewerMarksCard';
+import { ValidationCard } from './ValidationCard';
 
 const FIELDS: Array<[keyof ReportParticulars, string]> = [
   ['case_number', 'Case / reference number'],
@@ -275,6 +277,14 @@ export const ReportExportView: React.FC = () => {
               Merkle root of the originals: <span className="font-mono">{pkg.merkle_root}</span>
             </p>
           )}
+        </Card>
+
+        <Card icon={PackageOpen} title="Reviewer's marks">
+          <ReviewerMarksCard hasCase={hasCase} />
+        </Card>
+
+        <Card icon={ListChecks} title="Validation record">
+          <ValidationCard />
         </Card>
 
         <Card icon={ListChecks} title="Audit log">
