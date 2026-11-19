@@ -1,7 +1,7 @@
 // Phase 5C: the new screens are registered, and the rules they promised are still in their source.
 import * as fs from 'fs';
 import * as path from 'path';
-import { STAGES, BANK_ALERTS_NOTICE } from '../renderer/workspace/stages';
+import { GROUPS, BANK_ALERTS_NOTICE } from '../renderer/workspace/dataTree';
 import { shownValue, NOT_RECORDED } from '../renderer/utils/recordText';
 import { caseRecordOf } from '../renderer/utils/caseRecord';
 import { interpret, parseOffset } from '../renderer/utils/byteInterpreter';
@@ -11,10 +11,10 @@ function ok(cond: boolean, msg: string) {
   if (!cond) { failures++; console.error('FAIL:', msg); }
 }
 
-const tabs = STAGES.flatMap((s) => s.views.map((v) => v.tab as string));
-ok(STAGES.length === 8, 'still eight stages');
-ok(new Set(tabs).size === tabs.length, 'a view appears in one stage only');
-for (const t of ['SEARCH', 'TAGS', 'TIMELINE', 'MEDIA']) ok(tabs.includes(t), `${t} is reachable from a stage`);
+const tabs = GROUPS.flatMap((s) => s.views.map((v) => v.tab as string));
+ok(GROUPS.length === 7, 'still 7 groups');
+ok(new Set(tabs).size === tabs.length, 'a view appears in one group only');
+for (const t of ['SEARCH', 'TAGS', 'TIMELINE', 'MEDIA']) ok(tabs.includes(t), `${t} is reachable from a group`);
 
 // a value that was not recorded is shown as such; zero and false are values
 ok(shownValue(null) === NOT_RECORDED && shownValue(undefined) === NOT_RECORDED && shownValue('') === NOT_RECORDED, 'null, undefined and empty show "not recorded"');
@@ -81,10 +81,10 @@ ok(/Leads, not findings/.test(view('MuleLinkGraphTab.tsx')), 'the link graph say
 ok(!/byteOffset: 0/.test(view('BankCdrFusionView.tsx')), 'fusion rows do not invent a byte offset of 0');
 
 // bank alerts: works, and is marked as in testing wherever it is listed and on its own screen
-const bank = STAGES.flatMap((st) => st.views).find((v) => v.tab === 'BANK_ALERTS');
+const bank = GROUPS.flatMap((st) => st.views).find((v) => v.tab === 'BANK_ALERTS');
 ok(!!bank && bank.inTesting === true && !bank.unavailable, 'bank alerts is enabled and marked in testing');
 ok(/made-up data only/.test(BANK_ALERTS_NOTICE) && /not yet been tested on real/.test(BANK_ALERTS_NOTICE), 'the notice says it has only been run on made-up data');
-const nav = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace', 'StageNavigator.tsx'), 'utf8');
+const nav = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace', 'DataTreeView.tsx'), 'utf8');
 ok(/v\.inTesting && <span/.test(nav) && /in testing/.test(nav), 'the navigator shows an "in testing" tag');
 ok(/v\.unavailable\s*\?\s*addToast/.test(nav) && /cursor-not-allowed/.test(nav), 'a view can still be switched off: greyed out, with a notice on click');
 ok(/inTesting/.test(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace', 'CommandPalette.tsx'), 'utf8')), 'the command palette says it is in testing');

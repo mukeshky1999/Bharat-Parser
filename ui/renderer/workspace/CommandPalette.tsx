@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useUi } from '../state/uiStore';
 import { useWorkbenchStore } from '../state/workbenchStore';
 import { usePreferences } from '../state/preferencesStore';
-import { STAGES } from './stages';
+import { GROUPS } from './dataTree';
 
 interface Command {
   id: string;
@@ -24,9 +24,9 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const commands: Command[] = useMemo(() => {
-    const go: Command[] = STAGES.flatMap((st) =>
+    const go: Command[] = GROUPS.flatMap((st) =>
       st.views.map((v) => ({
-        id: `go-${v.tab}`, label: `Go to ${v.label}`, hint: v.unavailable ? 'Not available yet' : v.inTesting ? `In testing · Stage ${st.no}: ${st.label}` : `Stage ${st.no}: ${st.label}`,
+        id: `go-${v.tab}`, label: `Go to ${v.label}`, hint: v.unavailable ? 'Not available yet' : v.inTesting ? `In testing · ${st.label}` : st.label,
         run: () => (v.unavailable ? addToast({ type: 'info', title: `${v.label}: not available yet`, message: v.unavailable }) : setActiveTab(v.tab)),
       }))
     );
@@ -35,8 +35,8 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
       { id: 'open-file', label: 'Open evidence file…', run: onPickFile },
       { id: 'open-folder', label: 'Open extracted folder…', run: onPickFolder },
       { id: 'settings', label: 'Display settings', run: () => open('SETTINGS') },
-      { id: 't-dim', label: 'Theme: Dim', run: () => setPref({ theme: 'dim' }) },
       { id: 't-light', label: 'Theme: Light', run: () => setPref({ theme: 'light' }) },
+      { id: 't-dim', label: 'Theme: Dim', run: () => setPref({ theme: 'dim' }) },
       { id: 't-contrast', label: 'Theme: High contrast', run: () => setPref({ theme: 'contrast' }) },
       { id: 'd-compact', label: 'Rows: Compact', run: () => setPref({ density: 'compact' }) },
       { id: 'd-comf', label: 'Rows: Comfortable', run: () => setPref({ density: 'comfortable' }) },
@@ -84,8 +84,8 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/60 flex items-start justify-center pt-[12vh] p-4" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div role="dialog" aria-modal="true" aria-label="Search and commands" className="w-full max-w-xl rounded-lg border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-[100] bg-ink/40 flex items-start justify-center pt-[12vh] p-4" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div role="dialog" aria-modal="true" aria-label="Search and commands" className="w-full max-w-xl rounded-[10px] border border-line bg-surface shadow-float overflow-hidden">
         <input
           ref={inputRef}
           value={q}
@@ -96,7 +96,7 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
           role="combobox"
           aria-expanded="true"
           aria-controls="palette-list"
-          className="w-full h-12 px-4 bg-slate-900 text-slate-50 placeholder-slate-500 border-b border-slate-800 outline-none"
+          className="w-full h-12 px-4 bg-surface text-ink placeholder:text-faint border-b border-line outline-none"
         />
         <ul id="palette-list" role="listbox" className="max-h-80 overflow-y-auto py-1">
           {items.map((c, i) => (
@@ -104,15 +104,15 @@ export const CommandPalette: React.FC<{ onPickFile: () => void; onPickFolder: ()
               <button
                 onMouseEnter={() => setIdx(i)}
                 onClick={() => run(c)}
-                className={`w-full flex items-center justify-between px-4 py-2 text-left ${i === idx ? 'bg-slate-800 text-slate-50' : 'text-slate-200'}`}
+                className={`w-full flex items-center justify-between px-4 py-2 text-left ${i === idx ? 'bg-accent-soft text-accent-ink' : 'text-ink'}`}
               >
                 <span>{c.label}</span>
-                {c.hint && <span className="text-slate-400 text-[0.75rem]">{c.hint}</span>}
+                {c.hint && <span className="text-muted text-[0.75rem]">{c.hint}</span>}
               </button>
             </li>
           ))}
         </ul>
-        <div className="px-4 py-2 border-t border-slate-800 text-slate-400 text-[0.75rem]">Up and Down to choose · Enter to run · Esc to close</div>
+        <div className="px-4 py-2 border-t border-line text-muted text-[0.75rem]">Up and Down to choose · Enter to run · Esc to close</div>
       </div>
     </div>
   );

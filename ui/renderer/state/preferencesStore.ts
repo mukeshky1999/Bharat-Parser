@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type ThemeName = 'dim' | 'light' | 'contrast';
+export type ThemeName = 'light' | 'dim' | 'contrast';
 export type Density = 'compact' | 'comfortable';
 export type TimeZoneMode = 'IST' | 'UTC';
 
@@ -21,19 +21,20 @@ export interface Preferences {
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
-  theme: 'dim',
+  theme: 'light',
   density: 'comfortable',
   fontScale: 1,
   timeZone: 'IST',
-  navWidth: 248,
-  cardWidth: 380,
+  navWidth: 264,
+  cardWidth: 372,
   navCollapsed: false,
   cardOpen: true,
   breakReminder: false,
   hiddenColumns: {},
 };
 
-const STORAGE_KEY = 'bharat.preferences.v1';
+// v2: light became the default theme; v1 stored 'dim' as the old default for everyone.
+const STORAGE_KEY = 'bharat.preferences.v2';
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /** Accepts anything read from storage and returns a valid Preferences object (never throws). */

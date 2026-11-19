@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./theme.css";
+@import "./tokens.css";
 
 /* Reading comfort is set here and by the preferences store (data-theme, data-density, --font-scale).
    Rules: no pure black page, text never below 11px at 100%, numbers align in columns, nothing blinks. */
@@ -18,8 +19,8 @@ html {
 
 @layer base {
   body {
-    background-color: var(--c-slate-950);
-    color: var(--c-slate-200);
+    background-color: var(--t-page);
+    color: var(--t-ink);
     font-family: var(--font-ui);
     font-size: 0.8125rem; /* 13px at 100% */
     line-height: 1.5;
@@ -42,9 +43,20 @@ html {
 
 /* Visible keyboard focus everywhere (WCAG 2.4.7) */
 :focus-visible {
-  outline: 2px solid var(--c-cyan-400);
+  outline: 2px solid var(--t-accent);
   outline-offset: 2px;
 }
+
+/* A separate object on the page: white card, soft border, small radius, one quiet shadow. */
+.card {
+  background: var(--t-surface);
+  border: 1px solid var(--t-line);
+  border-radius: 10px;
+  box-shadow: var(--t-shadow);
+  min-width: 0;
+}
+/* Recovered (deleted) table rows: rose edge on the first cell */
+tr.is-recovered > td:first-child { box-shadow: inset 3px 0 0 var(--t-rec); }
 
 /* Nothing in this application blinks or pulses: constant motion tires the eye over a long shift. */
 .animate-ping,
@@ -67,9 +79,9 @@ html {
 
 /* Scrollbars follow the theme */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: var(--c-slate-950); }
-::-webkit-scrollbar-thumb { background: var(--c-slate-700); border-radius: 5px; border: 2px solid var(--c-slate-950); }
-::-webkit-scrollbar-thumb:hover { background: var(--c-slate-600); }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--t-line-strong); border-radius: 5px; border: 2px solid var(--t-surface); }
+::-webkit-scrollbar-thumb:hover { background: var(--t-faint); }
 
 /* Data tables: row height follows the density setting */
 .rec-row { height: var(--row-h); }

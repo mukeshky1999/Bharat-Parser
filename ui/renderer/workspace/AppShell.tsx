@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { CaseBar } from './CaseBar';
-import { StageNavigator } from './StageNavigator';
+import { DataTree } from './DataTreeView';
 import { Workspace } from './Workspace';
 import { StatusLine } from './StatusLine';
 import { CommandPalette } from './CommandPalette';
@@ -15,7 +15,7 @@ import { useFindings } from '../state/findingsStore';
 import { usePreferences, applyPreferences } from '../state/preferencesStore';
 import { useUi } from '../state/uiStore';
 import { forensicClient } from '../api/forensicClient';
-import { STAGES } from './stages';
+import { GROUPS } from './dataTree';
 
 const REGIONS = ['stages', 'workspace', 'card'];
 
@@ -28,7 +28,7 @@ const Splitter: React.FC<{ label: string; onDelta: (dx: number) => void }> = ({ 
       aria-orientation="vertical"
       aria-label={label}
       tabIndex={0}
-      className="w-1.5 shrink-0 cursor-col-resize bg-slate-800 hover:bg-cyan-700 focus-visible:bg-cyan-600"
+      className="w-1.5 shrink-0 cursor-col-resize bg-line hover:bg-accent focus-visible:bg-accent"
       onPointerDown={(e) => { last.current = e.clientX; (e.target as HTMLElement).setPointerCapture(e.pointerId); }}
       onPointerMove={(e) => { if (last.current !== null) { onDelta(e.clientX - last.current); last.current = e.clientX; } }}
       onPointerUp={() => { last.current = null; }}
@@ -73,7 +73,7 @@ export const AppShell: React.FC = () => {
   const pickFile = useCallback(() => void ingest(() => forensicClient.pickEvidenceFile(), 'file'), [ingest]);
   const pickFolder = useCallback(() => void ingest(() => forensicClient.pickEvidenceFolder(), 'folder'), [ingest]);
 
-  // Global keys: Ctrl+K palette, Ctrl+B pin, Alt+1..8 stage, F6 next region
+  // Global keys: Ctrl+K palette, Ctrl+B pin, Alt+1..7 group, F6 next region
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
@@ -86,7 +86,7 @@ export const AppShell: React.FC = () => {
         }
         return;
       }
-      if (e.altKey && /^[1-8]$/.test(e.key)) { e.preventDefault(); setActiveTab(STAGES[Number(e.key) - 1].views[0].tab); return; }
+      if (e.altKey && /^[1-7]$/.test(e.key)) { e.preventDefault(); setActiveTab(GROUPS[Number(e.key) - 1].views[0].tab); return; }
       if (e.key === 'F6') {
         e.preventDefault();
         const els = REGIONS.map((r) => document.querySelector<HTMLElement>(`[data-region="${r}"]`)).filter(Boolean) as HTMLElement[];
@@ -106,8 +106,8 @@ export const AppShell: React.FC = () => {
   }, [prefs.breakReminder, addToast]);
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-slate-950 text-slate-200 overflow-hidden">
-      <a href="#main-workspace" className="sr-only focus:not-sr-only focus:absolute focus:z-[200] focus:bg-cyan-600 focus:text-slate-50 focus:px-3 focus:py-1" onClick={(e) => { e.preventDefault(); document.querySelector<HTMLElement>('[data-region="workspace"]')?.focus(); }}>
+    <div className="h-screen w-screen flex flex-col bg-page text-ink overflow-hidden">
+      <a href="#main-workspace" className="sr-only focus:not-sr-only focus:absolute focus:z-[200] focus:bg-accent focus:text-on-accent focus:px-3 focus:py-1" onClick={(e) => { e.preventDefault(); document.querySelector<HTMLElement>('[data-region="workspace"]')?.focus(); }}>
         Skip to workspace
       </a>
       <CaseBar onPickFile={pickFile} onPickFolder={pickFolder} />
@@ -115,24 +115,24 @@ export const AppShell: React.FC = () => {
 
       <div className="flex-1 flex min-h-0">
         <div style={{ width: prefs.navCollapsed ? 56 : prefs.navWidth }} className="shrink-0 min-h-0">
-          <StageNavigator />
+          <DataTree />
         </div>
-        {!prefs.navCollapsed && <Splitter label="Resize stage list" onDelta={(dx) => prefs.set({ navWidth: prefs.navWidth + dx })} />}
+        {!prefs.navCollapsed && <Splitter label="Resize data tree" onDelta={(dx) => prefs.set({ navWidth: prefs.navWidth + dx })} />}
 
         <div id="main-workspace" className="flex-1 min-w-0 min-h-0"><Workspace /></div>
 
         {prefs.cardOpen ? (
           <>
             <Splitter label="Resize evidence card" onDelta={(dx) => prefs.set({ cardWidth: prefs.cardWidth - dx })} />
-            <aside style={{ width: prefs.cardWidth }} className="shrink-0 min-h-0 bg-slate-900 border-l border-slate-800 relative" aria-label="Evidence card" data-region="card" tabIndex={-1}>
-              <button onClick={() => prefs.set({ cardOpen: false })} className="absolute top-2 right-12 z-10 p-1 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800" aria-label="Hide evidence card">
+            <aside style={{ width: prefs.cardWidth }} className="shrink-0 min-h-0 bg-surface border-l border-line relative" aria-label="Evidence card" data-region="card" tabIndex={-1}>
+              <button onClick={() => prefs.set({ cardOpen: false })} className="absolute top-2 right-12 z-10 p-1 rounded text-muted hover:text-ink hover:bg-hover" aria-label="Hide evidence card">
                 <PanelRightClose className="w-4 h-4" />
               </button>
               <EvidenceCard />
             </aside>
           </>
         ) : (
-          <button onClick={() => prefs.set({ cardOpen: true })} className="w-9 shrink-0 border-l border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 grid place-items-start justify-items-center pt-3" aria-label="Show evidence card">
+          <button onClick={() => prefs.set({ cardOpen: true })} className="w-9 shrink-0 border-l border-line bg-surface text-muted hover:bg-hover grid place-items-start justify-items-center pt-3" aria-label="Show evidence card">
             <PanelRightOpen className="w-4 h-4" />
           </button>
         )}

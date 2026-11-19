@@ -4,7 +4,7 @@ import { usePreferences } from '../state/preferencesStore';
 import { fetchAllRows } from '../utils/artifactRows';
 import { DataGrid, FilterInput, GridColumn, Unset } from '../workspace/DataGrid';
 import { SavedFilters } from '../workspace/SavedFilters';
-import { BANK_ALERTS_NOTICE } from '../workspace/stages';
+import { BANK_ALERTS_NOTICE } from '../workspace/dataTree';
 import { normalizeTimestamp } from '../../shared/forensic-types';
 
 type Row = Record<string, any>;

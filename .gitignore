@@ -80,3 +80,25 @@ build_backend/
 dist-test/
 *.sqlite-wal
 *.sqlite-shm
+
+# Internal documents and generated test evidence (regenerate with scripts/generate_forensic_test_data.py)
+docs/
+test_evidence/
+
+# Evidence images and archives: never push real or test evidence
+*.dd
+*.e01
+*.E01
+*.ufdr
+*.tar
+*.7z
+
+# Local notes, secrets, logs and tool state
+make_exe.md
+.env
+.env.*
+.claude/
+*.log
+npm-debug.log*
+*.tsbuildinfo
+coverage/

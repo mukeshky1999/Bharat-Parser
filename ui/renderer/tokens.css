@@ -1,0 +1,150 @@
+/* Semantic colour tokens for the workbench shell and shared components (hand-tuned; checked by ui/tests/contrast_test.ts).
+   Light is the default. Each data group has one calm hue used on its icon tile and markers only.
+   Classes: bg-page bg-surface bg-sunken bg-hover border-line border-line-strong text-ink text-muted text-faint
+            bg-accent text-on-accent bg-accent-soft text-accent-ink, rec / ok / warn (+ -soft), g-<group> (+ -soft). */
+
+:root,
+:root[data-theme='light'] {
+  --t-page: #f3f5f8;
+  --t-surface: #ffffff;
+  --t-sunken: #eef1f5;
+  --t-hover: #f1f4f8;
+  --t-line: #e1e6ed;
+  --t-line-strong: #cdd4de;
+  --t-ink: #17202b;
+  --t-muted: #556071;
+  --t-faint: #8a93a1;
+  --t-accent: #3a4cd6;
+  --t-on-accent: #ffffff;
+  --t-accent-soft: #eaedfd;
+  --t-accent-ink: #2d3cb0;
+  --t-rec: #b42a45;
+  --t-rec-soft: #fcebee;
+  --t-ok: #17734a;
+  --t-ok-soft: #e3f4ea;
+  --t-warn: #8d5300;
+  --t-warn-soft: #fdf1da;
+  --t-g-comm: #0a68a0;
+  --t-g-comm-soft: #e2f1fa;
+  --t-g-money: #12704c;
+  --t-g-money-soft: #e0f3ea;
+  --t-g-places: #8f5600;
+  --t-g-places-soft: #fcefd8;
+  --t-g-files: #3f5a93;
+  --t-g-files-soft: #e7ecf6;
+  --t-g-analysis: #6440b8;
+  --t-g-analysis-soft: #eee8fa;
+  --t-g-report: #0c6b70;
+  --t-g-report-soft: #ddf1f0;
+  --t-shadow: 0 1px 2px rgba(23, 32, 43, 0.06), 0 1px 1px rgba(23, 32, 43, 0.03);
+  --t-shadow-float: 0 8px 24px rgba(23, 32, 43, 0.14);
+}
+
+:root[data-theme='dim'] {
+  --t-page: #11151b;
+  --t-surface: #181d25;
+  --t-sunken: #141920;
+  --t-hover: #1f2530;
+  --t-line: #29303b;
+  --t-line-strong: #39414e;
+  --t-ink: #e5e9ef;
+  --t-muted: #a2acba;
+  --t-faint: #6f7987;
+  --t-accent: #7f91ff;
+  --t-on-accent: #0d1230;
+  --t-accent-soft: #232a4c;
+  --t-accent-ink: #b3beff;
+  --t-rec: #ff8fa2;
+  --t-rec-soft: #3a1c24;
+  --t-ok: #72d39f;
+  --t-ok-soft: #16301f;
+  --t-warn: #f0b862;
+  --t-warn-soft: #382a12;
+  --t-g-comm: #7cc6f2;
+  --t-g-comm-soft: #15293a;
+  --t-g-money: #6fd3a6;
+  --t-g-money-soft: #132b22;
+  --t-g-places: #f1b96a;
+  --t-g-places-soft: #33260f;
+  --t-g-files: #a4b6e6;
+  --t-g-files-soft: #1e2638;
+  --t-g-analysis: #bba3f5;
+  --t-g-analysis-soft: #262039;
+  --t-g-report: #70d0d2;
+  --t-g-report-soft: #132c2d;
+  --t-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --t-shadow-float: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme='contrast'] {
+  --t-page: #000000;
+  --t-surface: #0a0a0a;
+  --t-sunken: #000000;
+  --t-hover: #1f1f1f;
+  --t-line: #8a8a8a;
+  --t-line-strong: #c9c9c9;
+  --t-ink: #ffffff;
+  --t-muted: #e2e2e2;
+  --t-faint: #a3a3a3;
+  --t-accent: #8fbaff;
+  --t-on-accent: #000000;
+  --t-accent-soft: #10233f;
+  --t-accent-ink: #cfe0ff;
+  --t-rec: #ffb3c0;
+  --t-rec-soft: #2e0a12;
+  --t-ok: #9df0c3;
+  --t-ok-soft: #062214;
+  --t-warn: #ffd58a;
+  --t-warn-soft: #2a1c02;
+  --t-g-comm: #a8dcff;
+  --t-g-comm-soft: #04182a;
+  --t-g-money: #9df0c3;
+  --t-g-money-soft: #04200f;
+  --t-g-places: #ffd58a;
+  --t-g-places-soft: #241700;
+  --t-g-files: #cbd7ff;
+  --t-g-files-soft: #0b1226;
+  --t-g-analysis: #dccbff;
+  --t-g-analysis-soft: #170c2c;
+  --t-g-report: #a6f2f2;
+  --t-g-report-soft: #021e1e;
+  --t-shadow: none;
+  --t-shadow-float: 0 0 0 2px #ffffff;
+}
+
+@theme inline {
+  --color-page: var(--t-page);
+  --color-surface: var(--t-surface);
+  --color-sunken: var(--t-sunken);
+  --color-hover: var(--t-hover);
+  --color-line: var(--t-line);
+  --color-line-strong: var(--t-line-strong);
+  --color-ink: var(--t-ink);
+  --color-muted: var(--t-muted);
+  --color-faint: var(--t-faint);
+  --color-accent: var(--t-accent);
+  --color-on-accent: var(--t-on-accent);
+  --color-accent-soft: var(--t-accent-soft);
+  --color-accent-ink: var(--t-accent-ink);
+  --color-rec: var(--t-rec);
+  --color-rec-soft: var(--t-rec-soft);
+  --color-ok: var(--t-ok);
+  --color-ok-soft: var(--t-ok-soft);
+  --color-warn: var(--t-warn);
+  --color-warn-soft: var(--t-warn-soft);
+  --color-g-comm: var(--t-g-comm);
+  --color-g-comm-soft: var(--t-g-comm-soft);
+  --color-g-money: var(--t-g-money);
+  --color-g-money-soft: var(--t-g-money-soft);
+  --color-g-places: var(--t-g-places);
+  --color-g-places-soft: var(--t-g-places-soft);
+  --color-g-files: var(--t-g-files);
+  --color-g-files-soft: var(--t-g-files-soft);
+  --color-g-analysis: var(--t-g-analysis);
+  --color-g-analysis-soft: var(--t-g-analysis-soft);
+  --color-g-report: var(--t-g-report);
+  --color-g-report-soft: var(--t-g-report-soft);
+  --shadow-card: var(--t-shadow);
+  --shadow-float: var(--t-shadow-float);
+  --radius-card: 10px;
+}

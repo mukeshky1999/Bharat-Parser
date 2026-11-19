@@ -2,7 +2,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { sanitizePreferences, DEFAULT_PREFERENCES } from '../renderer/state/preferencesStore';
-import { STAGES, stageForTab } from '../renderer/workspace/stages';
+import { GROUPS, groupForTab, countKey } from '../renderer/workspace/dataTree';
 import { integrityText } from '../renderer/workspace/integrity';
 
 let failures = 0;
@@ -17,7 +17,7 @@ function ok(cond: boolean, msg: string) {
 ok(JSON.stringify(sanitizePreferences(null)) === JSON.stringify(DEFAULT_PREFERENCES), 'null gives defaults');
 ok(JSON.stringify(sanitizePreferences('garbage')) === JSON.stringify(DEFAULT_PREFERENCES), 'string gives defaults');
 const wild = sanitizePreferences({ theme: 'neon', density: 'tiny', fontScale: 99, timeZone: 'PST', navWidth: -5, cardWidth: NaN, breakReminder: 'yes' });
-ok(wild.theme === 'dim' && wild.density === 'comfortable', 'unknown theme/density fall back');
+ok(wild.theme === 'light' && wild.density === 'comfortable', 'unknown theme/density fall back to light/comfortable');
 ok(wild.fontScale === 1.3, 'font scale is clamped to 1.3');
 ok(wild.timeZone === 'IST', 'unknown time zone falls back');
 ok(wild.navWidth === 180 && wild.cardWidth === DEFAULT_PREFERENCES.cardWidth, 'pane widths are clamped / defaulted');
@@ -29,12 +29,13 @@ const hc = sanitizePreferences({ hiddenColumns: { CALLS: ['from', 7, 'to'], bad:
 ok(JSON.stringify(hc) === JSON.stringify({ CALLS: ['from', 'to'] }), 'hidden columns keep only text names and drop anything else');
 ok(JSON.stringify(sanitizePreferences({ hiddenColumns: [1, 2] }).hiddenColumns) === '{}', 'a list in place of the map gives no hidden columns');
 
-// ---- stages ------------------------------------------------------------------------------------------------------
-ok(STAGES.length === 8, 'eight stages');
-ok(STAGES.every((s, i) => s.no === i + 1), 'stages are numbered 1..8 in order');
-const tabs = STAGES.flatMap((s) => s.views.map((v) => v.tab));
-ok(new Set(tabs).size === tabs.length, 'a view belongs to exactly one stage');
-ok(stageForTab('UPI_LEDGER').id === 'money' && stageForTab('CHATS').id === 'messages', 'tab to stage lookup');
+// ---- data tree groups ------------------------------------------------------------------------------------------------------
+ok(GROUPS.length === 7, '7 groups');
+ok(GROUPS.every((g, i) => g.no === i + 1), 'groups are numbered 1..7 in order (Alt+1..7)');
+const tabs = GROUPS.flatMap((g) => g.views.map((v) => v.tab));
+ok(new Set(tabs).size === tabs.length, 'each tab in one group');
+ok(groupForTab('UPI_LEDGER').id === 'money' && groupForTab('CHATS').id === 'comm', 'tab to group lookup');
+ok(countKey('CHATS') === 'chats_all' && countKey('SQLITE_WIZARD') === 'data_files' && countKey('SEARCH') === null, 'tab to count key');
 ok(['MALICIOUS_APKS', 'REMOTE_ACCESS'].every((t) => !tabs.includes(t as never)), 'views with no data source are not offered');
 
 // ---- integrity line says only what was recorded ----------------------------------------------------------------

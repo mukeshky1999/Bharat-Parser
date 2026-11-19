@@ -13,7 +13,7 @@ import {
   VfsNode,
   normalizeTimestamp
 } from '../../shared/forensic-types';
-import { forensicClient, registerApiToastListener } from '../api/forensicClient';
+import { forensicClient, registerApiToastListener, type CaseSummaryResponse } from '../api/forensicClient';
 
 export type ActiveFilterType = 'ALL' | 'WAL_AND_CARVED_ONLY' | 'CLOCK_TAMPER_ONLY';
 export type RecoveryPillFilter = 'ALL' | 'ACTIVE' | 'WAL' | 'CARVED' | 'SPILLOVER';
@@ -87,6 +87,11 @@ export interface WorkbenchStoreState {
   dualHashes: DualHashResult | null;
   /** What the backend recorded about the source file's integrity. null = nothing recorded. */
   integrity: { preSha256: string; postSha256: string; match: boolean | null } | null;
+  /** The backend's case summary (counts per category, device, owner profile). One source for the data tree and the overview. */
+  caseSummary: CaseSummaryResponse | null;
+  /** Views visited before the current one, newest last (for the Back button). */
+  tabHistory: ActiveTabType[];
+  goBack: () => void;
   vfsTree: VfsNode[];
   totalFilesIndexed: number;
 
@@ -259,6 +264,8 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
   caseManifest: null,
   dualHashes: null,
   integrity: null,
+  caseSummary: null,
+  tabHistory: [],
   vfsTree: [],
   totalFilesIndexed: 0,
 
@@ -313,7 +320,13 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
   setContacts: (contacts) => set({ contacts }),
   setOsSpillovers: (osSpillovers) => set({ osSpillovers }),
   setApkFindings: (findings) => set({ apkFindings: findings }),
-  setActiveTab: (tab) => set({ activeTab: tab, selectedSubcategory: 'ALL', currentPage: 1 }),
+  setActiveTab: (tab) => set((s) => (s.activeTab === tab
+    ? { selectedSubcategory: 'ALL', currentPage: 1 }
+    : { activeTab: tab, tabHistory: [...s.tabHistory, s.activeTab].slice(-30), selectedSubcategory: 'ALL', currentPage: 1 })),
+  goBack: () => set((s) => {
+    const prev = s.tabHistory[s.tabHistory.length - 1];
+    return prev ? { activeTab: prev, tabHistory: s.tabHistory.slice(0, -1), selectedSubcategory: 'ALL', currentPage: 1 } : {};
+  }),
   setSelectedSubcategory: (subcat) => set({ selectedSubcategory: subcat, currentPage: 1 }),
   setActiveFilter: (filter) => set({ activeFilter: filter, currentPage: 1 }),
   setRecoveryPillFilter: (filter) => set({ recoveryPillFilter: filter, currentPage: 1 }),
@@ -456,6 +469,7 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
           selectedArtifact: null, hexWindow: null, hexError: null, isLoadingHex: false,
         });
         set({
+          caseSummary: summary,
           integrity: summary.hashes && summary.hashes.sha256 ? {
             preSha256: String(summary.hashes.sha256),
             postSha256: String(summary.hashes.postIngestionSha256 || ''),
@@ -593,6 +607,7 @@ export const useWorkbenchStore = create<WorkbenchStoreState>((set, get) => ({
       } else {
         // Reset to clean empty state when no dump is loaded
         set({
+          caseSummary: null,
           dualHashes: null,
           integrity: null,
           caseManifest: null,

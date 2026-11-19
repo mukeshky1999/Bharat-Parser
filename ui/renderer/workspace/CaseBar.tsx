@@ -4,6 +4,7 @@ import { useWorkbenchStore } from '../state/workbenchStore';
 import { useUi } from '../state/uiStore';
 import { forensicClient, HealthResponse, EvidenceItemSummary } from '../api/forensicClient';
 import { integrityText } from './integrity';
+import { Button } from '../components/ui';
 
 interface CaseBarProps {
   onPickFile: () => void;
@@ -66,69 +67,70 @@ export const CaseBar: React.FC<CaseBarProps> = ({ onPickFile, onPickFolder }) =>
   const online = health.status === 'HEALTHY' || health.status === 'ONLINE';
   const checking = health.status === 'CHECKING';
   const integ = integrityText(integrity);
-  const toneClass = integ.tone === 'ok' ? 'text-emerald-300' : integ.tone === 'bad' ? 'text-rose-300 font-semibold' : 'text-slate-300';
+  const pill = integ.tone === 'ok' ? 'bg-ok-soft text-ok' : integ.tone === 'bad' ? 'bg-rec-soft text-rec' : 'bg-sunken text-muted';
+  const itemClass = 'w-full flex items-center gap-2 px-3 py-2 text-left text-ink hover:bg-hover';
 
   return (
-    <header className="h-12 shrink-0 flex items-center gap-4 px-4 bg-slate-900 border-b border-slate-800" data-region="case-bar" tabIndex={-1}>
-      <div className="flex items-baseline gap-2 min-w-0">
-        <span className="font-semibold text-slate-50 tracking-tight">BharatAnalyzer</span>
-        <span className="text-slate-500">/</span>
-        <span className="truncate text-slate-200" title={caseManifest?.evidencePath || ''}>
-          {caseManifest ? `${caseManifest.caseId} · ${caseManifest.evidenceFileName}` : 'No case open'}
-        </span>
+    <header className="h-[54px] shrink-0 flex items-center gap-3.5 px-4 bg-surface border-b border-line min-w-0" data-region="case-bar" tabIndex={-1}>
+      <div className="flex items-center gap-2 font-bold tracking-tight whitespace-nowrap">
+        <span className="w-[26px] h-[26px] rounded-[7px] bg-accent text-on-accent grid place-items-center text-[0.75rem] font-bold" aria-hidden="true">BA</span>
+        <span className="hidden sm:inline">BharatAnalyzer</span>
       </div>
 
-      <div className={`hidden md:block truncate ${toneClass}`} title={integ.detail} data-testid="integrity-line">
+      <div className="hidden md:flex flex-col leading-tight min-w-0 pl-3.5 border-l border-line" title={caseManifest?.evidencePath || ''}>
+        <b className="font-semibold truncate">{caseManifest ? caseManifest.caseId : 'No case open'}</b>
+        <span className="text-[0.75rem] text-muted truncate">{caseManifest ? caseManifest.evidenceFileName : 'Open evidence to begin'}</span>
+      </div>
+
+      <span className={`hidden lg:inline-flex items-center gap-1.5 px-2.5 py-[3px] rounded-full text-[0.75rem] font-semibold whitespace-nowrap ${pill}`} title={integ.detail} data-testid="integrity-line">
+        <span className="w-[7px] h-[7px] rounded-full bg-current" aria-hidden="true" />
         {integ.text}
-      </div>
+      </span>
 
-      <div className="ml-auto flex items-center gap-2">
+      <button onClick={() => open('PALETTE')} title="Search and commands (Ctrl+K)"
+        className="ml-auto flex-1 max-w-[460px] min-w-0 flex items-center gap-2 h-[34px] px-2.5 border border-line-strong rounded-lg bg-sunken text-muted text-left hover:bg-hover">
+        <Search className="w-4 h-4 shrink-0" aria-hidden="true" />
+        <span className="flex-1 truncate">Search or jump</span>
+        <kbd className="hidden lg:inline font-mono text-[0.6875rem] px-1.5 border border-line-strong rounded bg-surface text-muted">Ctrl K</kbd>
+      </button>
+
+      <div className="flex items-center gap-2.5 shrink-0">
         {devices.length > 1 && (
-          <label className="flex items-center gap-1.5 text-slate-300">
-            <span className="hidden lg:inline">Device</span>
+          <label className="flex items-center gap-1.5 text-muted">
+            <span className="hidden xl:inline">Device</span>
             <select aria-label="Device the owner profile and link graph describe" value={activeDevice} onChange={(e) => void switchDevice(e.target.value)}
-              className="h-8 rounded bg-slate-950 border border-slate-700 px-2 text-slate-100" title="Records of every device stay in the case; this chooses which device the owner profile, link graph and alerts describe.">
+              className="h-8 rounded-lg bg-surface border border-line-strong px-2 text-ink" title="Records of every device stay in the case; this chooses which device the owner profile, link graph and alerts describe.">
               {devices.map((d) => <option key={d.item_id} value={d.item_id}>{d.label || d.item_id}{d.model && d.model !== 'Not recorded' ? ` (${d.model})` : ''}</option>)}
             </select>
           </label>
         )}
-        <span className="flex items-center gap-1.5 text-slate-300" title={`Backend: ${health.status}`}>
-          <span className={`w-2 h-2 rounded-full ${online ? 'bg-emerald-400' : checking ? 'bg-slate-500' : 'bg-rose-400'}`} aria-hidden="true" />
+        <span className="hidden xl:flex items-center gap-1.5 text-muted" title={`Backend: ${health.status}`}>
+          <span className={`w-2 h-2 rounded-full ${online ? 'bg-ok' : checking ? 'bg-faint' : 'bg-rec'}`} aria-hidden="true" />
           {online ? 'Engine ready' : checking ? 'Engine starting' : 'Engine not reachable'}
         </span>
 
         <div className="relative" ref={menuRef}>
-          <button
-            onClick={() => setMenu((m) => !m)}
-            aria-haspopup="menu"
-            aria-expanded={menu}
-            className="flex items-center gap-1 h-8 px-3 rounded bg-cyan-600 text-slate-50 hover:bg-cyan-500 font-medium"
-          >
+          <Button variant="primary" onClick={() => setMenu((m) => !m)} aria-haspopup="menu" aria-expanded={menu}>
             Open evidence <ChevronDown className="w-4 h-4" />
-          </button>
+          </Button>
           {menu && (
-            <div role="menu" className="absolute right-0 mt-1 w-72 rounded border border-slate-700 bg-slate-900 shadow-xl z-50 py-1">
-              <button role="menuitem" className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-800" onClick={() => { setMenu(false); onPickFile(); }}>
-                <FileArchive className="w-4 h-4 text-slate-300" /> Archive or image file…
+            <div role="menu" className="absolute right-0 mt-1 w-72 rounded-[10px] border border-line bg-surface shadow-float z-50 py-1">
+              <button role="menuitem" className={itemClass} onClick={() => { setMenu(false); onPickFile(); }}>
+                <FileArchive className="w-4 h-4 text-muted" /> Archive or image file…
               </button>
-              <button role="menuitem" className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-800" onClick={() => { setMenu(false); onPickFolder(); }}>
-                <FolderOpen className="w-4 h-4 text-slate-300" /> Extracted folder…
+              <button role="menuitem" className={itemClass} onClick={() => { setMenu(false); onPickFolder(); }}>
+                <FolderOpen className="w-4 h-4 text-muted" /> Extracted folder…
               </button>
-              <button role="menuitem" className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-800" onClick={() => { setMenu(false); open('ADD_EXTRACTION'); }}>
-                <FolderOpen className="w-4 h-4 text-slate-300" /> More options…
+              <button role="menuitem" className={itemClass} onClick={() => { setMenu(false); open('ADD_EXTRACTION'); }}>
+                <FolderOpen className="w-4 h-4 text-muted" /> More options…
               </button>
             </div>
           )}
         </div>
 
-        <button onClick={() => open('PALETTE')} className="flex items-center gap-2 h-8 px-3 rounded border border-slate-700 text-slate-300 hover:bg-slate-800" title="Search and commands (Ctrl+K)">
-          <Search className="w-4 h-4" />
-          <span className="hidden lg:inline">Search or jump</span>
-          <kbd className="hidden lg:inline text-[0.6875rem] text-slate-400 border border-slate-700 rounded px-1">Ctrl K</kbd>
-        </button>
-        <button onClick={() => open('SETTINGS')} className="h-8 w-8 grid place-items-center rounded border border-slate-700 text-slate-300 hover:bg-slate-800" aria-label="Display settings" title="Display settings">
+        <Button variant="icon" onClick={() => open('SETTINGS')} aria-label="Display settings" title="Display settings">
           <Settings className="w-4 h-4" />
-        </button>
+        </Button>
       </div>
     </header>
   );

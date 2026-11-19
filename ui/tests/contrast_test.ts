@@ -58,6 +58,33 @@ for (const [sel, name] of themes) {
   if (name === 'contrast') check(name, 'border slate-800 vs slate-950', v['slate-800'], v['slate-950'], 3);
 }
 
+// ---- semantic tokens (ui/renderer/tokens.css): shell, cards, chips, group tiles --------------------------------
+const tok = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'tokens.css'), 'utf8').replace(new RegExp(String.fromCharCode(13), 'g'), '');
+function tokenVars(selector: string): Record<string, string> {
+  const start = tok.indexOf(selector);
+  if (start < 0) throw new Error(`token block ${selector} missing`);
+  const body = tok.slice(tok.indexOf('{', start) + 1, tok.indexOf('}', start));
+  const vars: Record<string, string> = {};
+  for (const m of body.matchAll(/--t-([a-z-]+):\s*(#[0-9a-f]{6});/g)) vars[m[1]] = m[2];
+  return vars;
+}
+for (const [sel, name] of [[":root[data-theme='light']", 'light'], [":root[data-theme='dim']", 'dim'], [":root[data-theme='contrast']", 'contrast']] as const) {
+  const t = tokenVars(sel);
+  const strict = name === 'contrast' ? 7 : 4.5;
+  for (const bg of ['page', 'surface', 'sunken', 'hover']) {
+    check(`tokens-${name}`, `ink on ${bg}`, t.ink, t[bg], strict);
+    check(`tokens-${name}`, `muted on ${bg}`, t.muted, t[bg], 4.5);
+  }
+  check(`tokens-${name}`, 'on-accent on accent', t['on-accent'], t.accent, 4.5);
+  check(`tokens-${name}`, 'accent-ink on accent-soft', t['accent-ink'], t['accent-soft'], 4.5);
+  check(`tokens-${name}`, 'accent (links) on surface', t.accent, t.surface, 4.5);
+  for (const s of ['rec', 'ok', 'warn', 'g-comm', 'g-money', 'g-places', 'g-files', 'g-analysis', 'g-report']) {
+    check(`tokens-${name}`, `${s} on ${s}-soft`, t[s], t[`${s}-soft`], 4.5);
+    check(`tokens-${name}`, `${s} on surface`, t[s], t.surface, 4.5);
+  }
+  check(`tokens-${name}`, 'line-strong vs surface (control edge)', t['line-strong'], t.surface, name === 'contrast' ? 3 : 1.3);
+}
+
 if (failures > 0) {
   console.error(`${failures} contrast failure(s)`);
   process.exit(1);
