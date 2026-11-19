@@ -47,18 +47,3 @@ npm run backend            # FastAPI backend only
 npx tsc --noEmit
 npm run test:ts
 ```
-
-### Verified status (2026-11-11, from this root only)
-
-| Check | Result |
-|---|---|
-| `pytest tests` | **364 passed, 3 failed** (see `docs/REVIEW_BRIEF.md` §2) |
-| `tests/e2e/runner.py --tier all` | 65 / 65 passed |
-| `npx tsc --noEmit` | 0 errors |
-| `npm run test:ts` | 92 passed, 0 failed |
-| `npx vite build` | builds (one chunk > 500 kB warning) |
-| Electron desktop launch | not re-verified after the merge cleanup |
-
-Passing tests are not, on their own, evidence of forensic correctness or court admissibility.
-Earlier documents in `docs/merge-history/` make stronger claims than were verified. Treat them
-as history, not status.
