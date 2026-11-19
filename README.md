@@ -4,17 +4,13 @@ Post-extraction mobile forensic analysis (Android / iOS) for Indian investigativ
 UPI and banking apps, NPCI artefacts, DLT SMS, messengers, crypto wallets, telemetry,
 geolocation, and examination reporting (facts, not legal forms).
 
-This repository is the **single source of truth**. It was formed by merging two earlier
-projects, *Bharart Analyzer* and *bharat-pa-forensics*. Both originals, with their full git
-history, are archived read-only at `E:\v8\_archive\combined_originals_2026-11-11\`.
-Nothing in this repository loads code from the archive.
 
 ## Layout
 
 | Path | What it is |
 |---|---|
 | `src/` | Python forensic engines (VFS, SQLite/WAL recovery, UPI, banking, messengers, crypto, legal/BSA, …). Originated in Bharart Analyzer. |
-| `parsers/` | Python REST backend for the desktop UI (`parsers/api_server.py`, FastAPI), plugin registry, heuristic engine, carvers. Originated in bharat-pa-forensics. Imports from `src/`. |
+| `parsers/` | Python REST backend for the desktop UI (`parsers/api_server.py`, FastAPI), plugin registry, heuristic engine, carvers. Imports from `src/`. |
 | `tools/` | Benchmark recorder. |
 | `electron/` | Electron shell (`main.cjs`, `preload.cjs`). Spawns `python -m parsers.api_server`. |
 | `ui/renderer/` | React 19 + TypeScript desktop UI (built by Vite into `dist/`). |
