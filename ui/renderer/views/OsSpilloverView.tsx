@@ -4,6 +4,7 @@ import { fetchAllRows } from '../utils/artifactRows';
 import { DataGrid, FilterInput, GridColumn, Unset } from '../workspace/DataGrid';
 
 type Row = Record<string, any>;
+const recoveredLabel = (v: unknown) => { const u = String(v ?? '').toUpperCase(); return u.includes('WAL') ? 'Recovered from log' : /CARVED|FREELIST|SLACK/.test(u) ? 'Carved from free space' : null; };
 
 const text = (v: unknown) => (v === null || v === undefined || v === '' ? '' : String(v));
 const cell = (v: unknown) => (text(v) ? text(v) : <Unset />);
@@ -66,6 +67,7 @@ export const OsSpilloverView: React.FC = () => {
       {loading ? <div className="flex-1 p-10 text-center text-muted" role="status">Loading device traces…</div> : (
         <div className="card flex-1 flex flex-col min-h-0 overflow-hidden">
         <DataGrid<Row>
+          recoveredOf={(r) => recoveredLabel(r.Forensic_Provenance)}
           tags={{ table: 'os_spillover', idOf: (r) => (Number.isFinite(Number(r.id)) ? Number(r.id) : null) }}
           tableId="os_spillover" title="Device traces outside the apps" columns={columns} rows={shown} totalBeforeFilter={rows.length}
           rowKey={(r, i) => `s${r.id ?? i}`} selectedKey={selected?.id?.startsWith('SPILL_') ? `s${selected.id.slice(6)}` : null}

@@ -36,7 +36,7 @@ const partyOf = (t: UnifiedUPITransaction): string =>
   (t.counterpartyVpa || (t.direction === 'DEBIT' ? t.payeeVpa : t.direction === 'CREDIT' ? t.payerVpa : null) || '').trim() || NO_PARTY;
 const isRecovered = (t: UnifiedUPITransaction) => t.provenance?.recoveryState === 'WAL_RECOVERED' || t.provenance?.recoveryState === 'CARVED_UNALLOCATED';
 
-const inr = (n: number | null) => (n === null ? <span className="text-slate-400" title="The evidence has no amount for this record">not recorded</span> : `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`);
+const inr = (n: number | null) => (n === null ? <span className="text-muted" title="The evidence has no amount for this record">not recorded</span> : `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`);
 
 /**
  * Payments found in the case, every app and device together. The filters are on recorded facts (direction, where the
@@ -114,7 +114,7 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
     { key: 'utr', label: 'UTR / reference', width: '11rem', cell: (t) => t.utrNumber || <Unset />, text: (t) => t.utrNumber || 'not recorded' },
     { key: 'app', label: 'App', width: '8rem', cell: (t) => t.sourceApp || <Unset />, text: (t) => t.sourceApp || 'not recorded' },
     { key: 'amount', label: 'Amount', width: '9rem', align: 'right', cell: (t) => inr(t.amountInr), text: (t) => (t.amountInr === null ? 'not recorded' : String(t.amountInr)) },
-    { key: 'direction', label: 'Direction', width: '8rem', cell: (t) => DIRECTION_TEXT[t.direction] ?? <span className="text-slate-400" title="The evidence does not establish the direction">Not established</span>, text: (t) => DIRECTION_TEXT[t.direction] ?? 'not established' },
+    { key: 'direction', label: 'Direction', width: '8rem', cell: (t) => DIRECTION_TEXT[t.direction] ?? <span className="text-muted" title="The evidence does not establish the direction">Not established</span>, text: (t) => DIRECTION_TEXT[t.direction] ?? 'not established' },
     { key: 'status', label: 'Status', width: '8rem', cell: (t) => (t.status ? STATUS_TEXT[t.status] ?? String(t.status) : <Unset />), text: (t) => (t.status ? STATUS_TEXT[t.status] ?? String(t.status) : 'not recorded') },
     { key: 'other', label: 'Other party', width: 'minmax(10rem,1fr)', cell: (t) => t.counterpartyVpa || <Unset />, text: (t) => t.counterpartyVpa || 'not recorded' },
     { key: 'payer', label: 'Payer VPA / account', width: 'minmax(10rem,1fr)', cell: (t) => t.payerVpa || t.accountMask || <Unset />, text: (t) => t.payerVpa || t.accountMask || 'not recorded' },
@@ -131,14 +131,14 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
         options={[{ value: 'ALL', label: 'All' }, { value: 'DEBIT', label: 'Debit' }, { value: 'CREDIT', label: 'Credit' }]} />
       <Segmented<RecoveryFilter> label="Where found" value={recovery} onChange={setRecovery}
         options={[{ value: 'ALL', label: 'Everything' }, { value: 'RECOVERED', label: 'Recovered only', title: 'Recovered from a database log or from free space' }]} />
-      <label className="text-slate-300 inline-flex items-center gap-2">Amount
-        <select aria-label="Amount range" value={amount} onChange={(e) => setAmount(e.target.value as AmountFilter)} className="h-8 rounded bg-slate-900 border border-slate-700 px-2 text-slate-100">
+      <label className="text-ink inline-flex items-center gap-2">Amount
+        <select aria-label="Amount range" value={amount} onChange={(e) => setAmount(e.target.value as AmountFilter)} className="h-8 rounded bg-surface border border-line px-2 text-ink">
           <option value="ANY">Any</option>
           <option value="BAND_40_50">₹40,000 to ₹50,000</option>
           <option value="OVER_1L">₹1,00,000 or more</option>
         </select>
       </label>
-      <label className="text-slate-300 inline-flex items-center gap-2">
+      <label className="text-ink inline-flex items-center gap-2">
         <input type="checkbox" checked={clockOnly} onChange={(e) => setClockOnly(e.target.checked)} />Clock differs from sequence
       </label>
       <SavedFilters scope="upi_ledger"
@@ -149,8 +149,8 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
           setAmount((s.amount as AmountFilter) ?? 'ANY'); setClockOnly(s.clockOnly === true); setQuery(String(s.query ?? ''));
         }} />
       {apps.length > 1 && (
-        <label className="text-slate-300 inline-flex items-center gap-2">App
-          <select aria-label="App" value={app} onChange={(e) => setApp(e.target.value)} className="h-8 rounded bg-slate-900 border border-slate-700 px-2 text-slate-100">
+        <label className="text-ink inline-flex items-center gap-2">App
+          <select aria-label="App" value={app} onChange={(e) => setApp(e.target.value)} className="h-8 rounded bg-surface border border-line px-2 text-ink">
             <option value="ALL">All apps ({rawTransactions.length})</option>
             {apps.map((a) => <option key={a} value={a}>{a} ({appCounts[a]})</option>)}
           </select>
@@ -185,6 +185,7 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
 
   const grid = (rs: UnifiedUPITransaction[]) => (
     <DataGrid<UnifiedUPITransaction>
+      recoveredOf={(t) => (isRecovered(t) ? RECOVERY_TEXT[t.provenance.recoveryState] : null)}
       tags={{ table: 'transactions', idOf: (t) => caseRecordOf(t.id, 'Financial Transaction')?.id ?? null }}
       tableId="upi_ledger" title="UPI ledger" columns={columns} rows={rs} totalBeforeFilter={rawTransactions.length}
       rowKey={(t, i) => t.id || t.appTransactionId || `row-${i}`}

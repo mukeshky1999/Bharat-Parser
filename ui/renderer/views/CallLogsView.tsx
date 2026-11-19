@@ -69,6 +69,7 @@ export const CallLogsView: React.FC = () => {
     <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-page p-4">
     <div className="card flex-1 flex flex-col min-h-0 overflow-hidden">
     <DataGrid<CallLogArtifact>
+      recoveredOf={(c) => (c.provenance && c.provenance.recoveryState !== 'ACTIVE' ? RECOVERY_TEXT[c.provenance.recoveryState] ?? null : null)}
       tags={{ table: 'calls', idOf: (c) => caseRecordOf(c.id)?.id ?? null }}
       tableId="calls" title="Calls on the device" columns={columns} rows={rows} totalBeforeFilter={callLogs.length}
       rowKey={(c) => c.id} selectedKey={selected?.id ?? null} exportName="calls.csv"

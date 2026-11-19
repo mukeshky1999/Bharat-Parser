@@ -80,12 +80,12 @@ export function mostContacted(
 
 export interface DayCount { day: string; n: number }
 
-/** Records per UTC day over the span that has records, newest 60 days at most. Records with no recorded time are left out. */
-export function perDay(epochs: number[]): DayCount[] {
+/** Records per day (in the chosen time zone, IST = UTC+05:30, or UTC) over the span that has records, newest 60 days at most. Records with no recorded time are left out. */
+export function perDay(epochs: number[], offsetMs = 0): DayCount[] {
   const valid = epochs.filter((e) => Number.isFinite(e) && e > 0);
   if (!valid.length) return [];
   const DAY = 86_400_000;
-  const dayOf = (e: number) => Math.floor(e / DAY);
+  const dayOf = (e: number) => Math.floor((e + offsetMs) / DAY);
   const counts = new Map<number, number>();
   for (const e of valid) counts.set(dayOf(e), (counts.get(dayOf(e)) ?? 0) + 1);
   const keys = [...counts.keys()];

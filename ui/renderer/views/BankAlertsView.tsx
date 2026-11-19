@@ -8,6 +8,7 @@ import { BANK_ALERTS_NOTICE } from '../workspace/dataTree';
 import { normalizeTimestamp } from '../../shared/forensic-types';
 
 type Row = Record<string, any>;
+const recoveredLabel = (v: unknown) => { const u = String(v ?? '').toUpperCase(); return u.includes('WAL') ? 'Recovered from log' : /CARVED|FREELIST|SLACK/.test(u) ? 'Carved from free space' : null; };
 
 const CATEGORY_TEXT: Record<string, string> = {
   TX_DEBIT_OUTFLOW: 'Money out (debit)',
@@ -109,6 +110,7 @@ export const BankAlertsView: React.FC = () => {
       {loading ? <div className="flex-1 p-10 text-center text-muted" role="status">Loading bank alerts…</div> : (
         <div className="card flex-1 flex flex-col min-h-0 overflow-hidden">
         <DataGrid<Row>
+          recoveredOf={(r) => recoveredLabel(r.Forensic_Provenance)}
           tags={{ table: 'bank_alerts', idOf: (r) => (Number.isFinite(Number(r.id)) ? Number(r.id) : null) }}
           tableId="bank_alerts" title="Bank alerts (in testing)" columns={columns} rows={shown} totalBeforeFilter={rows.length}
           rowKey={(r, i) => `a${r.id ?? i}`} selectedKey={selected?.id?.startsWith('ALERT_') ? `a${selected.id.slice(6)}` : null}

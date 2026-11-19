@@ -21,35 +21,21 @@ import {
   CornerUpRight,
   Star,
   MapPin,
-  FileText,
   Volume2,
   Image as ImageIcon,
   LayoutGrid,
-  MessageCircle,
   Clock,
   ExternalLink,
   Play,
   Pause,
   Search,
   Filter,
-  Eye,
-  EyeOff,
-  User,
-  Users,
-  Copy,
-  CheckCircle2,
-  Maximize2,
   X,
   CreditCard,
-  Lock,
-  Radio,
-  FileCode,
-  ShieldAlert,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  Compass,
   FileSpreadsheet,
   Binary
 } from 'lucide-react';
@@ -757,7 +743,6 @@ export const ChatsMasterWorkspace: React.FC = () => {
                             </button>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5 text-[0.75rem] font-semibold"><Volume2 className="w-3.5 h-3.5 text-g-places" aria-hidden="true" />Voice note</div>
-                              <div className="h-1.5 bg-sunken rounded-full overflow-hidden mt-1"><div className="h-full bg-accent" style={{ width: `${audioState.progress}%` }} /></div>
                               <div className="text-[0.6875rem] text-muted mt-0.5">Duration not recorded</div>
                             </div>
                           </div>

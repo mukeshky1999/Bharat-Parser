@@ -10,6 +10,7 @@ import { GROUPS, countKey } from '../workspace/dataTree';
 import { integrityText } from '../workspace/integrity';
 import { Button, Card, Chip, KeyValue, RecoveredChip, StatTile } from '../components/ui';
 import { IntakeCard } from './overview/IntakeCard';
+import { usePreferences } from '../state/preferencesStore';
 import { ActivityChart } from './overview/ActivityChart';
 import { appActivity, dossierText, mostContacted, perDay, recorded, sizeText } from './overview/format';
 
@@ -130,14 +131,15 @@ export const ExtractionSummaryTab: React.FC<ExtractionSummaryTabProps> = ({
   const dossier = backendSummary?.owner_dossier || {};
   const perAppBreakdown: any[] = dossier.Per_App_Breakdown || dossier.Per_App_Breakdown_DF || [];
 
+  const timeZone = usePreferences((p) => p.timeZone);
   const days = useMemo(
     () => perDay([
       ...upiTransactions.map((r) => r.timestamp?.epochMs),
       ...chats.map((r) => r.timestamp?.epochMs),
       ...callLogs.map((r) => r.timestamp?.epochMs),
       ...osSpillovers.map((r) => r.timestamp?.epochMs),
-    ]),
-    [upiTransactions, chats, callLogs, osSpillovers],
+    ], timeZone === 'IST' ? 19_800_000 : 0),
+    [upiTransactions, chats, callLogs, osSpillovers, timeZone],
   );
   const loadedWithTime = days.reduce((a, d) => a + d.n, 0);
   const apps = useMemo(() => appActivity(dossier), [dossier]);
@@ -261,11 +263,11 @@ export const ExtractionSummaryTab: React.FC<ExtractionSummaryTabProps> = ({
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <Card className="lg:col-span-7" title="Records per day" aside="from loaded records">
+          <Card className="lg:col-span-7" title="Records per day" aside={`from loaded records, ${timeZone === 'IST' ? 'IST' : 'UTC'} days`}>
             {days.length > 0
               ? (<>
                   <ActivityChart days={days} />
-                  <p className="text-muted mt-1.5">{loadedWithTime.toLocaleString()} loaded records with a recorded time, counted by UTC day. Records not loaded yet, or with no recorded time, are not counted.</p>
+                  <p className="text-muted mt-1.5">{loadedWithTime.toLocaleString()} loaded records with a recorded time, counted by {timeZone === 'IST' ? 'IST (UTC+05:30)' : 'UTC'} day. Records not loaded yet, or with no recorded time, are not counted.</p>
                 </>)
               : <p className="text-muted">No loaded records have a recorded time yet. Open a data view to load its records.</p>}
           </Card>

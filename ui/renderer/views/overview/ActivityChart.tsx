@@ -1,5 +1,6 @@
 import React from 'react';
 import type { DayCount } from './format';
+import { usePreferences } from '../../state/preferencesStore';
 
 const niceMax = (v: number) => {
   const p = Math.pow(10, Math.floor(Math.log10(Math.max(v, 1))));
@@ -11,6 +12,7 @@ const shortDay = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateStrin
 
 /** Records per day. One scale for the bars, the ticks and the labels. */
 export const ActivityChart: React.FC<{ days: DayCount[] }> = ({ days }) => {
+  const tz = usePreferences((p) => p.timeZone) === 'IST' ? 'IST' : 'UTC';
   const W = 640, H = 170, L = 38, R = 8, T = 10, B = 26;
   const max = niceMax(Math.max(...days.map((d) => d.n), 1));
   const bw = (W - L - R) / days.length;
@@ -19,7 +21,7 @@ export const ActivityChart: React.FC<{ days: DayCount[] }> = ({ days }) => {
   const labelEvery = Math.max(1, Math.ceil(days.length / 5));
   return (
     <svg viewBox={`0 0 ${W} ${H}`} role="img" className="w-full h-auto"
-      aria-label={`Records per day, ${shortDay(days[0].day)} to ${shortDay(days[days.length - 1].day)}, from loaded records`}>
+      aria-label={`Records per day, ${shortDay(days[0].day)} to ${shortDay(days[days.length - 1].day)}, from loaded records, ${tz} days`}>
       {ticks.map((t) => (
         <g key={t}>
           <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} className="stroke-line" strokeWidth={1} />

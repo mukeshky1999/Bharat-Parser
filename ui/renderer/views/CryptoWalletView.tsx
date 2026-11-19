@@ -16,6 +16,7 @@ interface CryptoWalletViewProps {
 }
 
 type Row = Record<string, any>;
+const recoveredLabel = (v: unknown) => { const u = String(v ?? '').toUpperCase(); return u.includes('WAL') ? 'Recovered from log' : /CARVED|FREELIST|SLACK/.test(u) ? 'Carved from free space' : null; };
 type Tab = 'custodial_wallets' | 'p2p_orders' | 'fiat_crypto_bridge' | 'crypto_addresses';
 
 const TABS: Array<{ id: Tab; label: string; scope: FilterScope; title: string; note?: string; empty: string }> = [
@@ -128,6 +129,7 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = () => {
 
   const grid = (rs: Row[]) => (
     <DataGrid<Row>
+          recoveredOf={(r) => recoveredLabel(r.Forensic_Provenance)}
       key={tab} tags={{ table: tab, idOf: (r) => (Number.isFinite(Number(r.id)) ? Number(r.id) : null) }} tableId={`crypto_${tab}`} title={meta.title} columns={COLUMNS[tab]} rows={rs} totalBeforeFilter={data[tab].length}
       rowKey={(r, i) => `${tab}-${r.id ?? i}`} selectedKey={selected?.id?.startsWith(`CRYPTO_${tab}_`) ? `${tab}-${selected.id.split('_').pop()}` : null}
       onSelect={select} exportName={EXPORT_NAME[tab]}
