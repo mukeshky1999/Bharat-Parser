@@ -21,8 +21,7 @@ geolocation, and examination reporting (facts, not legal forms).
 | `scripts/` | `start_all.py`, `build_desktop_exe.ps1`, OCR model setup, fixture generators. |
 | `docs/` | Architecture/abilities/command docs, original specs (`docs/specs/`), merge history. |
 
-> The legacy web dashboard (`main.py`, `src/workstation_app`) was retired: it carried sample data and a second,
-> unverified ingest path. The desktop app (Electron + `parsers/api_server.py`) is the only product.
+
 
 ## Setup
 
