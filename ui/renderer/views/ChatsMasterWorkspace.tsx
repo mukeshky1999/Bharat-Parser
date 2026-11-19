@@ -8,6 +8,8 @@ import { csvCell, downloadCsv, formatOffset } from '../utils/csv';
 import { useTagIndex } from '../workspace/useTagIndex';
 import { TagPills } from '../inspectors/TagControls';
 import { caseRecordOf } from '../utils/caseRecord';
+import { usePreferences } from '../state/preferencesStore';
+import { Button, Chip, RecoveredChip, Segmented } from '../components/ui';
 import {
   MessageSquare,
   ArrowUpRight,
@@ -315,128 +317,54 @@ export const ChatsMasterWorkspace: React.FC = () => {
     });
   };
 
-  const getAppTheme = (app: string) => {
-    if (app.includes('WhatsApp')) {
-      return {
-        badge: 'bg-emerald-950 text-emerald-300 border-emerald-700/60',
-        incoming: 'bg-emerald-950/80 border-emerald-800/80 text-emerald-50',
-        outgoing: 'bg-emerald-900/90 border-emerald-700 text-slate-50',
-        accent: 'text-emerald-400',
-        nameColor: 'text-emerald-300'
-      };
-    }
-    if (app.includes('Telegram')) {
-      return {
-        badge: 'bg-sky-950 text-sky-300 border-sky-700/60',
-        incoming: 'bg-sky-950/80 border-sky-800/80 text-sky-50',
-        outgoing: 'bg-sky-900/90 border-sky-700 text-slate-50',
-        accent: 'text-sky-400',
-        nameColor: 'text-sky-300'
-      };
-    }
-    if (app.includes('Signal')) {
-      return {
-        badge: 'bg-purple-950 text-purple-300 border-purple-700/60',
-        incoming: 'bg-purple-950/80 border-purple-800/80 text-purple-50',
-        outgoing: 'bg-purple-900/90 border-purple-700 text-slate-50',
-        accent: 'text-purple-400',
-        nameColor: 'text-purple-300'
-      };
-    }
-    if (app.includes('Zangi')) {
-      return {
-        badge: 'bg-orange-950 text-orange-300 border-orange-700/60',
-        incoming: 'bg-orange-950/80 border-orange-800/80 text-orange-50',
-        outgoing: 'bg-orange-900/90 border-orange-700 text-slate-50',
-        accent: 'text-orange-400',
-        nameColor: 'text-orange-300'
-      };
-    }
-    if (app.includes('Snapchat')) {
-      return {
-        badge: 'bg-yellow-950 text-yellow-300 border-yellow-700/60',
-        incoming: 'bg-yellow-950/80 border-yellow-800/80 text-yellow-50',
-        outgoing: 'bg-yellow-900/90 border-yellow-700 text-slate-50',
-        accent: 'text-yellow-400',
-        nameColor: 'text-yellow-300'
-      };
-    }
-    if (app.includes('Tinder') || app.includes('Bumble') || app.includes('Hinge') || app.includes('Grindr')) {
-      return {
-        badge: 'bg-rose-950 text-rose-300 border-rose-700/60',
-        incoming: 'bg-rose-950/80 border-rose-800/80 text-rose-50',
-        outgoing: 'bg-rose-900/90 border-rose-700 text-slate-50',
-        accent: 'text-rose-400',
-        nameColor: 'text-rose-300'
-      };
-    }
-    if (app.includes('Element')) {
-      return {
-        badge: 'bg-teal-950 text-teal-300 border-teal-700/60',
-        incoming: 'bg-teal-950/80 border-teal-800/80 text-teal-50',
-        outgoing: 'bg-teal-900/90 border-teal-700 text-slate-50',
-        accent: 'text-teal-400',
-        nameColor: 'text-teal-300'
-      };
-    }
-    if (app.includes('Session')) {
-      return {
-        badge: 'bg-cyan-950 text-cyan-300 border-cyan-700/60',
-        incoming: 'bg-cyan-950/80 border-cyan-800/80 text-cyan-50',
-        outgoing: 'bg-cyan-900/90 border-cyan-700 text-slate-50',
-        accent: 'text-cyan-400',
-        nameColor: 'text-cyan-300'
-      };
-    }
-    return {
-      badge: 'bg-slate-900 text-slate-300 border-slate-700',
-      incoming: 'bg-slate-900/90 border-slate-800 text-slate-100',
-      outgoing: 'bg-slate-800/90 border-slate-700 text-slate-50',
-      accent: 'text-slate-400',
-      nameColor: 'text-slate-300'
-    };
+  const tz = usePreferences((s) => s.timeZone);
+
+  const appGroupOf = (app: string): string => {
+    if (['Tinder', 'Bumble', 'Hinge', 'Grindr'].some((a) => app.includes(a))) return 'Dating';
+    if (['Threema', 'Briar', 'SimpleX'].some((a) => app.includes(a))) return 'Threema';
+    return app;
   };
+  const appChips = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const th of conversationThreads) counts.set(appGroupOf(th.sourceApp), (counts.get(appGroupOf(th.sourceApp)) ?? 0) + 1);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [conversationThreads]);
+  const activeSubcategory = selectedSubcategory || 'ALL';
+
+  const initialsOf = (name: string): string =>
+    name.replace(/[^A-Za-z ]/g, '').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '#';
+  const isRecoveredMsg = (m: ChatArtifact) => !!m.isDeleted || m.provenance?.recoveryState !== 'ACTIVE';
+
+  const hasTime = (m: ChatArtifact) => !!m.timestamp && m.timestamp.epochMs > 0;
+  const zone = tz === 'IST' ? 'Asia/Kolkata' : 'UTC';
+  const dayOf = (m: ChatArtifact): string =>
+    hasTime(m) ? new Date(m.timestamp.epochMs).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: zone }) : 'Time not recorded';
+  const dayShort = (m: ChatArtifact): string =>
+    hasTime(m) ? new Date(m.timestamp.epochMs).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: zone }) : '';
+  const stampText = (m: ChatArtifact): string => (hasTime(m) ? (tz === 'IST' ? m.timestamp.istFormatted : m.timestamp.utcIso) : 'not recorded');
+
+  const AppTag: React.FC<{ app: string }> = ({ app }) => (
+    <span className="inline-flex text-[0.6875rem] font-semibold px-[7px] py-px rounded-full whitespace-nowrap bg-sunken text-muted border border-line">{app}</span>
+  );
 
   const getStatusIcon = (status?: string) => {
     switch (status) {
       case 'READ':
-        return <span title="Read"><CheckCheck className="w-3.5 h-3.5 text-sky-400 inline" /></span>;
+        return <span title="Read"><CheckCheck className="w-3.5 h-3.5 text-accent inline" /></span>;
       case 'DELIVERED':
-        return <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-slate-400 inline" /></span>;
+        return <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-muted inline" /></span>;
       case 'SENT':
-        return <span title="Sent"><Check className="w-3.5 h-3.5 text-slate-400 inline" /></span>;
+        return <span title="Sent"><Check className="w-3.5 h-3.5 text-muted inline" /></span>;
       default:
-        return <span title="Sent / Saved"><Check className="w-3.5 h-3.5 text-slate-500 inline" /></span>;
+        return <span title="Sent / Saved"><Check className="w-3.5 h-3.5 text-faint inline" /></span>;
     }
   };
 
   const getStateBadge = (state: RecoveryState, isDeleted?: boolean) => {
-    if (state === 'WAL_RECOVERED') {
-      return (
-        <span className="text-[0.6875rem] bg-amber-950 text-amber-300 border border-amber-700/80 px-1.5 py-0.2 rounded font-bold font-mono">
-          [WAL]
-        </span>
-      );
-    }
-    if (state === 'CARVED_UNALLOCATED' || isDeleted) {
-      return (
-        <span className="text-[0.6875rem] bg-red-950 text-red-300 border border-red-700/80 px-1.5 py-0.2 rounded font-bold font-mono">
-          [CARVED]
-        </span>
-      );
-    }
-    if (state === 'OS_SPILLOVER') {
-      return (
-        <span className="text-[0.6875rem] bg-purple-950 text-purple-300 border border-purple-700/80 px-1.5 py-0.2 rounded font-bold font-mono">
-          [SPILLOVER]
-        </span>
-      );
-    }
-    return (
-      <span className="text-[0.6875rem] bg-emerald-950 text-emerald-300 border border-emerald-700/60 px-1.5 py-0.2 rounded font-mono">
-        [ACTIVE]
-      </span>
-    );
+    if (state === 'WAL_RECOVERED') return <Chip tone="rec" title="Recovered from the database log">WAL</Chip>;
+    if (state === 'CARVED_UNALLOCATED' || isDeleted) return <Chip tone="rec" title="Carved from free space or marked deleted">Carved</Chip>;
+    if (state === 'OS_SPILLOVER') return <Chip tone="warn" title="Found in an operating system trace">System trace</Chip>;
+    return <Chip>Active</Chip>;
   };
 
   const toggleAudioPlay = (msgId: string) => {
@@ -449,769 +377,445 @@ export const ChatsMasterWorkspace: React.FC = () => {
     });
   };
 
-  return (
-    <div className="flex-1 flex overflow-hidden bg-slate-950">
-      {/* =========================================================================
-          LEFT SUB-PANE: BharatAnalyzer Conversation Thread List
-          ========================================================================= */}
-      <aside className="w-72 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 select-none">
-        {/* Thread Header & Quick Search */}
-        <div className="p-2 border-b border-slate-800 bg-slate-950/70">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center space-x-1.5">
-              <MessageSquare className="w-4 h-4 text-cyan-400" />
-              <span className="text-xs font-bold text-slate-100 uppercase tracking-wide">
-                Threads & Matches
-              </span>
-            </div>
-            <span className="text-[0.6875rem] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.2 rounded">
-              {filteredThreads.length}
-            </span>
-          </div>
+  const pill = (active: boolean) =>
+    `px-2.5 py-[3px] rounded-full border text-[0.75rem] ${active ? 'bg-accent-soft text-accent-ink border-accent font-semibold' : 'bg-surface text-muted border-line-strong font-medium hover:bg-hover'}`;
+  const pageBtn = 'p-1 rounded text-muted hover:bg-hover disabled:opacity-30 disabled:cursor-not-allowed';
 
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2" />
-            <input
-              type="text"
-              placeholder="Filter threads..."
-              value={threadSearchQuery}
-              onChange={(e) => setThreadSearchQuery(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 rounded pl-7 pr-2 py-1 text-xs text-slate-200 placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-500"
-            />
+  const threadFacts: Array<[string, string]> = activeThread ? (() => {
+    const timed = activeThread.messages.filter(hasTime).sort((a, b) => a.timestamp.epochMs - b.timestamp.epochMs);
+    return [
+      ['Messages', activeThread.messages.length.toLocaleString()],
+      ['In database', activeThread.activeCount.toLocaleString()],
+      ['Recovered', activeThread.carvedCount.toLocaleString()],
+      ['First', timed.length ? stampText(timed[0]) : 'not recorded'],
+      ['Last', timed.length ? stampText(timed[timed.length - 1]) : 'not recorded'],
+    ] as Array<[string, string]>;
+  })() : [];
+
+  return (
+    <div className="flex-1 flex overflow-hidden bg-page">
+      {/* Conversation list */}
+      <aside className="w-80 bg-surface border-r border-line flex flex-col shrink-0" aria-label="Conversations">
+        <div className="p-3 border-b border-line flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-g-comm" aria-hidden="true" />
+            <span className="font-semibold">Conversations</span>
+            <span className="ml-auto text-muted text-[0.75rem]">{filteredThreads.length.toLocaleString()}</span>
           </div>
+          <div className="flex gap-1.5 flex-wrap" role="group" aria-label="Filter by app">
+            <button type="button" aria-pressed={activeSubcategory === 'ALL'} onClick={() => { setSelectedSubcategory('ALL'); setCurrentPage(1); }} className={pill(activeSubcategory === 'ALL')}>
+              All <span className="text-faint">{conversationThreads.length}</span>
+            </button>
+            {appChips.map(([name, n]) => (
+              <button key={name} type="button" aria-pressed={activeSubcategory === name} onClick={() => { setSelectedSubcategory(name); setCurrentPage(1); }}
+                title={name === 'Dating' ? 'Tinder, Bumble, Hinge, Grindr' : name === 'Threema' ? 'Threema, Briar, SimpleX' : undefined} className={pill(activeSubcategory === name)}>
+                {name} <span className="text-faint">{n}</span>
+              </button>
+            ))}
+          </div>
+          <label className="relative block">
+            <span className="sr-only">Filter conversations</span>
+            <Search className="w-4 h-4 text-faint absolute left-2.5 top-2" aria-hidden="true" />
+            <input type="text" placeholder="Find a name, app or word" value={threadSearchQuery} onChange={(e) => setThreadSearchQuery(e.target.value)}
+              className="h-8 w-full pl-8 pr-2 rounded-lg bg-surface border border-line-strong text-ink placeholder:text-faint" />
+          </label>
         </div>
 
-        {/* Thread Items List */}
-        <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60">
-          {/* Option: View All Messages */}
-          <div
-            onClick={() => setSelectedThreadId('ALL')}
-            className={`p-2.5 cursor-pointer transition-colors ${
-              selectedThreadId === 'ALL'
-                ? 'bg-emerald-950/60 border-l-4 border-emerald-500 text-emerald-200'
-                : 'hover:bg-slate-800/60 text-slate-300'
-            }`}
-          >
-            <div className="flex items-center justify-between text-xs font-bold mb-0.5">
-              <span className="flex items-center space-x-1.5">
-                <LayoutGrid className="w-3.5 h-3.5 text-cyan-400" />
-                <span>All Indexed Messages</span>
-              </span>
-              <span className="text-[0.6875rem] font-mono text-cyan-400 bg-cyan-950 px-1.5 rounded">
-                {chats.length}
-              </span>
-            </div>
-            <div className="text-[0.6875rem] text-slate-500 font-sans">
-              Global virtualized view across all 10 social & chat engines
-            </div>
-          </div>
+        <div className="flex-1 overflow-y-auto">
+          <button type="button" onClick={() => setSelectedThreadId('ALL')} aria-current={selectedThreadId === 'ALL'}
+            className={`w-full text-left flex gap-2.5 items-center px-3 py-2.5 border-b border-line ${selectedThreadId === 'ALL' ? 'bg-accent-soft' : 'hover:bg-hover'}`}>
+            <LayoutGrid className="w-4 h-4 text-muted shrink-0" aria-hidden="true" />
+            <span className="flex-1 min-w-0">
+              <b className="font-semibold block">All messages</b>
+              <span className="text-[0.75rem] text-muted">Every conversation together</span>
+            </span>
+            <span className="text-muted text-[0.75rem]">{chats.length.toLocaleString()}</span>
+          </button>
 
           {filteredThreads.map((thread) => {
             const isSelected = selectedThreadId === thread.threadKey;
-            const theme = getAppTheme(thread.sourceApp);
-
             return (
-              <div
-                key={thread.threadKey}
-                onClick={() => setSelectedThreadId(thread.threadKey)}
-                className={`p-2.5 cursor-pointer transition-colors space-y-1 ${
-                  isSelected
-                    ? 'bg-cyan-950/50 border-l-4 border-cyan-400 text-slate-100'
-                    : 'hover:bg-slate-800/60 text-slate-300'
-                }`}
-              >
-                {/* Thread Title & App Badge */}
-                <div className="flex items-center justify-between">
-                  <div className="font-semibold text-xs truncate max-w-[150px] text-slate-100 font-sans">
-                    {thread.threadTitle}
-                  </div>
-                  <span className={`text-[0.6875rem] px-1.5 py-0.2 rounded font-mono border ${theme.badge}`}>
-                    {thread.sourceApp}
+              <button type="button" key={thread.threadKey} onClick={() => setSelectedThreadId(thread.threadKey)} aria-current={isSelected}
+                className={`w-full text-left flex gap-2.5 items-start px-3 py-2.5 border-b border-line ${isSelected ? 'bg-accent-soft' : 'hover:bg-hover'} ${thread.carvedCount > 0 ? 'shadow-[inset_3px_0_0_var(--t-rec)]' : ''}`}>
+                <span aria-hidden="true" className="w-8 h-8 rounded-full grid place-items-center shrink-0 bg-accent-soft text-accent-ink font-semibold text-[0.75rem]">{initialsOf(thread.threadTitle)}</span>
+                <span className="min-w-0 flex-1 flex flex-col gap-0.5">
+                  <span className="flex items-center gap-1.5 justify-between">
+                    <b className="font-semibold truncate">{thread.threadTitle}</b>
+                    <time className="text-muted text-[0.6875rem] whitespace-nowrap">{dayShort(thread.lastMessage)}</time>
                   </span>
-                </div>
-
-                {/* Last Message Snippet */}
-                <div className="text-[0.6875rem] text-slate-400 truncate font-sans">
-                  {thread.lastMessage.isFromMe && <span className="text-emerald-400 mr-1 font-mono">You:</span>}
-                  {thread.lastMessage.body}
-                </div>
-
-                {/* Badges: Active & Carved */}
-                <div className="flex items-center justify-between pt-1">
-                  <div className="flex items-center space-x-1.5 text-[0.6875rem] font-mono">
-                    <span className="text-slate-400">{thread.messages.length} msgs</span>
-                    {thread.carvedCount > 0 && (
-                      <span className="bg-red-950 text-red-300 border border-red-800/70 px-1 py-0.2 rounded font-bold">
-                        [{thread.carvedCount} Deleted]
-                      </span>
-                    )}
-                  </div>
-                  {thread.lastMessage.ephemeralDuration && (
-                    <span className="text-orange-400 text-[0.6875rem] flex items-center space-x-0.5">
-                      <Flame className="w-2.5 h-2.5" />
-                      <span>{thread.lastMessage.ephemeralDuration}s</span>
-                    </span>
-                  )}
-                </div>
-              </div>
+                  <span className="text-muted text-[0.75rem] truncate">
+                    {thread.lastMessage.isFromMe && <span className="mr-1">You:</span>}
+                    {thread.lastMessage.body}
+                  </span>
+                  <span className="flex items-center gap-1.5 flex-wrap text-[0.6875rem] text-muted">
+                    <AppTag app={thread.sourceApp} />
+                    <span>{thread.messages.length.toLocaleString()} messages</span>
+                    {thread.carvedCount > 0 && <RecoveredChip n={thread.carvedCount} label="recovered" />}
+                    {thread.lastMessage.ephemeralDuration ? (
+                      <span className="inline-flex items-center gap-0.5"><Flame className="w-2.5 h-2.5" aria-hidden="true" />{thread.lastMessage.ephemeralDuration}s</span>
+                    ) : null}
+                  </span>
+                </span>
+              </button>
             );
           })}
         </div>
       </aside>
 
-      {/* =========================================================================
-          CENTER PANE: BharatAnalyzer 3-Way Split Canvas (Grid vs Bubble vs Dossier)
-          ========================================================================= */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-slate-950">
-        {/* Top Control Bar with Subcategory Pills & View Mode Toggle */}
-        <div className="h-10 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between shrink-0 select-none">
-          <div className="flex items-center space-x-2">
-            <span className="text-xs font-bold text-slate-100">
-              {selectedThreadId === 'ALL'
-                ? 'All Indexed Messages'
-                : activeThread?.threadTitle || 'Conversation'}
-            </span>
-            <span className="text-[0.6875rem] font-mono text-cyan-400 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800/60 font-semibold">
-              {totalMatching} Records
-            </span>
+      {/* Conversation and table */}
+      <main className="flex-1 flex flex-col overflow-hidden bg-page min-w-0">
+        <div className="bg-surface border-b border-line px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="font-semibold truncate">{selectedThreadId === 'ALL' ? 'All messages' : activeThread?.threadTitle || 'Conversation'}</h2>
+            <span className="text-muted">{totalMatching.toLocaleString()} record{totalMatching === 1 ? '' : 's'}</span>
           </div>
-
-          {/* 3-Mode View Toggle Button Group */}
-          <div className="flex items-center space-x-2">
-            <div className="flex items-center bg-slate-950 border border-slate-800 rounded p-0.5 font-mono text-[0.6875rem]">
-              <button
-                onClick={() => setChatViewMode('GRID')}
-                className={`flex items-center space-x-1 px-2.5 py-1 rounded transition-colors ${
-                  chatViewMode === 'GRID'
-                    ? 'bg-emerald-600 text-slate-50 font-bold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Table</span>
-              </button>
-              <button
-                onClick={() => setChatViewMode('BUBBLE')}
-                className={`flex items-center space-x-1 px-2.5 py-1 rounded transition-colors ${
-                  chatViewMode === 'BUBBLE'
-                    ? 'bg-emerald-600 text-slate-50 font-bold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <MessageCircle className="w-3.5 h-3.5" />
-                <span>Bubble View</span>
-              </button>
-            </div>
-
-            <button
-              onClick={handleExportCsv}
-              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded font-mono text-[0.6875rem] border border-slate-700 flex items-center space-x-1.5 transition-colors"
-              title="Export the filtered chat records as CSV"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Export CSV</span>
-            </button>
+          <div className="flex items-center gap-2">
+            <Segmented label="View" value={chatViewMode} onChange={(v) => setChatViewMode(v as ChatWorkspaceMode)}
+              options={[{ value: 'GRID', label: 'Table' }, { value: 'BUBBLE', label: 'Bubble view' }]} />
+            <Button onClick={handleExportCsv} title="Export the filtered chat records as CSV">
+              <FileSpreadsheet className="w-4 h-4" aria-hidden="true" />Export CSV
+            </Button>
           </div>
         </div>
 
-        {/* Top Filter & Pagination Ribbon */}
-        <div className="bg-slate-950/95 border-b border-slate-800 px-3 py-1.5 space-y-1.5 text-xs shrink-0 select-none">
-          {/* Row 1: Search Box + Recovery State Filter Pills */}
-          <div className="flex items-center justify-between gap-2 overflow-x-auto">
-            {/* Instant FTS5 Search Box */}
-            <div className="relative min-w-[320px] max-w-[420px]">
-              <Search className="w-3.5 h-3.5 text-cyan-400 absolute left-2 top-2" />
-              <input
-                type="text"
-                placeholder="Search messages, UTRs, VPAs, +91 phones, Zangi/Session IDs..."
-                value={messageSearchQuery}
-                onChange={(e) => {
-                  setMessageSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full bg-slate-900 border border-slate-800 rounded pl-7 pr-2 py-1 text-[0.6875rem] text-slate-200 placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-500"
-              />
-            </div>
-
-            {/* Recovery State Filter Pills */}
-            <div className="flex items-center space-x-1 font-mono text-[0.6875rem]">
-              <span className="text-slate-500 text-[0.6875rem] uppercase font-sans mr-1">State:</span>
-              {(['ALL', 'ACTIVE', 'WAL', 'CARVED', 'SPILLOVER'] as RecoveryPillFilter[]).map((pill) => {
-                const isActive = recoveryPillFilter === pill;
-                let activeStyle = 'bg-slate-800 text-slate-200 border-slate-700';
-                if (pill === 'ACTIVE') activeStyle = 'bg-emerald-950 text-emerald-300 border-emerald-700/80 font-bold';
-                if (pill === 'WAL') activeStyle = 'bg-amber-950 text-amber-300 border-amber-700/80 font-bold';
-                if (pill === 'CARVED') activeStyle = 'bg-red-950 text-red-300 border-red-700/80 font-bold';
-                if (pill === 'SPILLOVER') activeStyle = 'bg-purple-950 text-purple-300 border-purple-700/80 font-bold';
-
-                return (
-                  <button
-                    key={pill}
-                    onClick={() => setRecoveryPillFilter(pill)}
-                    className={`px-2 py-0.5 rounded border transition-colors ${
-                      isActive
-                        ? activeStyle
-                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                    }`}
-                  >
-                    {pill === 'ALL' && 'All Records'}
-                    {pill === 'ACTIVE' && 'Allocated Active'}
-                    {pill === 'WAL' && 'WAL Recovered (Amber)'}
-                    {pill === 'CARVED' && 'Freelist/Slack Carved (Red)'}
-                    {pill === 'SPILLOVER' && 'OS Notification Spillover (Purple)'}
-                  </button>
-                );
-              })}
+        <div className="bg-surface border-b border-line px-4 py-2 flex flex-col gap-2 shrink-0">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <label className="relative block min-w-[280px] max-w-[420px] flex-1">
+              <span className="sr-only">Search messages</span>
+              <Search className="w-4 h-4 text-faint absolute left-2.5 top-2" aria-hidden="true" />
+              <input type="text" placeholder="Search messages, UTRs, VPAs, phone numbers, IDs" value={messageSearchQuery}
+                onChange={(e) => { setMessageSearchQuery(e.target.value); setCurrentPage(1); }}
+                className="h-8 w-full pl-8 pr-2 rounded-lg bg-surface border border-line-strong text-ink placeholder:text-faint" />
+            </label>
+            <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label="Where found">
+              <span className="text-muted text-[0.75rem] mr-1">Where found</span>
+              {(['ALL', 'ACTIVE', 'WAL', 'CARVED', 'SPILLOVER'] as RecoveryPillFilter[]).map((p) => (
+                <button key={p} type="button" aria-pressed={recoveryPillFilter === p} onClick={() => setRecoveryPillFilter(p)} className={pill(recoveryPillFilter === p)}>
+                  {p === 'ALL' && 'All records'}
+                  {p === 'ACTIVE' && 'In database'}
+                  {p === 'WAL' && 'Recovered from log'}
+                  {p === 'CARVED' && 'Carved from free space'}
+                  {p === 'SPILLOVER' && 'System trace'}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Row 2: Ephemeral Filters + Server-Side Pagination Bar */}
-          <div className="flex items-center justify-between gap-2 overflow-x-auto text-[0.6875rem] font-mono">
-            {/* Ephemeral Filter Pills */}
-            <div className="flex items-center space-x-1">
-              <span className="text-slate-500 text-[0.6875rem] uppercase font-sans mr-1">Privacy:</span>
-              {(['ALL', 'VIEW_ONCE', 'DISAPPEARING', 'REVOKED', 'ATTACHMENTS'] as EphemeralPillFilter[]).map((pill) => {
-                const isActive = ephemeralFilter === pill;
-                return (
-                  <button
-                    key={pill}
-                    onClick={() => setEphemeralFilter(pill)}
-                    className={`px-2 py-0.5 rounded border transition-colors ${
-                      isActive
-                        ? 'bg-cyan-950 text-cyan-300 border-cyan-700/80 font-bold'
-                        : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                    }`}
-                  >
-                    {pill === 'ALL' && 'All Privacy'}
-                    {pill === 'VIEW_ONCE' && 'View-Once Media'}
-                    {pill === 'DISAPPEARING' && 'Disappearing / TTL > 0'}
-                    {pill === 'REVOKED' && 'Revoked / Unsent'}
-                    {pill === 'ATTACHMENTS' && 'With Attachments / GPS'}
-                  </button>
-                );
-              })}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label="Message kind">
+              <span className="text-muted text-[0.75rem] mr-1">Message kind</span>
+              {(['ALL', 'VIEW_ONCE', 'DISAPPEARING', 'REVOKED', 'ATTACHMENTS'] as EphemeralPillFilter[]).map((p) => (
+                <button key={p} type="button" aria-pressed={ephemeralFilter === p} onClick={() => setEphemeralFilter(p)} className={pill(ephemeralFilter === p)}>
+                  {p === 'ALL' && 'All'}
+                  {p === 'VIEW_ONCE' && 'View-once media'}
+                  {p === 'DISAPPEARING' && 'Disappearing'}
+                  {p === 'REVOKED' && 'Revoked or unsent'}
+                  {p === 'ATTACHMENTS' && 'With attachments or location'}
+                </button>
+              ))}
             </div>
 
-            {/* Server-Side Pagination Controls */}
-            <div className="flex items-center space-x-2 text-slate-300">
-              <span className="text-slate-400">
-                Showing rows <strong className="text-slate-100">{totalMatching === 0 ? 0 : offset + 1}</strong>–
-                <strong className="text-slate-100">{Math.min(offset + pageSize, totalMatching)}</strong> of{' '}
-                <strong className="text-cyan-400">{totalMatching.toLocaleString()}</strong>
+            <div className="flex items-center gap-2 text-muted text-[0.75rem]">
+              <span>
+                Rows <strong className="text-ink">{totalMatching === 0 ? 0 : offset + 1}</strong>–<strong className="text-ink">{Math.min(offset + pageSize, totalMatching)}</strong> of{' '}
+                <strong className="text-ink">{totalMatching.toLocaleString()}</strong>
               </span>
-
-              <div className="flex items-center space-x-0.5 bg-slate-900 border border-slate-800 rounded p-0.5">
-                <button
-                  onClick={() => setCurrentPage(1)}
-                  disabled={validPage <= 1}
-                  className="p-1 rounded hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="First Page"
-                >
-                  <ChevronsLeft className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => setCurrentPage(validPage - 1)}
-                  disabled={validPage <= 1}
-                  className="p-1 rounded hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Previous Page"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </button>
-                <span className="px-2 text-slate-300 font-bold text-[0.6875rem]">
-                  Page {validPage} of {totalPages}
-                </span>
-                <button
-                  onClick={() => setCurrentPage(validPage + 1)}
-                  disabled={validPage >= totalPages}
-                  className="p-1 rounded hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Next Page"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => setCurrentPage(totalPages)}
-                  disabled={validPage >= totalPages}
-                  className="p-1 rounded hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Last Page"
-                >
-                  <ChevronsRight className="w-3.5 h-3.5" />
-                </button>
+              <div className="flex items-center gap-0.5 border border-line-strong rounded-lg p-0.5 bg-surface">
+                <button onClick={() => setCurrentPage(1)} disabled={validPage <= 1} className={pageBtn} title="First page" aria-label="First page"><ChevronsLeft className="w-3.5 h-3.5" /></button>
+                <button onClick={() => setCurrentPage(validPage - 1)} disabled={validPage <= 1} className={pageBtn} title="Previous page" aria-label="Previous page"><ChevronLeft className="w-3.5 h-3.5" /></button>
+                <span className="px-2 text-ink font-semibold">Page {validPage} of {totalPages}</span>
+                <button onClick={() => setCurrentPage(validPage + 1)} disabled={validPage >= totalPages} className={pageBtn} title="Next page" aria-label="Next page"><ChevronRight className="w-3.5 h-3.5" /></button>
+                <button onClick={() => setCurrentPage(totalPages)} disabled={validPage >= totalPages} className={pageBtn} title="Last page" aria-label="Last page"><ChevronsRight className="w-3.5 h-3.5" /></button>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Content Presentation: Table Grid vs Bubble View vs Dossier */}
         {chatViewMode === 'GRID' && (
-          /* =====================================================================
-             VIEW A: Complete 28-Column Categorized Forensic Grid
-             ===================================================================== */
-          <div className="flex-1 overflow-auto select-text font-mono">
-            <table className="w-full text-left text-[0.6875rem] border-collapse">
-              <thead className="bg-slate-950 border-b border-slate-800 text-[0.6875rem] uppercase font-bold sticky top-0 z-20">
-                <tr className="bg-slate-900 border-b border-slate-800 text-slate-400 text-[0.6875rem]">
+          <div className="flex-1 overflow-auto select-text bg-surface">
+            <table className="w-full text-left text-[0.75rem] border-collapse">
+              <thead className="bg-sunken text-muted font-semibold sticky top-0 z-20">
+                <tr className="border-b border-line-strong">
                   <th className="p-2 w-10">#</th>
-                  <th className="p-2 w-28">Source App</th>
-                  <th className="p-2 w-24">Chat Type</th>
-                  <th className="p-2 w-16">Dir</th>
-                  <th className="p-2 w-28">Message Type</th>
+                  <th className="p-2 w-28">Source app</th>
+                  <th className="p-2 w-24">Chat type</th>
+                  <th className="p-2 w-16">Direction</th>
+                  <th className="p-2 w-28">Message type</th>
                   <th className="p-2 w-20">Status</th>
-                  <th className="p-2 min-w-[280px]">Message Body / Evidence</th>
+                  <th className="p-2 min-w-[280px]">Message body</th>
                   <th className="p-2 w-24">Quoted ID</th>
-                  <th className="p-2 w-36">Quoted Text</th>
-                  <th className="p-2 w-14">Fwd</th>
+                  <th className="p-2 w-36">Quoted text</th>
+                  <th className="p-2 w-14">Forwarded</th>
 
                   <th className="p-2 w-44">Thread ID</th>
-                  <th className="p-2 w-44">Thread Title</th>
-                  <th className="p-2 w-48">Sender (ID / Name)</th>
-                  <th className="p-2 w-48">Recipient (ID / Name)</th>
+                  <th className="p-2 w-44">Thread title</th>
+                  <th className="p-2 w-48">Sender (ID / name)</th>
+                  <th className="p-2 w-48">Recipient (ID / name)</th>
 
-                  <th className="p-2 w-20">View-Once</th>
-                  <th className="p-2 w-20">Disappearing TTL</th>
+                  <th className="p-2 w-20">View-once</th>
+                  <th className="p-2 w-20">Disappearing</th>
                   <th className="p-2 w-14">Revoked</th>
 
-                  <th className="p-2 w-36">Timestamp Raw</th>
+                  <th className="p-2 w-36">Timestamp raw</th>
                   <th className="p-2 w-44">Timestamp UTC</th>
-                  <th className="p-2 w-48 font-bold text-slate-200">Timestamp IST (+05:30)</th>
+                  <th className="p-2 w-48 text-ink">Timestamp IST (+05:30)</th>
                   <th className="p-2 w-44">Read IST</th>
 
-                  <th className="p-2 w-40">Attachment Path</th>
-                  <th className="p-2 w-28">MIME / Size</th>
-                  <th className="p-2 w-36">Geo Coordinates</th>
+                  <th className="p-2 w-40">Attachment path</th>
+                  <th className="p-2 w-28">MIME type</th>
+                  <th className="p-2 w-36">Location</th>
 
-                  <th className="p-2 w-36">Source File & Table</th>
-                  <th className="p-2 w-28">Physical Offset</th>
-                  <th className="p-2 w-32">Recovery State</th>
+                  <th className="p-2 w-36">Source file and table</th>
+                  <th className="p-2 w-28">Byte offset</th>
+                  <th className="p-2 w-32">Where found</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 bg-slate-950">
+              <tbody className="bg-surface text-ink">
                 {paginatedMessages.map((msg, idx) => {
                   const isSelected = selectedArtifact?.id === msg.id;
                   const hexOffset = `0x${msg.provenance.byteOffset.toString(16).toUpperCase().padStart(8, '0')}`;
-                  const isDel = msg.isDeleted || msg.provenance.recoveryState !== 'ACTIVE';
+                  const isDel = isRecoveredMsg(msg);
 
                   return (
                     <tr
                       key={msg.id}
                       onClick={() => handleSelectMessage(msg)}
-                      className={`cursor-pointer transition-colors ${
-                        isSelected
-                          ? 'bg-emerald-950/40 text-emerald-100 border-l-4 border-l-emerald-500'
-                          : isDel
-                          ? 'bg-red-950/10 hover:bg-red-950/20 text-slate-300'
-                          : 'hover:bg-slate-900/60 text-slate-300'
-                      }`}
+                      aria-selected={isSelected}
+                      className={`cursor-pointer border-b border-line ${isDel ? 'is-recovered' : ''} ${isSelected ? 'bg-accent-soft' : 'hover:bg-hover'}`}
                     >
-                      <td className="p-2 text-slate-500">{offset + idx + 1}</td>
-                      <td className="p-2 font-semibold">
-                        <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[0.6875rem]">
-                          {msg.sourceApp}
-                        </span>
-                      </td>
-                      <td className="p-2 text-[0.6875rem] text-slate-400">
-                        {msg.chatType || 'DIRECT_1ON1'}
-                      </td>
+                      <td className="p-2 text-faint">{offset + idx + 1}</td>
+                      <td className="p-2"><AppTag app={msg.sourceApp} /></td>
+                      <td className="p-2 text-muted">{msg.chatType || 'DIRECT_1ON1'}</td>
                       <td className="p-2">
                         {msg.isFromMe ? (
-                          <span className="flex items-center text-emerald-400 font-bold text-[0.6875rem]">
-                            <ArrowUpRight className="w-3 h-3 mr-0.5" /> OUT
-                          </span>
+                          <Chip tone="out"><ArrowUpRight className="w-3 h-3" aria-hidden="true" />Out</Chip>
                         ) : (
-                          <span className="flex items-center text-sky-400 font-bold text-[0.6875rem]">
-                            <ArrowDownLeft className="w-3 h-3 mr-0.5" /> IN
-                          </span>
+                          <Chip tone="in"><ArrowDownLeft className="w-3 h-3" aria-hidden="true" />In</Chip>
                         )}
                       </td>
-                      <td className="p-2 text-[0.6875rem] text-slate-300">
-                        {msg.isViewOnce ? (
-                          <span className="text-orange-400 font-bold">[VIEW ONCE]</span>
-                        ) : (
-                          msg.mediaType || 'TEXT'
-                        )}
+                      <td className="p-2">
+                        {msg.isViewOnce ? <Chip tone="warn">View once</Chip> : msg.mediaType || 'TEXT'}
                       </td>
                       <td className="p-2 text-center">{getStatusIcon(msg.messageStatus)}</td>
                       <td className="p-2">
-                        <div className="font-sans text-xs text-slate-100 line-clamp-2">{msg.body}</div>
+                        <div className="line-clamp-2">{msg.body}</div>
                         {tagsOfMsg(msg.id).length > 0 && <div className="mt-1 flex flex-wrap gap-1"><TagPills tags={tagsOfMsg(msg.id)} /></div>}
                         {msg.paymentAttachment && (
-                          <div className="mt-1 text-[0.6875rem] text-emerald-400 font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40 inline-block">
+                          <div className="mt-1 text-[0.75rem] text-g-money bg-g-money-soft px-1.5 py-0.5 rounded inline-block">
                             ₹{msg.paymentAttachment.amountInr.toLocaleString('en-IN')} (UTR: {msg.paymentAttachment.utrNumber})
                           </div>
                         )}
                       </td>
-                      <td className="p-2 text-slate-400 text-[0.6875rem] truncate max-w-[100px]">{msg.replyToId || '—'}</td>
-                      <td className="p-2 text-slate-400 text-[0.6875rem] truncate max-w-[140px] italic">{msg.quotedMessageText || '—'}</td>
-                      <td className="p-2 text-center text-[0.6875rem]">
-                        {msg.forwardingScore ? <span className="text-cyan-400 font-bold">+{msg.forwardingScore}</span> : '0'}
+                      <td className="p-2 text-muted truncate max-w-[100px]">{msg.replyToId || '—'}</td>
+                      <td className="p-2 text-muted truncate max-w-[140px] italic">{msg.quotedMessageText || '—'}</td>
+                      <td className="p-2 text-center">
+                        {msg.forwardingScore ? <span className="text-accent-ink font-semibold">+{msg.forwardingScore}</span> : '0'}
                       </td>
 
-                      <td className="p-2 truncate max-w-[150px] text-[0.6875rem] text-slate-400" title={msg.threadId}>
-                        {msg.threadId}
-                      </td>
-                      <td className="p-2 truncate max-w-[150px] text-[0.6875rem] text-slate-300">
-                        {msg.threadTitle || '—'}
+                      <td className="p-2 truncate max-w-[150px] font-mono text-muted" title={msg.threadId}>{msg.threadId}</td>
+                      <td className="p-2 truncate max-w-[150px]">{msg.threadTitle || '—'}</td>
+                      <td className="p-2 truncate max-w-[170px]">
+                        <div className="font-semibold truncate">{msg.senderName}</div>
+                        <div className="text-[0.6875rem] text-muted truncate font-mono">{msg.senderJid}</div>
                       </td>
                       <td className="p-2 truncate max-w-[170px]">
-                        <div className="font-sans font-semibold text-slate-200 truncate">{msg.senderName}</div>
-                        <div className="text-[0.6875rem] text-slate-500 truncate">{msg.senderJid}</div>
-                      </td>
-                      <td className="p-2 truncate max-w-[170px]">
-                        <div className="font-sans font-semibold text-slate-300 truncate">
-                          {msg.recipientName || 'Recipient'}
-                        </div>
-                        <div className="text-[0.6875rem] text-slate-500 truncate">{msg.recipientJid || 'N/A'}</div>
+                        <div className="font-semibold truncate">{msg.recipientName || 'not recorded'}</div>
+                        <div className="text-[0.6875rem] text-muted truncate font-mono">{msg.recipientJid || 'not recorded'}</div>
                       </td>
 
-                      <td className="p-2 text-center text-[0.6875rem]">
-                        {msg.isViewOnce ? <span className="text-red-400 font-bold">YES</span> : '—'}
-                      </td>
-                      <td className="p-2 text-[0.6875rem]">
+                      <td className="p-2 text-center">{msg.isViewOnce ? 'Yes' : '—'}</td>
+                      <td className="p-2">
                         {msg.ephemeralDuration ? (
-                          <span className="text-orange-400 flex items-center space-x-0.5 font-bold">
-                            <Flame className="w-3 h-3" />
-                            <span>{msg.ephemeralDuration}s</span>
-                          </span>
+                          <span className="inline-flex items-center gap-0.5 font-semibold"><Flame className="w-3 h-3" aria-hidden="true" />{msg.ephemeralDuration}s</span>
                         ) : (
-                          <span className="text-slate-600">—</span>
+                          <span className="text-faint">—</span>
                         )}
                       </td>
-                      <td className="p-2 text-center">
-                        {isDel ? <Trash2 className="w-3 h-3 text-red-400 inline" /> : '—'}
-                      </td>
+                      <td className="p-2 text-center">{isDel ? <Trash2 className="w-3 h-3 text-rec inline" aria-label="Deleted or recovered" /> : '—'}</td>
 
-                      <td className="p-2 text-slate-400 text-[0.6875rem] truncate">{msg.timestamp.rawValue}</td>
-                      <td className="p-2 text-slate-400 text-[0.6875rem] whitespace-nowrap">{msg.timestamp.utcIso}</td>
-                      <td className="p-2 text-slate-200 text-[0.6875rem] whitespace-nowrap font-bold">
-                        {msg.timestamp.istFormatted}
-                      </td>
-                      <td className="p-2 text-slate-400 text-[0.6875rem]">{msg.editTimestamp?.istFormatted || '—'}</td>
+                      <td className="p-2 text-muted truncate">{msg.timestamp.rawValue}</td>
+                      <td className="p-2 text-muted whitespace-nowrap">{msg.timestamp.utcIso}</td>
+                      <td className="p-2 whitespace-nowrap font-semibold">{msg.timestamp.istFormatted}</td>
+                      <td className="p-2 text-muted">{msg.editTimestamp?.istFormatted || '—'}</td>
 
-                      <td className="p-2 text-slate-400 text-[0.6875rem] truncate max-w-[150px]" title={msg.mediaPath}>
-                        {msg.mediaPath || '—'}
-                      </td>
-                      <td className="p-2 text-slate-400 text-[0.6875rem]">{msg.mediaMimeType || '—'}</td>
-                      <td className="p-2 text-slate-400 text-[0.6875rem] truncate max-w-[140px]" title={msg.locationName}>
-                        {msg.locationName || '—'}
-                      </td>
+                      <td className="p-2 text-muted truncate max-w-[150px]" title={msg.mediaPath}>{msg.mediaPath || '—'}</td>
+                      <td className="p-2 text-muted">{msg.mediaMimeType || '—'}</td>
+                      <td className="p-2 text-muted truncate max-w-[140px]" title={msg.locationName}>{msg.locationName || '—'}</td>
 
-                      <td className="p-2 text-slate-400 text-[0.6875rem] truncate max-w-[150px]" title={msg.provenance.vfsInternalPath}>
+                      <td className="p-2 text-muted truncate max-w-[150px]" title={msg.provenance.vfsInternalPath}>
                         {msg.provenance.vfsInternalPath.split('/').pop()} :: {msg.provenance.tableName || 'db'}
                       </td>
-                      <td className="p-2 text-amber-400 font-bold text-[0.6875rem]">{hexOffset}</td>
+                      <td className="p-2 font-mono text-accent-ink">{hexOffset}</td>
                       <td className="p-2">{getStateBadge(msg.provenance.recoveryState, msg.isDeleted)}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+            {paginatedMessages.length === 0 && <p className="p-10 text-center text-muted">{chats.length === 0 ? 'No chat messages were found in the evidence.' : 'No message matches these filters.'}</p>}
           </div>
         )}
 
         {chatViewMode === 'BUBBLE' && (
-          /* =====================================================================
-             VIEW B: Authentic Interactive Conversation Bubble Split View
-             ===================================================================== */
-          <div className="flex-1 flex flex-col overflow-hidden bg-slate-950">
-            {/* Top Participant Bio Metadata Banner */}
+          <div className="flex-1 flex flex-col overflow-hidden bg-surface">
             {activeThread && (
-              <div className="bg-slate-900 border-b border-slate-800 p-2.5 px-4 flex items-center justify-between shrink-0 select-none">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 rounded-full bg-cyan-950 border border-cyan-700/80 flex items-center justify-center font-bold text-cyan-300 text-xs">
-                    {activeThread.threadTitle.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-100 flex items-center space-x-2">
-                      <span>{activeThread.threadTitle}</span>
-                      <span className="text-[0.6875rem] font-mono text-cyan-400 bg-cyan-950/80 px-1.5 rounded border border-cyan-800/60">
-                        {activeThread.sourceApp}
-                      </span>
+              <>
+                <div className="border-b border-line px-4 py-3 flex items-center gap-3 flex-wrap shrink-0">
+                  <span aria-hidden="true" className="w-[34px] h-[34px] rounded-full grid place-items-center shrink-0 bg-accent-soft text-accent-ink font-semibold text-[0.75rem]">{initialsOf(activeThread.threadTitle)}</span>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-base font-semibold truncate">{activeThread.threadTitle}</h3>
+                    <div className="text-muted text-[0.75rem] flex items-center gap-1.5 flex-wrap">
+                      <AppTag app={activeThread.sourceApp} />
+                      <span className="font-mono break-all">{activeThread.threadId}</span>
                     </div>
                   </div>
+                  {activeThread.carvedCount > 0 && <RecoveredChip n={activeThread.carvedCount} label="recovered" />}
                 </div>
-
-                <div className="flex items-center space-x-3 font-mono text-[0.6875rem]">
-                  <div className="text-slate-400">
-                    Active: <strong className="text-emerald-400">{activeThread.activeCount}</strong> | Deleted:{' '}
-                    <strong className="text-red-400">{activeThread.carvedCount}</strong>
-                  </div>
+                <div className="flex gap-x-5 gap-y-1.5 flex-wrap px-4 py-2 border-b border-line bg-sunken text-[0.75rem] text-muted shrink-0">
+                  {threadFacts.map(([l, v]) => <span key={l}>{l} <b className="text-ink font-semibold">{v}</b></span>)}
                 </div>
-              </div>
+              </>
             )}
 
-            {/* Chat Bubbles Scroll Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 select-text">
-              {allFilteredMessages.map((msg) => {
+            <div className="flex-1 overflow-y-auto px-4 py-3.5 flex flex-col gap-2 select-text">
+              {allFilteredMessages.length === 0 && <p className="p-10 text-center text-muted">{chats.length === 0 ? 'No chat messages were found in the evidence.' : 'No message matches these filters.'}</p>}
+              {allFilteredMessages.map((msg, i) => {
                 const isSelected = selectedArtifact?.id === msg.id;
                 const isFromMe = msg.isFromMe;
-                const isDel = msg.isDeleted || msg.provenance.recoveryState !== 'ACTIVE';
+                const isDel = isRecoveredMsg(msg);
                 const hexOffset = `0x${msg.provenance.byteOffset.toString(16).toUpperCase().padStart(8, '0')}`;
-                const theme = getAppTheme(msg.sourceApp);
                 const audioState = audioStates[msg.id] || { isPlaying: false, progress: 35 };
                 const paymentEv = extractPaymentEvidence(msg);
+                const newDay = i === 0 || dayOf(allFilteredMessages[i - 1]) !== dayOf(msg);
 
                 return (
-                  <div
-                    key={msg.id}
-                    onClick={() => handleSelectMessage(msg)}
-                    className={`flex flex-col cursor-pointer transition-all ${
-                      isFromMe ? 'items-end' : 'items-start'
-                    }`}
-                  >
-                    <div
-                      className={`max-w-[75%] rounded-xl p-3 shadow-xl transition-all ${
-                        isDel
-                          ? 'border-2 border-dashed border-red-500 bg-red-950/20 shadow-red-950/40'
-                          : isSelected
-                          ? 'ring-2 ring-emerald-400 border border-emerald-400'
-                          : 'border border-slate-800'
-                      } ${
-                        isFromMe
-                          ? `${theme.outgoing} rounded-tr-none`
-                          : `${theme.incoming} rounded-tl-none`
-                      }`}
-                    >
-                      {/* Header: Sender, App & Forensic Recovery Badges */}
-                      <div className="flex items-center justify-between space-x-3 mb-1.5 text-[0.6875rem] pb-1 border-b border-white/10">
-                        <div className="flex items-center space-x-1.5 truncate">
-                          <span className={`font-bold font-sans ${theme.nameColor} truncate`}>
-                            {msg.senderName}
-                          </span>
-                          <span className={`text-[0.6875rem] px-1.5 py-0.2 rounded font-mono border ${theme.badge}`}>
-                            {msg.sourceApp}
-                          </span>
+                  <React.Fragment key={msg.id}>
+                    {newDay && <div className="self-center text-[0.75rem] text-muted bg-sunken px-3 py-0.5 rounded-full">{dayOf(msg)}</div>}
+                    <div onClick={() => handleSelectMessage(msg)} className={`flex flex-col cursor-pointer ${isFromMe ? 'items-end' : 'items-start'}`}>
+                      <div
+                        className={`max-w-[78%] rounded-xl px-3 py-2 flex flex-col gap-1.5 text-ink ${isFromMe ? 'bg-accent-soft' : 'bg-sunken'} ${
+                          isDel ? 'border border-dashed border-rec' : 'border border-transparent'
+                        } ${isSelected ? 'outline outline-2 outline-accent outline-offset-1' : ''}`}
+                      >
+                        <div className="flex items-center justify-between gap-3 text-[0.6875rem]">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="font-semibold text-muted truncate">{msg.senderName}</span>
+                            {!activeThread && <AppTag app={msg.sourceApp} />}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {msg.isStarred && <Star className="w-3 h-3 text-warn" aria-label="Starred" />}
+                            {msg.forwardingScore ? (
+                              <span className="inline-flex items-center gap-0.5 text-muted"><CornerUpRight className="w-2.5 h-2.5" aria-hidden="true" />+{msg.forwardingScore}</span>
+                            ) : null}
+                            {msg.ephemeralDuration ? <Chip tone="warn"><Flame className="w-2.5 h-2.5" aria-hidden="true" />TTL {msg.ephemeralDuration}s</Chip> : null}
+                            {msg.isViewOnce && <Chip tone="warn">View-once media</Chip>}
+                            {isDel && <Chip tone="rec" title="Recovered from the database log, free space or a deleted record">Recovered</Chip>}
+                          </div>
                         </div>
 
-                        <div className="flex items-center space-x-1.5 shrink-0">
-                          {msg.isStarred && <Star className="w-3 h-3 text-amber-400 fill-amber-400" />}
-                          {msg.forwardingScore ? (
-                            <span className="flex items-center space-x-0.5 text-[0.6875rem] text-cyan-300 font-mono">
-                              <CornerUpRight className="w-2.5 h-2.5" />
-                              <span>+{msg.forwardingScore}</span>
-                            </span>
-                          ) : null}
-                          {msg.ephemeralDuration ? (
-                            <span className="flex items-center space-x-0.5 text-[0.6875rem] text-orange-400 bg-orange-950/90 px-1 rounded font-mono font-bold">
-                              <Flame className="w-2.5 h-2.5" />
-                              <span>TTL: {msg.ephemeralDuration}s</span>
-                            </span>
-                          ) : null}
-                          {msg.isViewOnce && (
-                            <span className="text-[0.6875rem] text-amber-400 bg-amber-950/90 px-1.5 py-0.2 rounded font-mono font-bold border border-amber-700/60">
-                              View-Once Media
-                            </span>
-                          )}
-                          {getStateBadge(msg.provenance.recoveryState, msg.isDeleted)}
-                        </div>
-                      </div>
+                        {msg.quotedMessageText && (
+                          <div className="p-2 rounded-lg bg-surface border-l-2 border-accent text-[0.75rem]">
+                            <div className="text-[0.6875rem] text-muted font-semibold mb-0.5">Quoted message</div>
+                            <div className="italic">{msg.quotedMessageText}</div>
+                          </div>
+                        )}
 
-                      {/* Deleted / WAL Header Banner */}
-                      {isDel && (
-                        <div className="mb-2 bg-red-950/90 border border-red-700/80 rounded px-2 py-1 text-[0.6875rem] text-red-200 font-mono flex items-center space-x-1.5 font-bold">
-                          <Trash2 className="w-3 h-3 text-red-400 shrink-0" />
-                          <span>[RECOVERED FROM WAL / FREELIST]</span>
-                        </div>
-                      )}
+                        <div className="leading-relaxed break-words select-text">{msg.body}</div>
+                        {tagsOfMsg(msg.id).length > 0 && <div className="flex flex-wrap gap-1"><TagPills tags={tagsOfMsg(msg.id)} /></div>}
 
-                      {/* Quoted Message Card */}
-                      {msg.quotedMessageText && (
-                        <div className="mb-2 p-2 rounded bg-black/40 border-l-2 border-cyan-400 text-xs font-sans text-slate-300">
-                          <div className="text-[0.6875rem] text-cyan-400 font-bold mb-0.5">Quoted Message:</div>
-                          <div className="italic text-[0.6875rem] text-slate-300">{msg.quotedMessageText}</div>
-                        </div>
-                      )}
-
-                      {/* Message Body Content */}
-                      <div className="text-xs leading-relaxed select-text font-sans break-words py-1 text-slate-100">
-                        {msg.body}
-                      </div>
-                      {tagsOfMsg(msg.id).length > 0 && <div className="mt-1 flex flex-wrap gap-1"><TagPills tags={tagsOfMsg(msg.id)} /></div>}
-
-                      {/* INLINE UPI PAYMENT EVIDENCE CARD */}
-                      {paymentEv && (
-                        <div className="mt-2.5 p-2.5 rounded-lg bg-emerald-950/90 border border-emerald-600/80 shadow-lg font-sans">
-                          <div className="flex items-center justify-between text-[0.6875rem] pb-1.5 border-b border-emerald-700/60 mb-2">
-                            <div className="flex items-center space-x-1.5 text-emerald-300 font-bold tracking-wide">
-                              <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
-                              <span>UPI PAYMENT EVIDENCE</span>
+                        {paymentEv && (
+                          <div className="p-2.5 rounded-lg bg-surface border border-line">
+                            <div className="flex items-center justify-between text-[0.75rem] pb-1.5 border-b border-line mb-2">
+                              <span className="flex items-center gap-1.5 text-g-money font-semibold"><CreditCard className="w-3.5 h-3.5" aria-hidden="true" />UPI payment details in this message</span>
+                              <Chip>Read from message</Chip>
                             </div>
-                            <span className="font-mono text-[0.6875rem] bg-emerald-900/80 text-emerald-200 px-1.5 py-0.2 rounded border border-emerald-600/50">
-                              CORROBORATED
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2 text-[0.6875rem]">
-                            {paymentEv.amount && (
-                              <div>
-                                <span className="text-emerald-400/80 text-[0.6875rem] block font-sans">Amount:</span>
-                                <span className="text-slate-50 font-bold font-mono text-xs">
-                                  ₹{paymentEv.amount.toLocaleString('en-IN')}
-                                </span>
-                              </div>
-                            )}
-                            {paymentEv.utr && (
-                              <div>
-                                <span className="text-emerald-400/80 text-[0.6875rem] block font-sans">NPCI UTR:</span>
-                                <span className="text-cyan-300 font-bold font-mono text-xs select-all">
-                                  {paymentEv.utr}
-                                </span>
-                              </div>
-                            )}
-                            {paymentEv.vpa && (
-                              <div className="col-span-2">
-                                <span className="text-emerald-400/80 text-[0.6875rem] block font-sans">Counterparty VPA:</span>
-                                <span className="text-slate-50 font-mono text-[0.6875rem] select-all">
-                                  {paymentEv.vpa}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                          <div className="mt-2 pt-1.5 border-t border-emerald-800/80 flex justify-end">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveTab('UPI_LEDGER');
-                              }}
-                              className="text-[0.6875rem] text-cyan-300 hover:text-cyan-200 font-mono font-semibold flex items-center gap-1 cursor-pointer"
-                            >
-                              <span>View in UPI Ledger</span>
-                              <ExternalLink className="w-2.5 h-2.5" />
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Voice Note / .opus Audio Player Component */}
-                      {msg.mediaType === 'VOICE_NOTE' && (
-                        <div className="mt-2 bg-slate-950/90 border border-slate-700/80 rounded-lg p-2.5 text-xs font-mono">
-                          <div className="flex items-center justify-between text-[0.6875rem] text-cyan-300 mb-1.5">
-                            <span className="flex items-center space-x-1 font-bold">
-                              <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
-                              <span>VOICE NOTE (.OPUS CODEC)</span>
-                            </span>
-                            <span className="text-[0.6875rem] text-slate-400">0:14 / 0:45</span>
-                          </div>
-
-                          <div className="flex items-center space-x-3">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleAudioPlay(msg.id);
-                              }}
-                              className="w-7 h-7 rounded-full bg-cyan-600 hover:bg-cyan-500 text-slate-950 flex items-center justify-center shrink-0 transition-transform active:scale-95"
-                            >
-                              {audioState.isPlaying ? (
-                                <Pause className="w-3.5 h-3.5 fill-current" />
-                              ) : (
-                                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                            <div className="grid grid-cols-2 gap-2 text-[0.75rem]">
+                              {paymentEv.amount && (
+                                <div><span className="text-muted block">Amount</span><span className="font-semibold">₹{paymentEv.amount.toLocaleString('en-IN')}</span></div>
                               )}
-                            </button>
-
-                            <div className="flex-1 space-y-1">
-                              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-cyan-400 transition-all duration-300"
-                                  style={{ width: `${audioState.progress}%` }}
-                                />
-                              </div>
-                              <div className="flex items-center justify-between text-[0.6875rem] text-slate-500 font-mono">
-                                <span>Voice Note Payload</span>
-                              </div>
+                              {paymentEv.utr && (
+                                <div><span className="text-muted block">UTR</span><span className="font-mono select-all">{paymentEv.utr}</span></div>
+                              )}
+                              {paymentEv.vpa && (
+                                <div className="col-span-2"><span className="text-muted block">UPI ID</span><span className="font-mono select-all">{paymentEv.vpa}</span></div>
+                              )}
+                            </div>
+                            <div className="mt-2 pt-1.5 border-t border-line flex justify-end">
+                              <button type="button" onClick={(e) => { e.stopPropagation(); setActiveTab('UPI_LEDGER'); }}
+                                className="text-[0.75rem] text-accent-ink hover:underline font-semibold flex items-center gap-1">
+                                <span>View in UPI ledger</span><ExternalLink className="w-2.5 h-2.5" aria-hidden="true" />
+                              </button>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* Image / Media Preview with On-Demand VFS Extraction */}
-                      {msg.mediaPath && msg.mediaType !== 'VOICE_NOTE' && (
-                        <div className="mt-2 p-2 bg-slate-950/80 rounded border border-slate-800 space-y-1">
-                          <div className="flex items-center justify-between text-[0.6875rem]">
-                            <span className="flex items-center space-x-1 text-teal-300 font-mono">
-                              <ImageIcon className="w-3 h-3 text-teal-400" />
-                              <span>{msg.mediaPath.split('/').pop()}</span>
-                            </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveImageModal(msg.mediaPath || 'preview.jpg');
-                              }}
-                              className="text-[0.6875rem] bg-cyan-950 text-cyan-300 border border-cyan-800/80 px-2 py-0.5 rounded font-mono font-semibold hover:bg-cyan-900"
-                            >
-                              [Extract & Preview Media from VFS]
+                        {msg.mediaType === 'VOICE_NOTE' && (
+                          <div className="flex items-center gap-2.5 p-2 rounded-lg bg-surface border border-line">
+                            <button type="button" aria-label={audioState.isPlaying ? 'Pause' : 'Play'} onClick={(e) => { e.stopPropagation(); toggleAudioPlay(msg.id); }}
+                              className="w-7 h-7 rounded-full bg-accent text-on-accent flex items-center justify-center shrink-0">
+                              {audioState.isPlaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current ml-0.5" />}
                             </button>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 text-[0.75rem] font-semibold"><Volume2 className="w-3.5 h-3.5 text-g-places" aria-hidden="true" />Voice note</div>
+                              <div className="h-1.5 bg-sunken rounded-full overflow-hidden mt-1"><div className="h-full bg-accent" style={{ width: `${audioState.progress}%` }} /></div>
+                              <div className="text-[0.6875rem] text-muted mt-0.5">Duration not recorded</div>
+                            </div>
                           </div>
-                          <div className="text-[0.6875rem] text-slate-500 font-mono truncate">
-                            MIME: {msg.mediaMimeType || 'image/jpeg'} | Physical: {hexOffset}
-                          </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* Geolocation Geotag Card */}
-                      {msg.locationName && (
-                        <div className="mt-2 p-2 rounded bg-teal-950/60 border border-teal-700/60 text-xs font-sans">
-                          <div className="flex items-center space-x-1.5 text-teal-300 font-semibold mb-0.5">
-                            <MapPin className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                            <span>Location: {msg.locationName}</span>
+                        {msg.mediaPath && msg.mediaType !== 'VOICE_NOTE' && (
+                          <div className="flex items-center gap-2.5 p-2 rounded-lg bg-surface border border-line">
+                            <ImageIcon className="w-4 h-4 text-g-files shrink-0" aria-hidden="true" />
+                            <div className="min-w-0 flex-1">
+                              <b className="block font-semibold break-all">{msg.mediaPath.split('/').pop()}</b>
+                              <span className="text-[0.6875rem] text-muted">{msg.mediaMimeType || 'type not recorded'} · physical offset {hexOffset}</span>
+                            </div>
+                            <Button className="!h-7 !px-2 text-[0.75rem]" onClick={(e) => { e.stopPropagation(); setActiveImageModal(msg.mediaPath || 'preview.jpg'); }}>
+                              Show path
+                            </Button>
                           </div>
-                          <div className="text-[0.6875rem] text-slate-400 font-mono">
-                            Coordinates: {msg.latitude?.toFixed(5)}, {msg.longitude?.toFixed(5)}
+                        )}
+
+                        {msg.locationName && (
+                          <div className="flex items-start gap-2 p-2 rounded-lg bg-surface border border-line text-[0.75rem]">
+                            <MapPin className="w-3.5 h-3.5 text-g-places shrink-0 mt-0.5" aria-hidden="true" />
+                            <div>
+                              <div className="font-semibold">{msg.locationName}</div>
+                              <div className="text-muted font-mono">{msg.latitude?.toFixed(5)}, {msg.longitude?.toFixed(5)}</div>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* Footer: Multi-Format Timestamps & Provenance Offset */}
-                      <div className="flex items-center justify-between space-x-4 mt-2 pt-1 border-t border-white/10 text-[0.6875rem] font-mono text-slate-400">
-                        <div className="flex items-center space-x-1">
-                          <Clock className="w-2.5 h-2.5 text-slate-400" />
-                          <span className="text-slate-200 font-semibold">{msg.timestamp.istFormatted}</span>
-                          <span className="text-slate-500">({msg.timestamp.utcIso})</span>
-                        </div>
-
-                        <div className="flex items-center space-x-1.5 shrink-0">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectMessage(msg);
-                              setBottomDockTab('HEX');
-                              fetchHexWindowForOffset(msg.provenance);
-                            }}
-                            className="text-amber-400 font-bold hover:underline cursor-pointer flex items-center gap-0.5"
-                            title="Jump to physical byte offset in Hex Viewer"
-                          >
-                            <Binary className="w-2.5 h-2.5" />
-                            <span>{hexOffset}</span>
+                        <div className="flex items-center justify-end gap-2 flex-wrap text-[0.6875rem] text-muted">
+                          <span className="inline-flex items-center gap-1"><Clock className="w-2.5 h-2.5" aria-hidden="true" />{stampText(msg)} {tz}</span>
+                          <button type="button"
+                            onClick={(e) => { e.stopPropagation(); handleSelectMessage(msg); setBottomDockTab('HEX'); fetchHexWindowForOffset(msg.provenance); }}
+                            className="text-accent-ink font-mono hover:underline inline-flex items-center gap-0.5" title="Jump to this byte offset in the hex viewer">
+                            <Binary className="w-2.5 h-2.5" aria-hidden="true" />{hexOffset}
                           </button>
                           {getStatusIcon(msg.messageStatus)}
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </React.Fragment>
                 );
               })}
             </div>
           </div>
         )}
-
       </main>
 
-      {/* Media Lightbox Modal */}
       {activeImageModal && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 select-none"
-          onClick={() => setActiveImageModal(null)}
-        >
-          <div
-            className="max-w-2xl w-full bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl p-4 space-y-3"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between text-xs font-mono text-slate-300 pb-2 border-b border-slate-800">
-              <span className="font-bold text-teal-400">Extracted VFS Media Attachment Preview</span>
-              <button onClick={() => setActiveImageModal(null)} className="text-slate-400 hover:text-slate-50">
-                <X className="w-4 h-4" />
-              </button>
+        <div className="fixed inset-0 z-50 bg-ink/60 flex items-center justify-center p-4" onClick={() => setActiveImageModal(null)}>
+          <div className="max-w-2xl w-full bg-surface border border-line rounded-[10px] overflow-hidden shadow-float p-4 flex flex-col gap-3" role="dialog" aria-label="Attachment path" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between pb-2 border-b border-line">
+              <span className="font-semibold">Attachment path</span>
+              <button type="button" aria-label="Close" onClick={() => setActiveImageModal(null)} className="text-muted hover:text-ink"><X className="w-4 h-4" /></button>
             </div>
-            <div className="bg-slate-950 rounded p-8 text-center text-slate-400 border border-slate-800 space-y-2">
-              <ImageIcon className="w-16 h-16 mx-auto text-teal-400" />
-              <div className="text-xs font-mono font-semibold text-slate-200">{activeImageModal}</div>
-              <div className="text-[0.6875rem] text-slate-500 font-mono">
+            <div className="bg-sunken rounded-lg p-8 text-center text-muted flex flex-col gap-2 items-center">
+              <ImageIcon className="w-12 h-12 text-g-files" aria-hidden="true" />
+              <div className="font-mono font-semibold text-ink break-all">{activeImageModal}</div>
+              <div className="text-[0.75rem]">
                 This is the path recorded for the attachment. The tool does not display the file here; use the media library to see recorded hashes.
               </div>
             </div>

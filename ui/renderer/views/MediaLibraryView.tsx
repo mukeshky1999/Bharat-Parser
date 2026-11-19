@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Image as ImageIcon, Film } from 'lucide-react';
 import { forensicClient, HashSetInfo, MediaItem } from '../api/forensicClient';
+import { ViewHeader, Button } from '../components/ui';
 import { useLatestRequest } from '../utils/latestRequest';
 
 const PAGE = 48;
-const field = 'h-8 rounded bg-slate-950 border border-slate-700 px-2 text-slate-100 placeholder-slate-500';
-const btn = 'h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40';
+const field = 'h-8 rounded-lg bg-surface border border-line-strong px-2 text-ink placeholder:text-faint';
 const NR = 'not recorded';
 
 const STATUS_TEXT: Record<MediaItem['status'], string> = {
@@ -30,9 +30,9 @@ const Thumb: React.FC<{ item: MediaItem }> = ({ item }) => {
       .catch(() => { if (!cancelled) setUrl(null); });
     return () => { cancelled = true; ctl.abort(); if (made) URL.revokeObjectURL(made); };
   }, [item.id, item.has_thumbnail]);
-  if (url) return <img src={url} alt={`Thumbnail of ${item.file_name ?? 'file'}`} className="w-full h-28 object-cover bg-slate-950" />;
+  if (url) return <img src={url} alt={`Thumbnail of ${item.file_name ?? 'file'}`} className="w-full h-28 object-cover bg-sunken" />;
   const Icon = item.kind === 'video' ? Film : ImageIcon;
-  return <div className="w-full h-28 bg-slate-950 flex items-center justify-center text-slate-500"><Icon className="w-8 h-8" aria-label="No thumbnail" /></div>;
+  return <div className="w-full h-28 bg-sunken flex items-center justify-center text-faint"><Icon className="w-8 h-8" aria-label="No thumbnail" /></div>;
 };
 
 const HashLists: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
@@ -51,16 +51,16 @@ const HashLists: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
   };
   const del = async (n: string) => { await forensicClient.removeHashSet(n); await load(); onChanged(); };
   return (
-    <details className="rounded border border-slate-800 bg-slate-900 p-3 mb-3">
-      <summary className="cursor-pointer text-slate-100">Hash lists you supplied ({sets.length})</summary>
-      <p className="text-xs text-slate-400 mt-2">
+    <details className="card p-3 mb-3">
+      <summary className="cursor-pointer text-ink">Hash lists you supplied ({sets.length})</summary>
+      <p className="text-xs text-muted mt-2">
         The tool ships no list. A match means a file&rsquo;s MD5 or SHA-256 equals a value in a list you imported; what the list means is yours to say.
       </p>
-      <ul className="mt-2 text-xs text-slate-200 space-y-1">
+      <ul className="mt-2 text-xs text-ink space-y-1">
         {sets.map((s) => (
           <li key={s.id} className="flex items-center justify-between gap-2">
             <span>{s.name} · {s.kind === 'known_notable' ? 'known / notable' : 'known / ignorable'} · {s.entries} values{s.skipped_lines ? ` · ${s.skipped_lines} lines skipped` : ''}</span>
-            <button className="h-7 px-2 rounded border border-slate-700 hover:bg-slate-800" onClick={() => void del(s.name)}>Remove</button>
+            <Button className="!h-7 px-2" onClick={() => void del(s.name)}>Remove</Button>
           </li>
         ))}
       </ul>
@@ -71,11 +71,11 @@ const HashLists: React.FC<{ onChanged: () => void }> = ({ onChanged }) => {
           <option value="known_ignorable">Known / ignorable</option>
         </select>
       </div>
-      <textarea aria-label="MD5 or SHA-256 values, one per line" className="mt-2 w-full h-24 rounded bg-slate-950 border border-slate-700 p-2 font-mono text-xs text-slate-100"
+      <textarea aria-label="MD5 or SHA-256 values, one per line" className="mt-2 w-full h-24 rounded bg-surface border border-line-strong p-2 font-mono text-xs text-ink"
         placeholder="MD5 or SHA-256 values, one per line" value={text} onChange={(e) => setText(e.target.value)} />
       <div className="mt-2 flex items-center gap-3">
-        <button className={btn} disabled={!name.trim() || !text.trim()} onClick={() => void add()}>Import list</button>
-        {msg && <span className="text-xs text-slate-300" aria-live="polite">{msg}</span>}
+        <Button disabled={!name.trim() || !text.trim()} onClick={() => void add()}>Import list</Button>
+        {msg && <span className="text-xs text-ink" aria-live="polite">{msg}</span>}
       </div>
     </details>
   );
@@ -97,32 +97,32 @@ const Detail: React.FC<{ item: MediaItem; onOpen: (id: number) => void }> = ({ i
     ['Matches your lists', item.hash_set_matches.length ? item.hash_set_matches.join(', ') : 'none'],
   ];
   return (
-    <aside className="w-96 shrink-0 border-l border-slate-800 bg-slate-900 overflow-y-auto p-3 text-xs text-slate-200 select-text" aria-label="Media detail">
-      <h2 className="font-semibold text-slate-50 mb-2 break-words">{item.file_name ?? item.vfs_path}</h2>
+    <aside className="w-96 shrink-0 border-l border-line bg-surface overflow-y-auto p-3 text-xs text-ink select-text" aria-label="Media detail">
+      <h2 className="font-semibold text-ink mb-2 break-words">{item.file_name ?? item.vfs_path}</h2>
       <table className="w-full border-collapse">
         <tbody>
           {rows.map(([k, v]) => (
-            <tr key={k} className="border-t border-slate-800 align-top">
-              <th className="text-left font-normal text-slate-400 pr-2 py-1 w-32">{k}</th>
-              <td className={`py-1 break-all ${v === NR ? 'text-slate-500' : 'text-slate-100'}`}>{v}</td>
+            <tr key={k} className="border-t border-line align-top">
+              <th className="text-left font-normal text-muted pr-2 py-1 w-32">{k}</th>
+              <td className={`py-1 break-all ${v === NR ? 'text-faint' : 'text-ink'}`}>{v}</td>
             </tr>
           ))}
         </tbody>
       </table>
       {item.dhash && (
         <div className="mt-3">
-          <button className={btn} onClick={async () => {
+          <Button onClick={async () => {
             const { isCurrent } = latestSimilar.begin();
             const res = await forensicClient.getSimilarMedia(item.id);
             if (isCurrent()) setSimilar(res.data);
-          }}>Find look-alike images (a lead)</button>
+          }}>Find look-alike images (a lead)</Button>
           {similar && (
             <div className="mt-2">
-              <p className="text-amber-300">LEAD: {similar.note}</p>
-              {similar.matches.length === 0 && <p className="text-slate-400 mt-1">No other image is within the distance.</p>}
+              <p className="text-warn">LEAD: {similar.note}</p>
+              {similar.matches.length === 0 && <p className="text-muted mt-1">No other image is within the distance.</p>}
               <ul className="mt-1 space-y-1">
                 {similar.matches.map((m) => (
-                  <li key={m.id}><button className="underline text-cyan-300" onClick={() => onOpen(m.id)}>{m.file_name ?? `#${m.id}`}</button> · {m.distance} bit(s) apart{m.identical_bytes ? ' · identical bytes' : ''}</li>
+                  <li key={m.id}><button className="underline text-accent-ink" onClick={() => onOpen(m.id)}>{m.file_name ?? `#${m.id}`}</button> · {m.distance} bit(s) apart{m.identical_bytes ? ' · identical bytes' : ''}</li>
                 ))}
               </ul>
             </div>
@@ -184,10 +184,11 @@ export const MediaLibraryView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex min-w-0 min-h-0">
+    <div className="flex-1 flex min-w-0 min-h-0 bg-page">
       <div className="flex-1 overflow-y-auto p-4 select-text min-w-0">
+        <ViewHeader title="Media library" count={total} />
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <button className="h-8 px-3 rounded bg-cyan-600 hover:bg-cyan-500 text-slate-50 disabled:opacity-40" disabled={!!working && working.endsWith('…')} onClick={() => void analyse(false)}>Analyse media files</button>
+          <Button variant="primary" disabled={!!working && working.endsWith('…')} onClick={() => void analyse(false)}>Analyse media files</Button>
           <select aria-label="Kind" className={field} value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
             <option value="">Images and videos</option><option value="image">Images</option><option value="video">Videos</option>
           </select>
@@ -201,27 +202,27 @@ export const MediaLibraryView: React.FC = () => {
             <option value="">Regardless of your lists</option><option value="notable">On a known / notable list</option><option value="outside">On none of your lists</option>
           </select>
         </div>
-        {working && <p className="text-slate-300 text-xs mb-2" aria-live="polite">{working}</p>}
+        {working && <p className="text-ink text-xs mb-2" aria-live="polite">{working}</p>}
         <HashLists onChanged={() => void load(offset)} />
-        {error && <p className="text-rose-300 mb-2">{error}</p>}
-        <p className="text-slate-200 mb-2">{total} file{total === 1 ? '' : 's'}.{total === 0 ? ' Choose “Analyse media files” to read the images and videos in the case.' : ''}</p>
+        {error && <p className="text-rec mb-2">{error}</p>}
+        <p className="text-ink mb-2">{total} file{total === 1 ? '' : 's'}.{total === 0 ? ' Choose “Analyse media files” to read the images and videos in the case.' : ''}</p>
         <ul className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(11rem, 1fr))' }}>
           {items.map((i) => (
             <li key={i.id}>
-              <button onClick={() => setSelected(i)} className={`w-full text-left rounded border overflow-hidden hover:bg-slate-800 ${selected?.id === i.id ? 'border-cyan-600' : 'border-slate-800'} bg-slate-900`}>
+              <button onClick={() => setSelected(i)} className={`w-full text-left rounded-[10px] border overflow-hidden shadow-card hover:bg-hover ${selected?.id === i.id ? 'border-accent' : 'border-line'} bg-surface`}>
                 <Thumb item={i} />
                 <div className="p-2 text-xs">
-                  <div className="text-slate-100 truncate">{i.file_name ?? i.vfs_path}</div>
-                  <div className="text-slate-400">{STATUS_TEXT[i.status]}</div>
-                  {i.hash_set_matches.length > 0 && <div className="text-amber-300">On list: {i.hash_set_matches.join(', ')}</div>}
+                  <div className="text-ink truncate">{i.file_name ?? i.vfs_path}</div>
+                  <div className="text-muted">{STATUS_TEXT[i.status]}</div>
+                  {i.hash_set_matches.length > 0 && <div className="text-warn">On list: {i.hash_set_matches.join(', ')}</div>}
                 </div>
               </button>
             </li>
           ))}
         </ul>
         <div className="flex items-center gap-2 mt-3">
-          <button className={btn} disabled={offset === 0} onClick={() => { const o = Math.max(0, offset - PAGE); setOffset(o); void load(o); }}>Previous</button>
-          <button className={btn} disabled={offset + PAGE >= total} onClick={() => { const o = offset + PAGE; setOffset(o); void load(o); }}>Next</button>
+          <Button disabled={offset === 0} onClick={() => { const o = Math.max(0, offset - PAGE); setOffset(o); void load(o); }}>Previous</Button>
+          <Button disabled={offset + PAGE >= total} onClick={() => { const o = offset + PAGE; setOffset(o); void load(o); }}>Next</Button>
         </div>
       </div>
       {selected && <Detail item={selected} onOpen={openById} />}

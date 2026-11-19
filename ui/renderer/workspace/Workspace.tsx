@@ -7,6 +7,7 @@ import { BankAlertsView } from '../views/BankAlertsView';
 import { ExtractionSummaryTab } from '../views/ExtractionSummaryTab';
 import { RecordTable } from './RecordTable';
 import { ChatsMasterWorkspace } from '../views/ChatsMasterWorkspace';
+import { CallsView } from '../views/CallsView';
 import { UPIMasterLedgerView } from '../views/UPIMasterLedgerView';
 import { BankCdrFusionView } from '../views/BankCdrFusionView';
 import { SQLiteWizardTab } from '../views/SQLiteWizardTab';
@@ -64,7 +65,7 @@ export const Workspace: React.FC = () => {
         {activeTab === 'FILE_SYSTEM' && <FileSystemExplorerTab onSelectFileProvenance={inspect} />}
         {activeTab === 'SQLITE_WIZARD' && <SQLiteWizardTab onSelectRecordProvenance={inspect} />}
         {activeTab === 'CONTACTS' && <RecordTable title="Contacts" category="CONTACTS" />}
-        {activeTab === 'CALLS' && <RecordTable title="Calls" category="CALLS" />}
+        {activeTab === 'CALLS' && <CallsView />}
         {activeTab === 'UPI_LEDGER' && <UPIMasterLedgerView />}
         {activeTab === 'CALL_LOGS' && <BankCdrFusionView />}
         {activeTab === 'CRYPTO' && <CryptoWalletView onSelectTx={(t) => inspect(t.provenance)} />}

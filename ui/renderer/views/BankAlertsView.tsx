@@ -80,8 +80,8 @@ export const BankAlertsView: React.FC = () => {
     { key: 'code', label: 'Code or place', width: '9rem', cell: (r) => cell(r.Code_Or_Location), text: (r) => text(r.Code_Or_Location) || 'not recorded' },
     {
       key: 'indicator', label: 'Sent without a service-centre number', width: '14rem',
-      cell: (r) => (r.Spoof_Indicator === 1 ? <span className="text-amber-300" title="An indicator, not proof the message was forged. Many devices do not store this field.">Yes (indicator only)</span>
-        : r.Spoof_Indicator === 0 ? 'No' : <span className="text-slate-500 italic" title="This database does not store the fields needed">cannot tell</span>),
+      cell: (r) => (r.Spoof_Indicator === 1 ? <span className="text-warn" title="An indicator, not proof the message was forged. Many devices do not store this field.">Yes (indicator only)</span>
+        : r.Spoof_Indicator === 0 ? 'No' : <span className="text-faint italic" title="This database does not store the fields needed">cannot tell</span>),
       text: (r) => (r.Spoof_Indicator === 1 ? 'yes (indicator only)' : r.Spoof_Indicator === 0 ? 'no' : 'cannot tell'),
     },
     { key: 'body', label: 'Message', width: 'minmax(20rem,3fr)', cell: (r) => cell(r.Message_Body), text: (r) => text(r.Message_Body) || 'not recorded' },
@@ -101,12 +101,13 @@ export const BankAlertsView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-slate-950">
-      <div className="shrink-0 px-4 py-2 border-b border-amber-800 bg-amber-950/40 text-amber-100 text-xs" role="note">
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-page p-4 gap-3">
+      <div className="shrink-0 card px-4 py-2.5 bg-warn-soft text-ink" role="note">
         <strong>In testing.</strong> {BANK_ALERTS_NOTICE} Check each alert against the message text before relying on it.
       </div>
-      {error && <p className="shrink-0 px-4 pt-2 text-rose-300">{error}</p>}
-      {loading ? <div className="flex-1 p-10 text-center text-slate-400" role="status">Loading bank alerts…</div> : (
+      {error && <p className="shrink-0 text-rec">{error}</p>}
+      {loading ? <div className="flex-1 p-10 text-center text-muted" role="status">Loading bank alerts…</div> : (
+        <div className="card flex-1 flex flex-col min-h-0 overflow-hidden">
         <DataGrid<Row>
           tags={{ table: 'bank_alerts', idOf: (r) => (Number.isFinite(Number(r.id)) ? Number(r.id) : null) }}
           tableId="bank_alerts" title="Bank alerts (in testing)" columns={columns} rows={shown} totalBeforeFilter={rows.length}
@@ -115,8 +116,8 @@ export const BankAlertsView: React.FC = () => {
           toolbar={(
             <>
               <FilterInput label="Search the alerts" value={query} onChange={setQuery} placeholder="Reference, account, wording…" />
-              <label className="text-slate-300 inline-flex items-center gap-2">Kind
-                <select aria-label="Kind of notice" value={category} onChange={(e) => setCategory(e.target.value)} className="h-8 rounded bg-slate-900 border border-slate-700 px-2 text-slate-100">
+              <label className="text-muted inline-flex items-center gap-2">Kind
+                <select aria-label="Kind of notice" value={category} onChange={(e) => setCategory(e.target.value)} className="h-8 rounded bg-surface border border-line-strong px-2 text-ink">
                   <option value="">All kinds</option>
                   {kinds.map((k) => <option key={k} value={k}>{k === NONE ? 'Kind not recorded' : (CATEGORY_TEXT[k] ?? k)}</option>)}
                 </select>
@@ -129,6 +130,7 @@ export const BankAlertsView: React.FC = () => {
             ? (manifest ? 'No bank or SMS alert was found. This reader looks for an SMS database (Android sms table or iOS sms.db) in the evidence.' : 'No case is open.')
             : 'No alert matches these filters.'}
         />
+        </div>
       )}
     </div>
   );

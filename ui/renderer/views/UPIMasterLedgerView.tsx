@@ -6,6 +6,7 @@ import { formatOffset } from '../utils/csv';
 import { caseRecordOf } from '../utils/caseRecord';
 import { DataGrid, FilterInput, GridColumn, Segmented, Unset } from '../workspace/DataGrid';
 import { SavedFilters } from '../workspace/SavedFilters';
+import { PartyBrowser } from '../workspace/PartyBrowser';
 
 interface UPIMasterLedgerViewProps {
   transactions?: UnifiedUPITransaction[];
@@ -27,6 +28,13 @@ const RECOVERY_TEXT: Record<string, string> = {
 
 const DIRECTION_TEXT: Record<string, string> = { DEBIT: 'Debit', CREDIT: 'Credit', COLLECT_REQUEST: 'Collect request', GHOST_INTENT: 'Intent, not completed' };
 const STATUS_TEXT: Record<string, string> = { SUCCESS: 'Success', FAILED: 'Failed', PENDING: 'Pending', ABANDONED_INTENT: 'Abandoned', UNKNOWN: 'Not established' };
+
+const NO_PARTY = 'Counterparty not recorded';
+const last10 = (v: string): string => v.replace(/\D/g, '').slice(-10);
+/** The other party as recorded; when the app did not record one, the payee on a debit or the payer on a credit. */
+const partyOf = (t: UnifiedUPITransaction): string =>
+  (t.counterpartyVpa || (t.direction === 'DEBIT' ? t.payeeVpa : t.direction === 'CREDIT' ? t.payerVpa : null) || '').trim() || NO_PARTY;
+const isRecovered = (t: UnifiedUPITransaction) => t.provenance?.recoveryState === 'WAL_RECOVERED' || t.provenance?.recoveryState === 'CARVED_UNALLOCATED';
 
 const inr = (n: number | null) => (n === null ? <span className="text-slate-400" title="The evidence has no amount for this record">not recorded</span> : `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`);
 
@@ -151,13 +159,52 @@ export const UPIMasterLedgerView: React.FC<UPIMasterLedgerViewProps> = ({
     </>
   );
 
-  return (
+  const contacts = store.contacts;
+  const callLogs = store.callLogs;
+  const partyLabel = (id: string) => {
+    const c = id === NO_PARTY ? undefined : contacts.find((x) => x.identifier === id && x.displayName);
+    return c ? { name: c.displayName, note: 'Saved contact' } : { name: id, note: id === NO_PARTY ? undefined : 'No saved contact for this ID' };
+  };
+  const alsoFoundIn = (id: string) => {
+    const out: Array<{ tab: 'CALLS' | 'CONTACTS'; label: string }> = [];
+    const local = id.split('@')[0];
+    if (/^\d{10}$/.test(local)) {
+      const n = callLogs.filter((c) => c.peerNumberOrId && last10(c.peerNumberOrId) === local).length;
+      if (n > 0) out.push({ tab: 'CALLS', label: `Calls (${n})` });
+    }
+    if (contacts.some((c) => c.identifier === id)) out.push({ tab: 'CONTACTS', label: 'Contacts' });
+    return out;
+  };
+  const stamp = (t: UnifiedUPITransaction) => t.timestamp?.utcIso || '';
+  const when = (rs: UnifiedUPITransaction[], last: boolean): string => {
+    const timed = rs.filter((t) => stamp(t)).sort((a, b) => stamp(a).localeCompare(stamp(b)));
+    return timed.length ? timeText(timed[last ? timed.length - 1 : 0]) : 'not recorded';
+  };
+  const total = (rs: UnifiedUPITransaction[], dir: string) => rs.filter((t) => t.direction === dir && t.amountInr !== null).reduce((a, t) => a + (t.amountInr ?? 0), 0);
+  const money = (n: number) => `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+  const grid = (rs: UnifiedUPITransaction[]) => (
     <DataGrid<UnifiedUPITransaction>
       tags={{ table: 'transactions', idOf: (t) => caseRecordOf(t.id, 'Financial Transaction')?.id ?? null }}
-      tableId="upi_ledger" title="UPI ledger" columns={columns} rows={rows} totalBeforeFilter={rawTransactions.length}
+      tableId="upi_ledger" title="UPI ledger" columns={columns} rows={rs} totalBeforeFilter={rawTransactions.length}
       rowKey={(t, i) => t.id || t.appTransactionId || `row-${i}`}
       selectedKey={selectedTxId ?? null} onSelect={select} toolbar={toolbar} exportName="upi_ledger.csv"
       empty={rawTransactions.length === 0 ? 'No payments were found in the evidence, or no case is open.' : 'No payment matches these filters.'}
+    />
+  );
+
+  return (
+    <PartyBrowser<UnifiedUPITransaction>
+      rows={rows} appOf={(t) => t.sourceApp || 'App not recorded'} partyOf={partyOf} partyLabel={partyLabel} isRecovered={isRecovered}
+      apps={apps} idLabel="UPI ID" unit={{ one: 'payment', many: 'payments' }}
+      listSummary={(rs) => {
+        const out = total(rs, 'DEBIT'); const inn = total(rs, 'CREDIT');
+        return <span className="flex flex-col"><span>{out > 0 && <><b className="text-ink font-semibold">{money(out)}</b> sent</>}</span><span>{inn > 0 && <><b className="text-ink font-semibold">{money(inn)}</b> received</>}</span></span>;
+      }}
+      facts={(rs) => [['Sent', money(total(rs, 'DEBIT'))], ['Received', money(total(rs, 'CREDIT'))], ['Payments', rs.length.toLocaleString()], ['First', when(rs, false)], ['Last', when(rs, true)]]}
+      alsoFoundIn={alsoFoundIn}
+      renderRows={(rs) => grid(rs)}
+      renderAll={() => grid(rows)}
     />
   );
 };

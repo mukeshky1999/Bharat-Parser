@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Copy, Pin, PinOff, X } from 'lucide-react';
+import { Banknote, Copy, FileText, MessageSquare, Pin, PinOff, X } from 'lucide-react';
+import { Button, Chip, GroupTile, KeyValue, Tabs } from '../components/ui';
 import { useWorkbenchStore, SelectedArtifactState } from '../state/workbenchStore';
 import { useFindings } from '../state/findingsStore';
 import { usePreferences } from '../state/preferencesStore';
@@ -40,23 +41,28 @@ function offsetText(p: ForensicProvenance): string {
   return p.byteOffset >= 0 ? `0x${p.byteOffset.toString(16).toUpperCase().padStart(8, '0')}` : NOT_RECORDED;
 }
 
-function Row({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
-  const missing = v === NOT_RECORDED;
+type Item = [string, React.ReactNode];
+
+function val(v: string, mono?: boolean): React.ReactNode {
+  return v === NOT_RECORDED
+    ? <span className="text-faint italic">{v}</span>
+    : <span className={mono ? 'font-mono text-[0.75rem]' : ''}>{v}</span>;
+}
+
+function Section({ title, items, bordered }: { title: string; items: Item[]; bordered?: boolean }) {
   return (
-    <div className="grid grid-cols-[8.5rem_1fr] gap-x-3 py-1 border-b border-slate-800/70 last:border-b-0">
-      <dt className="text-slate-400">{k}</dt>
-      <dd className={`${missing ? 'text-slate-500 italic' : 'text-slate-100'} ${mono ? 'font-mono' : ''} break-words min-w-0`}>{v}</dd>
-    </div>
+    <section className={bordered ? 'mb-4 border border-line bg-sunken rounded-lg p-3' : 'mb-4'}>
+      <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted mb-2">{title}</h3>
+      <KeyValue items={items} />
+    </section>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="mb-4">
-      <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-slate-400 mb-1">{title}</h3>
-      <dl>{children}</dl>
-    </section>
-  );
+function tileFor(a: SelectedArtifactState) {
+  const t = (a.itemType || '').toLowerCase();
+  if (/upi|bank|transaction|crypto|wallet/.test(t)) return { hue: 'money' as const, icon: Banknote };
+  if (/chat|message|sms|call|contact/.test(t)) return { hue: 'comm' as const, icon: MessageSquare };
+  return { hue: 'accent' as const, icon: FileText };
 }
 
 function kindOf(a: SelectedArtifactState): string {
@@ -129,16 +135,16 @@ function LinksTab({ artifact }: { artifact: SelectedArtifactState }) {
 
   return (
     <div>
-      <p className="text-slate-400 mb-3">Records that share this record&apos;s UTR or counterparty VPA, matched exactly. These are leads to check, not proof that the records belong together.</p>
+      <p className="text-muted mb-3">Records that share this record&apos;s UTR or counterparty VPA, matched exactly. These are leads to check, not proof that the records belong together.</p>
       {links.length === 0 ? (
-        <p className="text-slate-500 italic">No exact matches found for this record.</p>
+        <p className="text-faint italic">No exact matches found for this record.</p>
       ) : (
         <ul className="space-y-1">
           {links.map((l, i) => (
             <li key={i}>
-              <button onClick={l.open} className="w-full text-left rounded px-2 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800">
-                <div className="text-slate-100">{l.label}</div>
-                <div className="text-slate-400">{l.why}</div>
+              <button onClick={l.open} className="w-full text-left rounded-lg px-2.5 py-1.5 bg-surface hover:bg-hover border border-line">
+                <div className="text-ink">{l.label}</div>
+                <div className="text-muted">{l.why}</div>
               </button>
             </li>
           ))}
@@ -171,8 +177,8 @@ export const EvidenceCard: React.FC = () => {
 
   if (!artifact) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">
-        <p className="text-slate-200 font-medium mb-1">No record selected</p>
+      <div className="h-full flex flex-col items-center justify-center text-center p-6 text-muted">
+        <p className="text-ink font-medium mb-1">No record selected</p>
         <p className="max-w-[16rem]">Select a row anywhere. Its fields, where it came from in the evidence file, and its raw bytes appear here.</p>
       </div>
     );
@@ -198,108 +204,101 @@ export const EvidenceCard: React.FC = () => {
     }
   };
 
+  const tile = tileFor(artifact);
+  const isRecovered = !!prov && prov.recoveryState !== 'ACTIVE';
+  const subLine = hasTime(t) ? (tzMode === 'IST' ? t.istFormatted : t.utcIso) : `Record ${artifact.id}`;
+
   const doPin = () => findings.pin(buildPin(artifact, note));
 
   const tabs: Array<[CardTab, string]> = [['DETAILS', 'Details'], ['BYTES', 'Source bytes'], ['LINKS', 'Links']];
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      <header className="px-4 pt-3 pb-2 border-b border-slate-800 shrink-0">
+      <header className="px-4 pt-3 shrink-0">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="text-slate-400 text-[0.6875rem] uppercase tracking-wider">{artifact.itemType || 'Record'}</div>
-            <h2 className="text-slate-50 font-semibold break-words leading-snug">{titleOf(artifact)}</h2>
+          <div className="flex items-start gap-2.5 min-w-0">
+            <GroupTile hue={tile.hue} icon={tile.icon} size="lg" />
+            <div className="min-w-0">
+              <div className="text-muted text-[0.6875rem] uppercase tracking-wider">{artifact.itemType || 'Record'}</div>
+              <h2 className="text-base font-semibold break-words leading-snug">{titleOf(artifact)}</h2>
+              <div className="flex items-center gap-2 mt-1 text-muted text-[0.75rem] flex-wrap">
+                <span>{subLine}</span>
+                {isRecovered && <Chip tone="rec">Recovered · {show(prov?.recoveryState)}</Chip>}
+              </div>
+            </div>
           </div>
-          <button onClick={() => void setSelectedArtifact(null)} className="p-1 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-800" aria-label="Clear selection">
+          <button onClick={() => void setSelectedArtifact(null)} className="p-1 rounded text-muted hover:text-ink hover:bg-hover" aria-label="Clear selection">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div role="tablist" aria-label="Evidence card sections" className="flex gap-1 mt-2">
-          {tabs.map(([id, label]) => (
-            <button
-              key={id}
-              role="tab"
-              aria-selected={tab === id}
-              onClick={() => setTab(id)}
-              className={`px-2.5 py-1 rounded text-[0.75rem] ${tab === id ? 'bg-slate-700 text-slate-50 font-semibold' : 'text-slate-300 hover:bg-slate-800'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
       </header>
+      <Tabs label="Evidence card sections" value={tab} onChange={(v) => setTab(v as CardTab)} tabs={tabs.map(([value, label]) => ({ value, label }))} />
 
       <div className="flex-1 overflow-y-auto p-4 select-text min-h-0">
         {tab === 'DETAILS' && (
           <>
             {typeof body === 'string' && body && (
-              <Section title="Content">
-                <pre className="whitespace-pre-wrap break-words font-sans text-slate-100 bg-slate-900 border border-slate-800 rounded p-2 max-h-60 overflow-auto">{body}</pre>
-              </Section>
+              <section className="mb-4">
+                <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted mb-2">Content</h3>
+                <pre className="whitespace-pre-wrap break-words font-sans text-ink bg-sunken border border-line rounded-lg p-2.5 max-h-60 overflow-auto">{body}</pre>
+              </section>
             )}
-            <Section title="When">
+            <section className="mb-4">
+              <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted mb-2">When</h3>
               {hasTime(t) ? (
                 <>
-                  <Row k={tzMode === 'IST' ? 'IST' : 'UTC'} v={tzMode === 'IST' ? t.istFormatted : t.utcIso} mono />
-                  <Row k={tzMode === 'IST' ? 'UTC' : 'IST'} v={tzMode === 'IST' ? t.utcIso : t.istFormatted} mono />
-                  <Row k="Raw value" v={show(t.rawValue)} mono />
-                  <Row k="Raw format" v={show(t.sourceFormat)} />
-                  <button className="text-cyan-400 hover:underline mt-1" onClick={() => setPref({ timeZone: tzMode === 'IST' ? 'UTC' : 'IST' })}>
+                  <KeyValue items={[
+                    [tzMode === 'IST' ? 'IST' : 'UTC', val(tzMode === 'IST' ? t.istFormatted : t.utcIso, true)],
+                    [tzMode === 'IST' ? 'UTC' : 'IST', val(tzMode === 'IST' ? t.utcIso : t.istFormatted, true)],
+                    ['Raw value', val(show(t.rawValue), true)],
+                    ['Raw format', val(show(t.sourceFormat))],
+                  ]} />
+                  <button className="text-accent-ink hover:underline mt-1" onClick={() => setPref({ timeZone: tzMode === 'IST' ? 'UTC' : 'IST' })}>
                     Show {tzMode === 'IST' ? 'UTC' : 'IST'} first
                   </button>
                 </>
               ) : localTime?.localClock ? (
-                <>
-                  <Row k="Clock time as recorded" v={localTime.localClock} mono />
-                  <Row k="Time zone" v="Not recorded (no UTC or IST time is claimed)" />
-                  <Row k="Raw value" v={show(localTime.rawValue)} mono />
-                </>
+                <KeyValue items={[
+                  ['Clock time as recorded', val(localTime.localClock, true)],
+                  ['Time zone', val('Not recorded (no UTC or IST time is claimed)')],
+                  ['Raw value', val(show(localTime.rawValue), true)],
+                ]} />
               ) : (
-                <Row k="Time" v={NOT_RECORDED} />
+                <KeyValue items={[['Time', val(NOT_RECORDED)]]} />
               )}
-            </Section>
+            </section>
             {caseRecordOf(artifact.id, artifact.itemType) && (
               <section className="mb-4">
-                <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-slate-400 mb-1">Tags</h3>
+                <h3 className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted mb-1">Tags</h3>
                 <TagControls key={artifact.id} record={caseRecordOf(artifact.id, artifact.itemType)!} />
               </section>
             )}
-            <Section title="Where it came from">
-              {prov ? (
-                <>
-                  <Row k="File" v={show(prov.vfsInternalPath)} mono />
-                  <Row k="Container" v={show(prov.containerType)} />
-                  <Row k="Table" v={show(prov.tableName)} />
-                  <Row k="Row" v={show(prov.rowId)} />
-                  <Row k="Page" v={prov.pageNumber ? String(prov.pageNumber) : NOT_RECORDED} />
-                  <Row k="Byte offset" v={offsetText(prov)} mono />
-                  <Row k="Length" v={prov.byteOffset >= 0 && prov.byteLength > 0 ? `${prov.byteLength} bytes` : NOT_RECORDED} />
-                  <Row k="Recovery state" v={show(prov.recoveryState)} />
-                </>
-              ) : (
-                <Row k="Source" v={NOT_RECORDED} />
-              )}
-            </Section>
-            <Section title="Fields">
-              {fields.length === 0 ? <Row k="Fields" v={NOT_RECORDED} /> : fields.map(([k, v]) => <Row key={k} k={words(k)} v={show(v)} />)}
-            </Section>
+            <Section title="Fields" items={fields.length === 0 ? [['Fields', val(NOT_RECORDED)]] : fields.map(([k, v]): Item => [words(k), val(show(v))])} />
+            <Section title="Where it came from" bordered items={prov ? [
+              ['File', val(show(prov.vfsInternalPath), true)],
+              ['Container', val(show(prov.containerType))],
+              ['Table', val(show(prov.tableName))],
+              ['Row', val(show(prov.rowId))],
+              ['Page', val(prov.pageNumber ? String(prov.pageNumber) : NOT_RECORDED)],
+              ['Byte offset', val(offsetText(prov), true)],
+              ['Length', val(prov.byteOffset >= 0 && prov.byteLength > 0 ? `${prov.byteLength} bytes` : NOT_RECORDED)],
+              ['Recovery state', val(show(prov.recoveryState))],
+            ] : [['Source', val(NOT_RECORDED)]]} />
           </>
         )}
         {tab === 'BYTES' && (
-          <div className="h-[28rem] border border-slate-800 rounded overflow-hidden">
+          <div className="h-[28rem] border border-line rounded-lg overflow-hidden">
             <SyncedHexViewer embedded />
           </div>
         )}
         {tab === 'LINKS' && <LinksTab artifact={artifact} />}
       </div>
 
-      <footer className="border-t border-slate-800 p-3 shrink-0 bg-slate-900">
+      <footer className="border-t border-line p-3 shrink-0 bg-sunken">
         {pinned ? (
           <div className="flex items-center justify-between gap-2">
-            <span className="text-emerald-300">Pinned to findings{pinned.note ? `: ${pinned.note}` : ''}</span>
-            <button onClick={() => void findings.unpin(pinned.id)} className="flex items-center gap-1 px-2 py-1 rounded border border-slate-700 text-slate-200 hover:bg-slate-800">
-              <PinOff className="w-4 h-4" /> Unpin
-            </button>
+            <span className="text-ok">Pinned to findings{pinned.note ? `: ${pinned.note}` : ''}</span>
+            <Button onClick={() => void findings.unpin(pinned.id)}><PinOff className="w-4 h-4" /> Unpin</Button>
           </div>
         ) : (
           <div className="flex items-end gap-2">
@@ -309,18 +308,14 @@ export const EvidenceCard: React.FC = () => {
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Why this matters (optional)"
-                className="w-full h-8 px-2 rounded bg-slate-950 border border-slate-700 text-slate-100 placeholder-slate-500"
+                className="w-full h-8 px-2.5 rounded-lg bg-surface border border-line-strong text-ink placeholder:text-faint"
               />
             </label>
-            <button onClick={() => void doPin()} className="flex items-center gap-1 px-3 h-8 rounded bg-cyan-600 text-slate-50 hover:bg-cyan-500 font-medium" title="Pin to findings (Ctrl+B)">
-              <Pin className="w-4 h-4" /> Pin
-            </button>
-            <button onClick={copyJson} className="flex items-center gap-1 px-2 h-8 rounded border border-slate-700 text-slate-200 hover:bg-slate-800" title="Copy the record as JSON">
-              <Copy className="w-4 h-4" /> {copied ? 'Copied' : 'Copy'}
-            </button>
+            <Button variant="primary" onClick={() => void doPin()} title="Pin to findings (Ctrl+B)"><Pin className="w-4 h-4" /> Pin</Button>
+            <Button onClick={copyJson} title="Copy the record as JSON"><Copy className="w-4 h-4" /> {copied ? 'Copied' : 'Copy'}</Button>
           </div>
         )}
-        {findings.error && <p className="mt-2 text-rose-300">{findings.error}</p>}
+        {findings.error && <p className="mt-2 text-rec">{findings.error}</p>}
       </footer>
     </div>
   );

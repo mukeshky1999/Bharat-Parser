@@ -39,35 +39,35 @@ export const ValidationCard: React.FC = () => {
 
   return (
     <div>
-      <p className="text-slate-300 mb-3">
+      <p className="text-muted mb-3">
         Runs the tool&rsquo;s own checks on small inputs whose answer is known in advance, and lists what was expected against what the tool produced. The open case is not touched.
       </p>
       <div className="flex flex-wrap gap-2">
-        <button className="h-8 px-3 rounded bg-cyan-600 text-slate-50 hover:bg-cyan-500 disabled:opacity-40" onClick={() => void run()} disabled={busy}>{busy ? 'Running…' : 'Run validation checks'}</button>
-        <button className="h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40" disabled={!html}
+        <button className="h-8 px-3 rounded-lg bg-accent text-on-accent hover:brightness-110 disabled:opacity-40" onClick={() => void run()} disabled={busy}>{busy ? 'Running…' : 'Run validation checks'}</button>
+        <button className="h-8 px-3 rounded border border-line-strong text-ink hover:bg-hover disabled:opacity-40" disabled={!html}
           onClick={() => saveText('validation_record.html', html, 'text/html;charset=utf-8')}>Save the record (HTML)</button>
       </div>
-      {error && <p className="mt-3 text-rose-300">{error}</p>}
+      {error && <p className="mt-3 text-rec">{error}</p>}
       {report && (
         <div className="mt-3">
-          <p className={ok ? 'text-emerald-300 font-semibold' : 'text-rose-300 font-semibold'} aria-live="polite">
+          <p className={ok ? 'text-ok font-semibold' : 'text-rec font-semibold'} aria-live="polite">
             {report.result}: {report.tally.PASS} passed, {report.tally.FAIL} failed, {report.tally.ERROR} errored.
           </p>
-          <p className="text-slate-400 text-xs mb-2">{report.statement}</p>
+          <p className="text-muted text-xs mb-2">{report.statement}</p>
           <table className="w-full text-left">
-            <thead className="text-slate-400"><tr><th className="py-1 pr-2">Check</th><th className="pr-2">Result</th></tr></thead>
+            <thead className="text-muted"><tr><th className="py-1 pr-2">Check</th><th className="pr-2">Result</th></tr></thead>
             <tbody>
               {report.checks.map((c) => (
-                <tr key={c.id} className="border-t border-slate-800 align-top">
+                <tr key={c.id} className="border-t border-line align-top">
                   <td className="py-1 pr-2">{c.id}: {c.what}
-                    {c.status !== 'PASS' && <div className="text-xs text-slate-400 break-all">Expected {JSON.stringify(c.expected)}; got {JSON.stringify(c.actual)} {c.error ?? ''}</div>}
+                    {c.status !== 'PASS' && <div className="text-xs text-muted break-all">Expected {JSON.stringify(c.expected)}; got {JSON.stringify(c.actual)} {c.error ?? ''}</div>}
                   </td>
-                  <td className={c.status === 'PASS' ? 'text-emerald-300' : 'text-rose-300'}>{c.status}</td>
+                  <td className={c.status === 'PASS' ? 'text-ok' : 'text-rec'}>{c.status}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <p className="mt-2 text-slate-400 text-xs">Not covered: {report.not_covered.join(' ')}</p>
+          <p className="mt-2 text-muted text-xs">Not covered: {report.not_covered.join(' ')}</p>
         </div>
       )}
     </div>

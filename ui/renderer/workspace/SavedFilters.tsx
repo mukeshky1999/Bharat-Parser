@@ -52,28 +52,28 @@ export const SavedFilters: React.FC<{
 
   return (
     <details className="relative">
-      <summary className="h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 cursor-pointer inline-flex items-center list-none">
+      <summary className="h-8 px-3 rounded border border-line-strong text-ink hover:bg-hover cursor-pointer inline-flex items-center list-none">
         Saved filters{filters.length ? ` (${filters.length})` : ''}
       </summary>
-      <div className="absolute z-20 mt-1 w-80 rounded border border-slate-700 bg-slate-900 p-2 shadow-xl text-slate-200">
-        {loadError ? <p role="alert" className="text-rose-300 text-xs mb-2">Saved filters could not be read: {loadError}</p>
-          : filters.length === 0 ? <p className="text-slate-400 text-xs">No saved filters on this screen yet.</p> : (
+      <div className="absolute z-20 mt-1 w-80 rounded border border-line-strong bg-sunken p-2 shadow-float text-ink">
+        {loadError ? <p role="alert" className="text-rec text-xs mb-2">Saved filters could not be read: {loadError}</p>
+          : filters.length === 0 ? <p className="text-muted text-xs">No saved filters on this screen yet.</p> : (
           <ul className="mb-2 space-y-1">
             {filters.map((f) => (
               <li key={f.name} className="flex items-center justify-between gap-2">
                 <button className="text-left hover:underline truncate" onClick={() => onApply(f.state)} title="Apply this filter">{f.name}</button>
-                <button className="text-slate-400 hover:text-rose-300 text-xs" aria-label={`Delete ${f.name}`} onClick={() => void remove(f.name)}>Delete</button>
+                <button className="text-muted hover:text-rec text-xs" aria-label={`Delete ${f.name}`} onClick={() => void remove(f.name)}>Delete</button>
               </li>
             ))}
           </ul>
         )}
         <form onSubmit={(e) => void save(e)} className="flex gap-1">
           <input aria-label="Name for this filter" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="Name this filter"
-            className="h-8 flex-1 rounded bg-slate-950 border border-slate-700 px-2 text-slate-100 placeholder-slate-500" />
-          <button type="submit" disabled={!name.trim() || isDefault} className="h-8 px-3 rounded border border-slate-700 hover:bg-slate-800 disabled:opacity-40"
+            className="h-8 flex-1 rounded bg-surface border border-line-strong px-2 text-ink placeholder:text-faint" />
+          <button type="submit" disabled={!name.trim() || isDefault} className="h-8 px-3 rounded border border-line-strong hover:bg-hover disabled:opacity-40"
             title={isDefault ? 'Nothing is filtered yet' : undefined}>Save</button>
         </form>
-        <p className="mt-1 text-[0.6875rem] text-slate-400">Kept in this case file. A saved filter holds your choices, not records.{msg ? ` ${msg}` : ''}</p>
+        <p className="mt-1 text-[0.6875rem] text-muted">Kept in this case file. A saved filter holds your choices, not records.{msg ? ` ${msg}` : ''}</p>
       </div>
     </details>
   );

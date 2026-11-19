@@ -61,9 +61,10 @@ export const OsSpilloverView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-slate-950">
-      {error && <p role="alert" className="shrink-0 px-4 pt-2 text-rose-300">{error} What is listed below may be incomplete.</p>}
-      {loading ? <div className="flex-1 p-10 text-center text-slate-400" role="status">Loading device traces…</div> : (
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-page p-4 gap-3">
+      {error && <p role="alert" className="shrink-0 text-rec">{error} What is listed below may be incomplete.</p>}
+      {loading ? <div className="flex-1 p-10 text-center text-muted" role="status">Loading device traces…</div> : (
+        <div className="card flex-1 flex flex-col min-h-0 overflow-hidden">
         <DataGrid<Row>
           tags={{ table: 'os_spillover', idOf: (r) => (Number.isFinite(Number(r.id)) ? Number(r.id) : null) }}
           tableId="os_spillover" title="Device traces outside the apps" columns={columns} rows={shown} totalBeforeFilter={rows.length}
@@ -72,6 +73,7 @@ export const OsSpilloverView: React.FC = () => {
           toolbar={<FilterInput label="Search the traces" value={query} onChange={setQuery} placeholder="App, text, value…" />}
           empty={rows.length === 0 ? (manifest ? 'No device trace was found in the evidence, or the reader found none.' : 'No case is open.') : 'No trace matches the search.'}
         />
+        </div>
       )}
     </div>
   );

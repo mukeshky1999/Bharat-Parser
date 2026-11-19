@@ -39,24 +39,24 @@ export const ReviewerMarksCard: React.FC<{ hasCase: boolean }> = ({ hasCase }) =
 
   return (
     <div>
-      <p className="text-slate-300 mb-3">
+      <p className="text-muted mb-3">
         The reviewer opens the package&rsquo;s index.html, marks the files and saves a marks file. Import it here. It is accepted only if it belongs to a package this case built and every mark matches a file of that package.
       </p>
       <label className="inline-block">
         <span className="sr-only">Reviewer marks file</span>
         <input type="file" accept="application/json,.json" disabled={!hasCase} onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ''; }}
-          className="text-slate-200 file:mr-3 file:h-8 file:px-3 file:rounded file:border file:border-slate-700 file:bg-slate-900 file:text-slate-200" />
+          className="text-ink file:mr-3 file:h-8 file:px-3 file:rounded file:border file:border-line-strong file:bg-surface file:text-ink" />
       </label>
-      {msg && <p className="mt-2 text-emerald-300" aria-live="polite">{msg}</p>}
-      {error && <p className="mt-2 text-rose-300">{error}</p>}
+      {msg && <p className="mt-2 text-ok" aria-live="polite">{msg}</p>}
+      {error && <p className="mt-2 text-rec">{error}</p>}
       {marks.length > 0 && (
         <>
-          <p className="mt-3 text-slate-400">{note}</p>
+          <p className="mt-3 text-muted">{note}</p>
           <table className="mt-2 w-full text-left">
-            <thead className="text-slate-400"><tr><th className="py-1 pr-2">File</th><th className="pr-2">Mark</th><th className="pr-2">Note</th><th className="pr-2">Reviewer (as typed)</th><th>Imported (UTC)</th></tr></thead>
+            <thead className="text-muted"><tr><th className="py-1 pr-2">File</th><th className="pr-2">Mark</th><th className="pr-2">Note</th><th className="pr-2">Reviewer (as typed)</th><th>Imported (UTC)</th></tr></thead>
             <tbody>
               {marks.map((m) => (
-                <tr key={m.id} className="border-t border-slate-800 align-top">
+                <tr key={m.id} className="border-t border-line align-top">
                   <td className="py-1 pr-2 break-all">{m.File_Index} {m.File_Name ?? ''}</td>
                   <td className="pr-2">{m.Label ? LABEL_TEXT[m.Label] ?? m.Label : 'no mark'}</td>
                   <td className="pr-2 break-words">{m.Note ?? ''}</td>

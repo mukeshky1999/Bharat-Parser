@@ -4,6 +4,7 @@ import { usePreferences } from '../state/preferencesStore';
 import { csvCell, downloadCsv } from '../utils/csv';
 import { useTagIndex } from './useTagIndex';
 import { TagPills } from '../inspectors/TagControls';
+import { Button, Chip, ViewHeader } from '../components/ui';
 
 /**
  * The one table pattern for the money views: a header row, fixed-height rows that are drawn only while they are in
@@ -24,7 +25,7 @@ export interface GridColumn<T> {
   text: (row: T) => string;
 }
 
-export const Unset: React.FC = () => <span className="text-slate-500 italic">not recorded</span>;
+export const Unset: React.FC = () => <span className="text-faint italic">not recorded</span>;
 
 interface DataGridProps<T> {
   /** Names this table for the remembered column choice */
@@ -42,6 +43,8 @@ interface DataGridProps<T> {
   exportName: string;
   rowHeight?: number;
   rowClass?: (row: T) => string;
+  /** Optional: recovery state text for a row that came from deleted or carved data (null for an ordinary row). */
+  recoveredOf?: (row: T) => string | null;
   /** Total before filtering, for "n of m" */
   totalBeforeFilter?: number;
   /** Adds a Tags column: the case-store table the rows belong to, and which record id a row is (null when it is not one). */
@@ -49,13 +52,13 @@ interface DataGridProps<T> {
 }
 
 export function DataGrid<T>({
-  tableId, title, columns: baseColumns, rows, rowKey, selectedKey, onSelect, toolbar, empty, exportName, rowHeight = 40, rowClass, totalBeforeFilter, tags,
+  tableId, title, columns: baseColumns, rows, rowKey, selectedKey, onSelect, toolbar, empty, exportName, rowHeight = 38, rowClass, recoveredOf, totalBeforeFilter, tags,
 }: DataGridProps<T>): React.ReactElement {
   const tagIndex = useTagIndex(tags?.table ?? '');
   const tagsOf = (r: T): string[] => { const id = tags?.idOf(r); return id ? tagIndex[id] ?? [] : []; };
   const columns: GridColumn<T>[] = useMemo(() => (tags ? [{
     key: 'tags', label: 'Tags', width: '11rem',
-    cell: (r: T) => { const t = tagsOf(r); return t.length ? <span className="flex gap-1 overflow-hidden"><TagPills tags={t} /></span> : <span className="text-slate-600">none</span>; },
+    cell: (r: T) => { const t = tagsOf(r); return t.length ? <span className="flex gap-1 overflow-hidden"><TagPills tags={t} /></span> : <span className="text-faint">none</span>; },
     text: (r: T) => tagsOf(r).join('; '),
   }, ...baseColumns] : baseColumns), [baseColumns, tags, tagIndex]); // eslint-disable-line react-hooks/exhaustive-deps
   const hidden = usePreferences((s) => s.hiddenColumns[tableId]) ?? [];
@@ -108,63 +111,74 @@ export function DataGrid<T>({
       ...rows.map((r) => columns.map((c) => csvCell(c.text(r))).join(',')),
     ]);
 
-  return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-slate-950 select-text">
-      <div className="shrink-0 flex flex-wrap items-center gap-3 px-4 py-3 border-b border-slate-800">
-        <h2 className="text-slate-50 font-semibold mr-2">{title}</h2>
-        {toolbar}
-        <span className="text-slate-400" aria-live="polite">
-          {rows.length.toLocaleString()}{totalBeforeFilter !== undefined && totalBeforeFilter !== rows.length ? ` of ${totalBeforeFilter.toLocaleString()}` : ''} row{rows.length === 1 ? '' : 's'}
-        </span>
-        <details className="relative ml-auto">
-          <summary className="h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 cursor-pointer inline-flex items-center list-none">Columns</summary>
-          <div className="absolute right-0 z-20 mt-1 w-60 rounded border border-slate-700 bg-slate-900 p-2 shadow-xl">
-            {columns.map((c) => (
-              <label key={c.key} className="flex items-center gap-2 py-0.5 text-slate-200">
-                <input type="checkbox" checked={!hidden.includes(c.key)} disabled={!hidden.includes(c.key) && shown.length === 1}
-                  onChange={(e) => setPrefs({ hiddenColumns: { ...allHidden, [tableId]: e.target.checked ? hidden.filter((k) => k !== c.key) : [...hidden, c.key] } })} />
-                {c.label}
-              </label>
-            ))}
-            <p className="mt-1 text-[0.6875rem] text-slate-400">Hiding a column only changes what is shown. Export keeps every column.</p>
-          </div>
-        </details>
-        <button onClick={exportCsv} disabled={rows.length === 0} className="flex items-center gap-2 h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40">
-          <Download className="w-4 h-4" aria-hidden="true" /> Export CSV
-        </button>
-      </div>
+  const recoveredCount = recoveredOf ? rows.reduce((n, r) => n + (recoveredOf(r) ? 1 : 0), 0) : 0;
+  const total = totalBeforeFilter ?? rows.length;
 
-      <div ref={ref} tabIndex={0} onKeyDown={onKey} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-        className="flex-1 overflow-auto min-h-0 outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-inset" role="grid" aria-label={title} aria-rowcount={rows.length + 1}>
-        {rows.length === 0 ? (
-          <div className="p-10 text-center text-slate-400">{empty}</div>
-        ) : (
-          <div className="min-w-max">
-            <div ref={headerRef} role="row" className="sticky top-0 z-10 grid items-center gap-x-3 px-3 h-8 bg-slate-900 border-b border-slate-700 text-slate-300 font-medium" style={{ gridTemplateColumns: template }}>
-              <span role="columnheader" className="text-right">#</span>
-              {shown.map((c) => <span key={c.key} role="columnheader" className={c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}>{c.label}</span>)}
-            </div>
-            <div style={{ height: rows.length * rowHeight, position: 'relative' }}>
-              <div style={{ transform: `translateY(${start * rowHeight}px)` }}>
-                {visible.map((r, i) => {
-                  const idx = start + i;
-                  const key = rowKey(r, idx);
-                  const sel = selectedKey === key;
-                  return (
-                    <div key={key} role="row" aria-selected={sel} aria-rowindex={idx + 2} onClick={() => onSelect?.(r)}
-                      className={`grid items-center gap-x-3 px-3 border-b border-slate-800/70 ${onSelect ? 'cursor-pointer' : ''} ${sel ? 'bg-slate-800 text-slate-50' : 'hover:bg-slate-900 text-slate-200'} ${rowClass?.(r) ?? ''}`}
-                      style={{ gridTemplateColumns: template, height: rowHeight }}>
-                      <span role="gridcell" className="text-right text-slate-500">{idx + 1}</span>
-                      {shown.map((c) => (
-                        <span key={c.key} role="gridcell" title={c.text(r)} className={`truncate ${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}`}>{c.cell(r)}</span>
-                      ))}
-                    </div>
-                  );
-                })}
+  return (
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-page select-text p-4">
+      <ViewHeader title={title} count={total} recovered={recoveredCount}
+        search={toolbar}
+        actions={(
+          <>
+            <details className="relative">
+              <summary className="h-8 px-3 rounded-lg border border-line-strong bg-surface text-ink hover:bg-hover cursor-pointer inline-flex items-center list-none font-medium">Columns</summary>
+              <div className="absolute right-0 z-20 mt-1 w-60 rounded-lg border border-line-strong bg-surface p-2 shadow-float">
+                {columns.map((c) => (
+                  <label key={c.key} className="flex items-center gap-2 py-0.5 text-ink">
+                    <input type="checkbox" checked={!hidden.includes(c.key)} disabled={!hidden.includes(c.key) && shown.length === 1}
+                      onChange={(e) => setPrefs({ hiddenColumns: { ...allHidden, [tableId]: e.target.checked ? hidden.filter((k) => k !== c.key) : [...hidden, c.key] } })} />
+                    {c.label}
+                  </label>
+                ))}
+                <p className="mt-1 text-[0.6875rem] text-muted">Hiding a column only changes what is shown. Export keeps every column.</p>
+              </div>
+            </details>
+            <Button onClick={exportCsv} disabled={rows.length === 0}>
+              <Download className="w-4 h-4" aria-hidden="true" /> Export CSV
+            </Button>
+          </>
+        )} />
+
+      <div className="card flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div ref={ref} tabIndex={0} onKeyDown={onKey} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+          className="flex-1 overflow-auto min-h-0 outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset" role="grid" aria-label={title} aria-rowcount={rows.length + 1}>
+          {rows.length === 0 ? (
+            <div className="p-10 text-center text-muted">{empty}</div>
+          ) : (
+            <div className="min-w-max">
+              <div ref={headerRef} role="row" className="sticky top-0 z-10 grid items-center gap-x-3 px-3 h-9 bg-sunken border-b border-line text-muted text-[0.75rem] font-semibold" style={{ gridTemplateColumns: template }}>
+                <span role="columnheader" className="text-right">#</span>
+                {shown.map((c) => <span key={c.key} role="columnheader" className={c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}>{c.label}</span>)}
+              </div>
+              <div style={{ height: rows.length * rowHeight, position: 'relative' }}>
+                <div style={{ transform: `translateY(${start * rowHeight}px)` }}>
+                  {visible.map((r, i) => {
+                    const idx = start + i;
+                    const key = rowKey(r, idx);
+                    const sel = selectedKey === key;
+                    const rec = recoveredOf?.(r) ?? null;
+                    return (
+                      <div key={key} role="row" aria-selected={sel} aria-rowindex={idx + 2} onClick={() => onSelect?.(r)}
+                        className={`${rec ? 'is-recovered shadow-[inset_3px_0_0_var(--t-rec)]' : ''} grid items-center gap-x-3 px-3 border-b border-line ${onSelect ? 'cursor-pointer' : ''} ${sel ? 'bg-accent-soft text-ink' : 'hover:bg-hover text-ink'} ${rowClass?.(r) ?? ''}`}
+                        style={{ gridTemplateColumns: template, height: rowHeight }}>
+                        <span role="gridcell" className="text-right text-faint">{idx + 1}</span>
+                        {shown.map((c, ci) => (
+                          <span key={c.key} role="gridcell" title={c.text(r)} className={`truncate ${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''}`}>
+                            {c.cell(r)}
+                            {ci === 0 && rec && <>{' '}<Chip tone="rec">Recovered · {rec}</Chip></>}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+        <div className="shrink-0 px-4 py-2 border-t border-line bg-sunken text-muted text-[0.75rem]" aria-live="polite">
+          Showing {rows.length.toLocaleString()} of {total.toLocaleString()} row{total === 1 ? '' : 's'}
+        </div>
       </div>
     </div>
   );
@@ -175,10 +189,10 @@ export function Segmented<V extends string>({ label, value, options, onChange }:
   label: string; value: V; options: Array<{ value: V; label: string; title?: string }>; onChange: (v: V) => void;
 }): React.ReactElement {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex rounded border border-slate-700 overflow-hidden">
+    <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg border border-line-strong overflow-hidden bg-surface">
       {options.map((o) => (
         <button key={o.value} role="radio" aria-checked={value === o.value} title={o.title} onClick={() => onChange(o.value)}
-          className={`h-8 px-3 border-r border-slate-700 last:border-r-0 ${value === o.value ? 'bg-slate-700 text-slate-50' : 'text-slate-300 hover:bg-slate-800'}`}>
+          className={`h-8 px-3 border-r border-line last:border-r-0 ${value === o.value ? 'bg-accent-soft text-accent-ink font-semibold' : 'text-muted hover:bg-hover'}`}>
           {o.label}
         </button>
       ))}
@@ -189,6 +203,6 @@ export function Segmented<V extends string>({ label, value, options, onChange }:
 export const FilterInput: React.FC<{ label: string; value: string; onChange: (v: string) => void; placeholder: string; width?: string }> = ({ label, value, onChange, placeholder, width = 'w-64' }) => (
   <label>
     <span className="sr-only">{label}</span>
-    <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={`h-8 ${width} px-2 rounded bg-slate-900 border border-slate-700 text-slate-100 placeholder-slate-500`} />
+    <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={`h-8 ${width} px-2.5 rounded-lg bg-surface border border-line-strong text-ink placeholder:text-faint`} />
   </label>
 );

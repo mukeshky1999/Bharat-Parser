@@ -4,6 +4,7 @@ import { usePreferences } from '../state/preferencesStore';
 import { RecordDetail, RecordRef, TagPills } from '../inspectors/RecordDetail';
 import { SavedFilters } from '../workspace/SavedFilters';
 import { useLatestRequest } from '../utils/latestRequest';
+import { ViewHeader, Button, Card } from '../components/ui';
 import { whenText } from '../utils/timeText';
 
 const GROUPS: Array<{ id: TimelineGroup; label: string; help: string }> = [
@@ -13,7 +14,7 @@ const GROUPS: Array<{ id: TimelineGroup; label: string; help: string }> = [
 ];
 
 const PAGE = 100;
-const field = 'h-8 rounded bg-slate-950 border border-slate-700 px-2 text-slate-100 placeholder-slate-500';
+const field = 'h-8 rounded-lg bg-surface border border-line-strong px-2 text-ink placeholder:text-faint';
 
 
 /** Every record that has a time, from every table and device, in one list. Records without a fixed instant are counted apart. */
@@ -51,68 +52,71 @@ export const TimelineView: React.FC = () => {
   const help = GROUPS.find((g) => g.id === group)?.help;
 
   return (
-    <div className="flex-1 flex min-w-0 min-h-0">
+    <div className="flex-1 flex min-w-0 min-h-0 bg-page">
       <div className="flex-1 overflow-y-auto p-4 select-text min-w-0">
+        <ViewHeader title="Timeline" count={data ? data.total : undefined} />
         <div role="tablist" aria-label="Kind of time" className="flex flex-wrap gap-2 mb-2">
           {GROUPS.map((g) => (
             <button key={g.id} role="tab" aria-selected={group === g.id} onClick={() => setGroup(g.id)}
-              className={`h-8 px-3 rounded border ${group === g.id ? 'border-cyan-600 bg-slate-800 text-slate-50' : 'border-slate-700 text-slate-300 hover:bg-slate-800'}`}>
+              className={`h-8 px-3 rounded-lg border font-medium ${group === g.id ? 'border-accent bg-accent-soft text-accent-ink font-semibold' : 'border-line-strong bg-surface text-muted hover:bg-hover'}`}>
               {g.label}{data ? ` (${data.counts[g.id]})` : ''}
             </button>
           ))}
         </div>
-        <p className="text-slate-400 text-xs mb-3">{help}</p>
+        <p className="text-muted text-xs mb-3">{help}</p>
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <label className="text-xs text-slate-400" title="The dates and the day bars are Indian Standard Time days, whichever zone the times are shown in">From (IST day) <input type="date" aria-label="From date" value={from} onChange={(e) => setFrom(e.target.value)} className={field} /></label>
-          <label className="text-xs text-slate-400" title="The dates and the day bars are Indian Standard Time days, whichever zone the times are shown in">To (IST day) <input type="date" aria-label="To date" value={to} onChange={(e) => setTo(e.target.value)} className={field} /></label>
+          <label className="text-xs text-muted" title="The dates and the day bars are Indian Standard Time days, whichever zone the times are shown in">From (IST day) <input type="date" aria-label="From date" value={from} onChange={(e) => setFrom(e.target.value)} className={field} /></label>
+          <label className="text-xs text-muted" title="The dates and the day bars are Indian Standard Time days, whichever zone the times are shown in">To (IST day) <input type="date" aria-label="To date" value={to} onChange={(e) => setTo(e.target.value)} className={field} /></label>
           <input aria-label="Only this app" value={app} onChange={(e) => setApp(e.target.value)} placeholder="App (optional)" className={`${field} w-32`} />
           <input aria-label="Only records with this tag" value={tag} onChange={(e) => setTag(e.target.value)} placeholder="Tag (optional)" className={`${field} w-32`} />
           <SavedFilters scope="timeline" current={{ group, from, to, app, tag, descending }} isDefault={group === 'fixed' && !from && !to && !app && !tag && !descending}
             onApply={(s) => { setGroup((s.group as TimelineGroup) ?? 'fixed'); setFrom(String(s.from ?? '')); setTo(String(s.to ?? '')); setApp(String(s.app ?? '')); setTag(String(s.tag ?? '')); setDescending(s.descending === true); }} />
           {group === 'fixed' && (
-            <label className="text-xs text-slate-300 inline-flex items-center gap-1"><input type="checkbox" checked={descending} onChange={(e) => setDescending(e.target.checked)} />Newest first</label>
+            <label className="text-xs text-muted inline-flex items-center gap-1"><input type="checkbox" checked={descending} onChange={(e) => setDescending(e.target.checked)} />Newest first</label>
           )}
         </div>
-        {error && <p className="text-rose-300 mb-2">{error}</p>}
+        {error && <p className="text-rec mb-2">{error}</p>}
         {data && (
           <>
             {data.buckets && data.buckets.items.length > 0 && (
-              <figure className="mb-3" aria-label="Records per Indian Standard Time day">
+              <Card className="mb-3" bodyClassName="px-4 py-3">
+              <figure aria-label="Records per Indian Standard Time day">
                 <div className="flex items-end gap-px h-16 overflow-x-auto">
                   {data.buckets.items.map((b) => (
-                    <div key={b.start} title={`${b.start}: ${b.count}`} className="w-2 shrink-0 bg-cyan-600" style={{ height: `${Math.max(4, (b.count / max) * 100)}%` }} />
+                    <div key={b.start} title={`${b.start}: ${b.count}`} className="w-2 shrink-0 bg-accent" style={{ height: `${Math.max(4, (b.count / max) * 100)}%` }} />
                   ))}
                 </div>
-                <figcaption className="text-[0.6875rem] text-slate-500">
+                <figcaption className="text-[0.6875rem] text-faint mt-1">
                   Records per IST day, {data.buckets.items[0].start} to {data.buckets.items[data.buckets.items.length - 1].start}
                   {data.buckets.truncated ? ' (only part of the range is shown)' : ''}. Hover a bar for its count.
                 </figcaption>
               </figure>
+              </Card>
             )}
-            <p className="text-slate-200 mb-1" aria-live="polite">{data.total} record{data.total === 1 ? '' : 's'} in this group.</p>
+            <p className="text-ink mb-1" aria-live="polite">{data.total} record{data.total === 1 ? '' : 's'} in this group.</p>
             <ul className="space-y-1">
               {data.events.map((e) => (
                 <li key={`${e.tbl}-${e.id}`}>
                   <button onClick={() => setOpen({ table: e.tbl, id: e.id })}
-                    className={`w-full text-left rounded border p-2 hover:bg-slate-800 ${open?.table === e.tbl && open.id === e.id ? 'border-cyan-600 bg-slate-800' : 'border-slate-800 bg-slate-900'}`}>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.75rem] text-slate-400">
-                      <span className="text-slate-100 font-mono">{whenText(e, tz)}</span>
+                    className={`w-full text-left rounded-[10px] border p-2 shadow-card hover:bg-hover ${open?.table === e.tbl && open.id === e.id ? 'border-accent bg-accent-soft' : 'border-line bg-surface'}`}>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.75rem] text-muted">
+                      <span className="text-ink font-mono">{whenText(e, tz)}</span>
                       <span>{e.kind}</span>
                       <span>{e.application || 'app not recorded'}</span>
                       {e.evidence_item && <span>{e.evidence_item}</span>}
                       {e.tags && e.tags.length > 0 && <TagPills tags={e.tags} />}
                     </div>
-                    <div className="text-slate-100 break-words">{e.summary || 'no text recorded'}</div>
+                    <div className="text-ink break-words">{e.summary || 'no text recorded'}</div>
                   </button>
                 </li>
               ))}
             </ul>
             <div className="flex items-center gap-2 mt-3">
-              <button className="h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40" disabled={busy || offset === 0}
-                onClick={() => { const o = Math.max(0, offset - PAGE); setOffset(o); void load(o); }}>Previous</button>
-              <span className="text-slate-400 text-xs">{data.events.length ? `${offset + 1}–${offset + data.events.length}` : 'none'}</span>
-              <button className="h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40" disabled={busy || offset + PAGE >= data.total}
-                onClick={() => { const o = offset + PAGE; setOffset(o); void load(o); }}>Next</button>
+              <Button disabled={busy || offset === 0}
+                onClick={() => { const o = Math.max(0, offset - PAGE); setOffset(o); void load(o); }}>Previous</Button>
+              <span className="text-muted text-xs">{data.events.length ? `${offset + 1}–${offset + data.events.length}` : 'none'}</span>
+              <Button disabled={busy || offset + PAGE >= data.total}
+                onClick={() => { const o = offset + PAGE; setOffset(o); void load(o); }}>Next</Button>
             </div>
           </>
         )}

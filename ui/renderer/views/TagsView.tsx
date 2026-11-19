@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { forensicClient, TagSummary, TaggedRecord } from '../api/forensicClient';
 import { RecordDetail, RecordRef } from '../inspectors/RecordDetail';
 import { useUi } from '../state/uiStore';
+import { ViewHeader, Button } from '../components/ui';
 import { useLatestRequest } from '../utils/latestRequest';
 
 const PAGE = 100;
@@ -57,53 +58,53 @@ export const TagsView: React.FC = () => {
   const changed = () => { void loadTags(); void loadRecords(current, offset); };
 
   return (
-    <div className="flex-1 flex min-w-0 min-h-0">
-      <nav className="w-64 shrink-0 border-r border-slate-800 overflow-y-auto p-3" aria-label="Tags">
+    <div className="flex-1 flex min-w-0 min-h-0 bg-page">
+      <nav className="w-64 shrink-0 border-r border-line bg-surface overflow-y-auto p-3" aria-label="Tags">
         <ul className="space-y-1">
           {tags.map((t) => (
             <li key={t.tag}>
               <button onClick={() => setCurrent(t.tag)} aria-current={current === t.tag}
-                className={`w-full text-left rounded border px-2 py-1.5 ${current === t.tag ? 'border-cyan-600 bg-slate-800' : 'border-slate-800 hover:bg-slate-800'}`}>
-                <div className="flex justify-between text-slate-100"><span>{t.tag}</span><span>{t.count}</span></div>
-                {t.meaning && <div className="text-[0.6875rem] text-slate-400">{t.meaning}</div>}
-                {t.detached > 0 && <div className="text-[0.6875rem] text-amber-300">{t.detached} no longer found after reprocessing</div>}
+                className={`w-full text-left rounded-lg border px-2 py-1.5 ${current === t.tag ? 'border-accent bg-accent-soft' : 'border-line hover:bg-hover'}`}>
+                <div className="flex justify-between text-ink"><span>{t.tag}</span><span>{t.count}</span></div>
+                {t.meaning && <div className="text-[0.6875rem] text-muted">{t.meaning}</div>}
+                {t.detached > 0 && <div className="text-[0.6875rem] text-warn">{t.detached} no longer found after reprocessing</div>}
               </button>
             </li>
           ))}
         </ul>
         {detachedTotal > 0 && (
-          <p className="mt-3 text-[0.75rem] text-amber-300">
+          <p className="mt-3 text-[0.75rem] text-warn">
             {detachedTotal} tag(s) belong to records that were not found again after a device was processed a second time. They are counted here and are not listed.
           </p>
         )}
       </nav>
       <div className="flex-1 overflow-y-auto p-4 select-text min-w-0">
-        {error && <p className="text-rose-300 mb-2">{error}</p>}
+        {error && <p className="text-rec mb-2">{error}</p>}
         {!current ? (
-          <p className="text-slate-400">Choose a tag to see its records. To tag a record, open it from Search, the Timeline or a table and use the tag buttons in the record panel.</p>
+          <p className="text-muted">Choose a tag to see its records. To tag a record, open it from Search, the Timeline or a table and use the tag buttons in the record panel.</p>
         ) : (
           <>
-            <h2 className="text-slate-50 font-semibold mb-1">{current}{recordsTag === current ? `: ${total} record${total === 1 ? '' : 's'}` : ': loading…'}</h2>
-            {recordsTag === current && records.length === 0 && !error && <p className="text-slate-500">No records under this tag.</p>}
+            <ViewHeader title={`${current}${recordsTag === current ? `: ${total} record${total === 1 ? '' : 's'}` : ': loading…'}`} />
+            {recordsTag === current && records.length === 0 && !error && <p className="text-faint">No records under this tag.</p>}
             <ul className="space-y-1">
               {(recordsTag === current ? records : []).map((r, i) => (
-                <li key={`${r.table}-${r.id}-${i}`} className="rounded border border-slate-800 bg-slate-900 p-2">
+                <li key={`${r.table}-${r.id}-${i}`} className="card p-2">
                   <div className="flex justify-between gap-2">
                     <button className="text-left min-w-0 flex-1 hover:underline" disabled={r.id === null} onClick={() => r.id !== null && setOpen({ table: r.table, id: r.id })}>
-                      <div className="text-[0.75rem] text-slate-400">{r.table} #{r.id} · {r.evidence_item ?? 'device not recorded'} · tagged {r.tagged_at_utc} UTC</div>
-                      <div className="text-slate-100 break-words">{r.summary || 'no text recorded'}</div>
-                      {r.note && <div className="text-slate-300 text-xs">Note: {r.note}</div>}
+                      <div className="text-[0.75rem] text-muted">{r.table} #{r.id} · {r.evidence_item ?? 'device not recorded'} · tagged {r.tagged_at_utc} UTC</div>
+                      <div className="text-ink break-words">{r.summary || 'no text recorded'}</div>
+                      {r.note && <div className="text-muted text-xs">Note: {r.note}</div>}
                     </button>
-                    <button className="h-7 px-2 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 text-xs self-start" onClick={() => void remove(r)}>Remove tag</button>
+                    <Button className="!h-7 px-2 text-xs self-start" onClick={() => void remove(r)}>Remove tag</Button>
                   </div>
                 </li>
               ))}
             </ul>
             <div className="flex items-center gap-2 mt-3">
-              <button className="h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40" disabled={offset === 0}
-                onClick={() => { const o = Math.max(0, offset - PAGE); setOffset(o); void loadRecords(current, o); }}>Previous</button>
-              <button className="h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40" disabled={offset + PAGE >= total}
-                onClick={() => { const o = offset + PAGE; setOffset(o); void loadRecords(current, o); }}>Next</button>
+              <Button disabled={offset === 0}
+                onClick={() => { const o = Math.max(0, offset - PAGE); setOffset(o); void loadRecords(current, o); }}>Previous</Button>
+              <Button disabled={offset + PAGE >= total}
+                onClick={() => { const o = offset + PAGE; setOffset(o); void loadRecords(current, o); }}>Next</Button>
             </div>
           </>
         )}

@@ -5,6 +5,7 @@ import { usePreferences } from '../state/preferencesStore';
 import { formatOffset } from '../utils/csv';
 import { fetchAllRows } from '../utils/artifactRows';
 import { DataGrid, FilterInput, GridColumn, Unset } from '../workspace/DataGrid';
+import { PartyBrowser } from '../workspace/PartyBrowser';
 import { SavedFilters, FilterScope } from '../workspace/SavedFilters';
 import type { CryptoWalletTransaction } from '../../shared/forensic-types';
 
@@ -64,6 +65,13 @@ const COLUMNS: Record<Tab, Array<GridColumn<Row>>> = {
   ],
 };
 
+// Tabs whose records carry an address, so they can be grouped by it. Orders and bridge links are not about one address.
+const NO_ADDRESS = 'Address not recorded';
+const BY_ADDRESS: Partial<Record<Tab, { address: string; app: string }>> = {
+  custodial_wallets: { address: 'Deposit_Address', app: 'Wallet_App' },
+  crypto_addresses: { address: 'Address', app: 'Network' },
+};
+
 const EXPORT_NAME: Record<Tab, string> = { custodial_wallets: 'wallet_accounts.csv', p2p_orders: 'p2p_orders.csv', fiat_crypto_bridge: 'rupee_crypto_links.csv', crypto_addresses: 'crypto_addresses.csv' };
 
 /**
@@ -118,31 +126,49 @@ export const CryptoWalletView: React.FC<CryptoWalletViewProps> = () => {
     });
   };
 
+  const grid = (rs: Row[]) => (
+    <DataGrid<Row>
+      key={tab} tags={{ table: tab, idOf: (r) => (Number.isFinite(Number(r.id)) ? Number(r.id) : null) }} tableId={`crypto_${tab}`} title={meta.title} columns={COLUMNS[tab]} rows={rs} totalBeforeFilter={data[tab].length}
+      rowKey={(r, i) => `${tab}-${r.id ?? i}`} selectedKey={selected?.id?.startsWith(`CRYPTO_${tab}_`) ? `${tab}-${selected.id.split('_').pop()}` : null}
+      onSelect={select} exportName={EXPORT_NAME[tab]}
+      toolbar={(
+        <>
+          <FilterInput label="Search these records" value={query} onChange={setQuery} placeholder="Address, order, name…" />
+          <SavedFilters scope={meta.scope} current={{ query }} onApply={(s) => setQuery(String(s.query ?? ''))} isDefault={!query} />
+        </>
+      )}
+      empty={data[tab].length === 0 ? (manifest ? meta.empty : 'No case is open.') : 'No record matches this search.'}
+    />
+  );
+
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-slate-950">
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-page">
       <div className="shrink-0 flex flex-wrap items-center gap-2 px-4 pt-3" role="tablist" aria-label="Kinds of crypto record">
         {TABS.map((t) => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => { setTab(t.id); setQuery(''); }}
-            className={`h-8 px-3 rounded border ${tab === t.id ? 'border-cyan-600 bg-slate-800 text-slate-50' : 'border-slate-700 text-slate-300 hover:bg-slate-800'}`}>
+            className={`h-8 px-3 rounded border ${tab === t.id ? 'border-accent bg-accent-soft text-accent-ink font-semibold' : 'border-line-strong text-muted hover:bg-hover'}`}>
             {t.label} ({data[t.id].length})
           </button>
         ))}
       </div>
-      {meta.note && <p className="shrink-0 px-4 pt-2 text-slate-400 text-xs">{meta.note}</p>}
-      {error && <p className="shrink-0 px-4 pt-2 text-rose-300">{error}</p>}
-      {loading ? <div className="flex-1 p-10 text-center text-slate-400" role="status">Loading crypto records…</div> : (
-        <DataGrid<Row>
-          key={tab} tags={{ table: tab, idOf: (r) => (Number.isFinite(Number(r.id)) ? Number(r.id) : null) }} tableId={`crypto_${tab}`} title={meta.title} columns={COLUMNS[tab]} rows={rows} totalBeforeFilter={data[tab].length}
-          rowKey={(r, i) => `${tab}-${r.id ?? i}`} selectedKey={selected?.id?.startsWith(`CRYPTO_${tab}_`) ? `${tab}-${selected.id.split('_').pop()}` : null}
-          onSelect={select} exportName={EXPORT_NAME[tab]}
-          toolbar={(
-            <>
-              <FilterInput label="Search these records" value={query} onChange={setQuery} placeholder="Address, order, name…" />
-              <SavedFilters scope={meta.scope} current={{ query }} onApply={(s) => setQuery(String(s.query ?? ''))} isDefault={!query} />
-            </>
-          )}
-          empty={data[tab].length === 0 ? (manifest ? meta.empty : 'No case is open.') : 'No record matches this search.'}
-        />
+      {meta.note && <p className="shrink-0 px-4 pt-2 text-muted text-xs">{meta.note}</p>}
+      {error && <p className="shrink-0 px-4 pt-2 text-rec">{error}</p>}
+      {loading ? <div className="flex-1 p-10 text-center text-muted" role="status">Loading crypto records…</div> : (
+        BY_ADDRESS[tab] && data[tab].length > 0 ? (
+          <PartyBrowser<Row>
+            key={tab} rows={rows} appOf={(r) => text(r[BY_ADDRESS[tab]!.app]) || 'App not recorded'} partyOf={(r) => text(r[BY_ADDRESS[tab]!.address]) || NO_ADDRESS}
+            partyLabel={(id) => {
+              const label = id === NO_ADDRESS ? '' : text(data[tab].find((r) => text(r[BY_ADDRESS[tab]!.address]) === id)?.Label);
+              return label ? { name: label, note: 'Label as stored in the evidence' } : { name: id, note: id === NO_ADDRESS ? undefined : 'No label recorded' };
+            }}
+            isRecovered={(r) => /WAL|CARVED|FREELIST|SLACK/i.test(text(r.Forensic_Provenance))}
+            apps={[...new Set(data[tab].map((r) => text(r[BY_ADDRESS[tab]!.app]) || 'App not recorded'))].sort()}
+            idLabel="Address" unit={{ one: 'record', many: 'records' }}
+            listSummary={(rs) => <span>{[...new Set(rs.map((r) => text(r.Network)).filter(Boolean))].join(', ')}</span>}
+            facts={(rs) => [['Records', rs.length.toLocaleString()], ['Networks', [...new Set(rs.map((r) => text(r.Network)).filter(Boolean))].join(', ') || 'not recorded'], ['Balance', 'not recorded']]}
+            renderRows={(rs) => grid(rs)} renderAll={() => grid(rows)}
+          />
+        ) : grid(rows)
       )}
     </div>
   );

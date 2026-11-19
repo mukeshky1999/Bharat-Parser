@@ -3,15 +3,13 @@ import { Upload } from 'lucide-react';
 import { forensicClient } from '../api/forensicClient';
 import { useWorkbenchStore } from '../state/workbenchStore';
 import { CallLogsView } from './CallLogsView';
+import { ViewHeader, Button, Tabs } from '../components/ui';
 import { DataGrid, FilterInput, GridColumn, Segmented, Unset } from '../workspace/DataGrid';
 
 type Sub = 'BANK' | 'CDR' | 'CALLS';
 type BankFilter = 'ALL' | 'MATCHED' | 'UNMATCHED';
 type CdrFilter = 'ALL' | 'BEFORE' | 'AFTER';
 type Row = Record<string, any>;
-
-const btn = 'h-8 px-3 rounded border border-slate-700 text-slate-200 hover:bg-slate-800 disabled:opacity-40';
-const btnPrimary = 'h-8 px-3 rounded bg-cyan-600 text-slate-50 hover:bg-cyan-500 disabled:opacity-40 inline-flex items-center gap-2';
 
 const asText = (v: unknown): string => (v === null || v === undefined || v === '' ? '' : String(v));
 const orUnset = (v: unknown) => (asText(v) ? asText(v) : <Unset />);
@@ -116,8 +114,8 @@ export const BankCdrFusionView: React.FC = () => {
   const bankColumns: Array<GridColumn<Row>> = [
     { key: 'status', label: 'Compared with the phone', width: '16rem',
       cell: (r) => (String(r.Reconciliation_Status || '').toUpperCase().includes('MATCH')
-        ? <span className="text-emerald-300">Found on the phone too</span>
-        : <span className="text-amber-300" title="No record on the extracted device was matched to this line. The reason is not known.">Only in the statement</span>),
+        ? <span className="text-ok">Found on the phone too</span>
+        : <span className="text-warn" title="No record on the extracted device was matched to this line. The reason is not known.">Only in the statement</span>),
       text: (r) => (String(r.Reconciliation_Status || '').toUpperCase().includes('MATCH') ? 'Found on the phone too' : 'Only in the statement') },
     { key: 'date', label: 'Statement date', width: '10rem', cell: (r) => orUnset(r.Date || r.Timestamp), text: (r) => asText(r.Date || r.Timestamp) || 'not recorded' },
     { key: 'narration', label: 'Narration', width: 'minmax(14rem,2fr)', cell: (r) => orUnset(r.Narration || r.Description), text: (r) => asText(r.Narration || r.Description) || 'not recorded' },
@@ -138,40 +136,38 @@ export const BankCdrFusionView: React.FC = () => {
       text: (r) => (asText(r.Delta_Seconds) ? `${r.Delta_Seconds} s` : 'not recorded') },
   ];
 
-  const tabBtn = (id: Sub, label: string) => (
-    <button key={id} role="tab" aria-selected={sub === id} onClick={() => setSub(id)}
-      className={`h-8 px-3 rounded border ${sub === id ? 'border-cyan-600 bg-slate-800 text-slate-50' : 'border-slate-700 text-slate-300 hover:bg-slate-800'}`}>{label}</button>
-  );
-
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-slate-950">
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-page p-4">
       <input type="file" ref={bankInput} onChange={uploadBank} accept=".csv,.xlsx,.xls" className="hidden" aria-label="Bank statement file" />
       <input type="file" ref={cdrInput} onChange={uploadCdr} accept=".csv,.xlsx,.xls" className="hidden" aria-label="Call records file" />
 
-      <div className="shrink-0 flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-800" role="tablist" aria-label="Bank and call records">
-        {tabBtn('BANK', 'Bank statement')}
-        {tabBtn('CDR', 'Telecom call records')}
-        {tabBtn('CALLS', `Calls on the device (${store.callLogs.length})`)}
-        <div className="ml-auto flex items-center gap-2">
-          {sub === 'BANK' && <button className={btnPrimary} disabled={loading} onClick={() => bankInput.current?.click()}><Upload className="w-4 h-4" aria-hidden="true" />Add a bank statement (CSV or XLSX)</button>}
-          {sub === 'CDR' && <button className={btnPrimary} disabled={loading} onClick={() => cdrInput.current?.click()}><Upload className="w-4 h-4" aria-hidden="true" />Add call records (CSV or XLSX)</button>}
-        </div>
+      <ViewHeader title="Bank and call records"
+        actions={(
+          <>
+            {sub === 'BANK' && <Button variant="primary" disabled={loading} onClick={() => bankInput.current?.click()}><Upload className="w-4 h-4" aria-hidden="true" />Add a bank statement (CSV or XLSX)</Button>}
+            {sub === 'CDR' && <Button variant="primary" disabled={loading} onClick={() => cdrInput.current?.click()}><Upload className="w-4 h-4" aria-hidden="true" />Add call records (CSV or XLSX)</Button>}
+          </>
+        )} />
+      <div className="shrink-0 card mb-3">
+        <Tabs label="Bank and call records" value={sub} onChange={(v) => setSub(v as Sub)}
+          tabs={[{ value: 'BANK', label: 'Bank statement' }, { value: 'CDR', label: 'Telecom call records' }, { value: 'CALLS', label: `Calls on the device (${store.callLogs.length})` }]} />
       </div>
 
       {message && (
-        <div className="shrink-0 px-4 py-2 border-b border-slate-800 text-slate-300 flex items-center justify-between" role="status">
+        <div className="shrink-0 card px-4 py-2 mb-3 text-ink flex items-center justify-between" role="status">
           <span>{message}</span>
-          <button className="text-slate-400 hover:text-slate-50" aria-label="Dismiss" onClick={() => setMessage('')}>×</button>
+          <button className="text-muted hover:text-ink" aria-label="Dismiss" onClick={() => setMessage('')}>×</button>
         </div>
       )}
 
       {sub === 'BANK' && (
         <>
           {bank && (
-            <div className="shrink-0 px-4 py-2 border-b border-slate-800 text-slate-300">
+            <div className="shrink-0 card px-4 py-2 mb-3 text-ink">
               {bank.total} statement line{bank.total === 1 ? '' : 's'} · {bank.matched} found on the phone too · {bank.unmatched} only in the statement
             </div>
           )}
+          <div className="card flex-1 flex flex-col min-h-0 overflow-hidden">
           <DataGrid<Row>
             tableId="fusion_bank" title="Bank statement against the phone" columns={bankColumns} rows={bankRows} totalBeforeFilter={bank?.rows.length}
             rowKey={(_, i) => `b${i}`} selectedKey={selected} onSelect={(r) => select(r, 'BANK', `b${bankRows.indexOf(r)}`)} exportName="bank_statement_comparison.csv"
@@ -186,16 +182,18 @@ export const BankCdrFusionView: React.FC = () => {
               ? 'No bank statement has been added. Add one to compare each line with the payments found on the device. The statement is a file you supply; the tool does not vouch for it.'
               : 'No line matches this filter.'}
           />
+          </div>
         </>
       )}
 
       {sub === 'CDR' && (
         <>
           {cdr && (
-            <div className="shrink-0 px-4 py-2 border-b border-slate-800 text-slate-300">
+            <div className="shrink-0 card px-4 py-2 mb-3 text-ink">
               {cdr.total} call{cdr.total === 1 ? '' : 's'} · {cdr.correlated} within 15 minutes of a payment. A call near a payment in time is a lead, not proof the two are related.
             </div>
           )}
+          <div className="card flex-1 flex flex-col min-h-0 overflow-hidden">
           <DataGrid<Row>
             tableId="fusion_cdr" title="Telecom call records against payments" columns={cdrColumns} rows={cdrRows} totalBeforeFilter={cdr?.rows.length}
             rowKey={(_, i) => `c${i}`} selectedKey={selected} onSelect={(r) => select(r, 'CDR', `c${cdrRows.indexOf(r)}`)} exportName="call_records_comparison.csv"
@@ -210,6 +208,7 @@ export const BankCdrFusionView: React.FC = () => {
               ? 'No call records have been added. Add a provider’s call detail records (CSV or XLSX) to see which calls fall within 15 minutes of a payment on the device.'
               : 'No call matches this filter.'}
           />
+          </div>
         </>
       )}
 

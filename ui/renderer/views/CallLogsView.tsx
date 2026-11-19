@@ -66,6 +66,8 @@ export const CallLogsView: React.FC = () => {
   const apply = (s: Partial<typeof state>) => { setKind((s.kind as Kind) ?? 'ALL'); setDir((s.dir as Dir) ?? 'ALL'); setQuery(s.query ?? ''); };
 
   return (
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-page p-4">
+    <div className="card flex-1 flex flex-col min-h-0 overflow-hidden">
     <DataGrid<CallLogArtifact>
       tags={{ table: 'calls', idOf: (c) => caseRecordOf(c.id)?.id ?? null }}
       tableId="calls" title="Calls on the device" columns={columns} rows={rows} totalBeforeFilter={callLogs.length}
@@ -81,5 +83,7 @@ export const CallLogsView: React.FC = () => {
       )}
       empty={callLogs.length === 0 ? 'No calls were found in the evidence, or no case is open.' : 'No call matches these filters.'}
     />
+    </div>
+    </div>
   );
 };

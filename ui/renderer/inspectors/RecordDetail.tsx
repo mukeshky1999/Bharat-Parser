@@ -23,10 +23,10 @@ export const RecordDetail: React.FC<Props> = ({ record, onClose, onTagsChanged }
   if (!record) return null;
   const data = loaded && loaded.table === record.table && loaded.id === record.id ? loaded.data : null;
   return (
-    <aside className="w-96 shrink-0 border-l border-slate-800 bg-slate-900 overflow-y-auto p-3 text-xs text-slate-200 select-text" aria-label="Record detail">
+    <aside className="w-96 shrink-0 border-l border-line bg-sunken overflow-y-auto p-3 text-xs text-ink select-text" aria-label="Record detail">
       <div className="flex items-start justify-between gap-2 mb-2">
-        <h2 className="font-semibold text-slate-50">{record.table} #{record.id}</h2>
-        {onClose && <button className="p-1 rounded text-slate-400 hover:bg-slate-800" aria-label="Close record" onClick={onClose}><X className="w-4 h-4" /></button>}
+        <h2 className="font-semibold text-ink">{record.table} #{record.id}</h2>
+        {onClose && <button className="p-1 rounded text-muted hover:bg-hover" aria-label="Close record" onClick={onClose}><X className="w-4 h-4" /></button>}
       </div>
       <div className="mb-3">
         <TagControls key={`${record.table}-${record.id}`} record={record} onChanged={onTagsChanged} onLoaded={(d) => setLoaded({ table: record.table, id: record.id, data: d })} />
@@ -34,9 +34,9 @@ export const RecordDetail: React.FC<Props> = ({ record, onClose, onTagsChanged }
       <table className="w-full table-fixed border-collapse">
         <tbody>
           {data && Object.entries(data).map(([k, v]) => (
-            <tr key={k} className="border-t border-slate-800 align-top">
-              <th className="text-left font-normal text-slate-400 pr-2 py-1 w-36 break-words">{k}</th>
-              <td className={`py-1 break-all ${v === null || v === undefined || v === '' ? 'text-slate-500' : 'text-slate-100'}`}>{shownValue(v)}</td>
+            <tr key={k} className="border-t border-line align-top">
+              <th className="text-left font-normal text-muted pr-2 py-1 w-36 break-words">{k}</th>
+              <td className={`py-1 break-all ${v === null || v === undefined || v === '' ? 'text-faint' : 'text-ink'}`}>{shownValue(v)}</td>
             </tr>
           ))}
         </tbody>

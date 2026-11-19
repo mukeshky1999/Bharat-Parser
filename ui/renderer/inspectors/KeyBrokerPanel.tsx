@@ -26,7 +26,7 @@ interface KeyEntryProps {
   disabled?: boolean;
 }
 
-const input = 'h-8 bg-slate-900 border border-slate-700 rounded px-2 text-xs text-slate-50 placeholder-slate-500 focus:outline-none focus:border-cyan-600';
+const input = 'h-8 bg-surface border border-line-strong rounded px-2 text-xs text-ink placeholder:text-faint focus:outline-none focus:border-accent';
 
 export const KeyEntry: React.FC<KeyEntryProps> = ({ rows, onChange, disabled }) => {
   const [checks, setChecks] = useState<Record<string, KeyCheckRow>>({});
@@ -59,23 +59,23 @@ export const KeyEntry: React.FC<KeyEntryProps> = ({ rows, onChange, disabled }) 
                 aria-label="Key value" type="password" className={`${input} flex-1 font-mono`} placeholder="Hex, base64 or passphrase" value={r.value} disabled={disabled}
                 onChange={(e) => update(r.id, { value: e.target.value })} onBlur={() => void check(rows)} autoComplete="off" spellCheck={false}
               />
-              <button type="button" aria-label="Remove this key" className="h-8 px-2 rounded border border-slate-700 text-slate-300 hover:bg-slate-800" disabled={disabled}
+              <button type="button" aria-label="Remove this key" className="h-8 px-2 rounded border border-line-strong text-muted hover:bg-hover" disabled={disabled}
                 onClick={() => onChange(rows.filter((x) => x.id !== r.id))}>
                 <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
             </div>
             {c && (
-              <p className={`text-[0.6875rem] ${c.usable ? 'text-slate-400' : 'text-amber-300'}`}>
+              <p className={`text-[0.6875rem] ${c.usable ? 'text-muted' : 'text-warn'}`}>
                 {c.usable
                   ? <>Will be tried as: {c.readings.map((x) => `${x.how} (${x.fingerprint})`).join(', ')}. The audit log records the name and fingerprint, not the key.</>
                   : null}
-                {c.problems.length > 0 && <span className="text-amber-300"> {c.problems.join(' ')}</span>}
+                {c.problems.length > 0 && <span className="text-warn"> {c.problems.join(' ')}</span>}
               </p>
             )}
           </div>
         );
       })}
-      <button type="button" className="h-8 px-3 rounded border border-slate-600 bg-slate-800 hover:bg-slate-700 text-xs text-slate-100 inline-flex items-center gap-1.5" disabled={disabled}
+      <button type="button" className="h-8 px-3 rounded border border-line-strong bg-surface hover:bg-hover text-xs text-ink inline-flex items-center gap-1.5" disabled={disabled}
         onClick={() => onChange([...rows, { id: nextId.current++, name: '', value: '' }])}>
         <Plus className="w-3.5 h-3.5" aria-hidden="true" />Add a key
       </button>
@@ -109,7 +109,7 @@ export const KeysNeededCard: React.FC<KeysNeededCardProps> = ({ onProcessed, ref
 
   // If it cannot be checked, say so: staying silent would read as "no file needs a key".
   if (loadError) {
-    return <p role="alert" className="rounded border border-amber-700 bg-amber-950/40 p-3 text-xs text-amber-100">
+    return <p role="alert" className="rounded border border-line-strong bg-warn-soft p-3 text-xs text-warn">
       The tool could not check whether any file in this case is encrypted and unread ({loadError}). Do not take the absence of this notice as meaning every file was read.
     </p>;
   }
@@ -130,31 +130,31 @@ export const KeysNeededCard: React.FC<KeysNeededCardProps> = ({ onProcessed, ref
   };
 
   return (
-    <section className="rounded-lg border border-amber-700 bg-amber-950/40 p-4 text-xs text-slate-200 space-y-3" aria-label="Files that need a key">
-      <h2 className="flex items-center gap-2 font-semibold text-amber-200"><KeyRound className="w-4 h-4" aria-hidden="true" />Encrypted databases that were not read</h2>
-      <p className="text-slate-300">
+    <section className="rounded-lg border border-line-strong bg-warn-soft p-4 text-xs text-ink space-y-3" aria-label="Files that need a key">
+      <h2 className="flex items-center gap-2 font-semibold text-warn"><KeyRound className="w-4 h-4" aria-hidden="true" />Encrypted databases that were not read</h2>
+      <p className="text-muted">
         These files could not be opened because no key was supplied or found in the evidence. Their content is not in the case.
         If you hold a key, add it and process the device again: that device is replaced, its tags are kept where the same record is found again.
       </p>
       {data.needed.map((n) => (
-        <div key={n.evidence_item} className="rounded border border-slate-700 bg-slate-900 p-3 space-y-2">
-          <p className="font-semibold text-slate-100">{n.evidence_item}{n.label ? `: ${n.label}` : ''}</p>
-          <ul className="list-disc pl-5 text-slate-300 break-all">
+        <div key={n.evidence_item} className="rounded border border-line-strong bg-surface p-3 space-y-2">
+          <p className="font-semibold text-ink">{n.evidence_item}{n.label ? `: ${n.label}` : ''}</p>
+          <ul className="list-disc pl-5 text-muted break-all">
             {n.files.map((f) => <li key={f.file}><span className="font-mono">{f.file}</span>{f.reason ? ` (${f.reason})` : ''}</li>)}
           </ul>
           <button type="button" disabled={!!busy || !n.source_path}
-            className="h-8 px-3 rounded bg-cyan-600 hover:bg-cyan-500 text-slate-50 font-semibold inline-flex items-center gap-1.5 disabled:opacity-50"
+            className="h-8 px-3 rounded bg-accent text-on-accent hover:brightness-110 font-semibold inline-flex items-center gap-1.5 disabled:opacity-50"
             onClick={() => void run(n)}>
             <Play className="w-3.5 h-3.5" aria-hidden="true" />{busy === n.evidence_item ? 'Processing…' : 'Process this device again with these keys'}
           </button>
         </div>
       ))}
-      <div className="rounded border border-slate-700 bg-slate-900 p-3 space-y-2">
-        <p className="font-semibold text-slate-100">Keys you hold</p>
+      <div className="rounded border border-line-strong bg-surface p-3 space-y-2">
+        <p className="font-semibold text-ink">Keys you hold</p>
         <KeyEntry rows={rows} onChange={setRows} disabled={!!busy} />
       </div>
-      {error && <p className="text-rose-300">{error}</p>}
-      <p className="flex items-center gap-1.5 text-slate-400"><ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />{data.note}</p>
+      {error && <p className="text-rec">{error}</p>}
+      <p className="flex items-center gap-1.5 text-muted"><ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />{data.note}</p>
     </section>
   );
 };
