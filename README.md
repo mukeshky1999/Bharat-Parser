@@ -34,6 +34,18 @@ npm install
 Optional disk-image support (EWF/E01 via `libewf-python`, Sleuth Kit via `pytsk3`) is in `requirements-optional.txt`:
 `python -m pip install -r requirements-optional.txt`. The app runs without these packages.
 
+## Quick start (Windows)
+
+Run these in the project folder, then the desktop app opens with the full UI:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+npm install
+npm run build
+npm run desktop:dev
+```
+
 ## Run
 
 ```powershell
