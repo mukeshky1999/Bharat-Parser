@@ -1,1 +1,5 @@
 
+
+# Test-run artifacts
+.workspace_tmp/
+scratch/
