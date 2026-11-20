@@ -1,3 +1,4 @@
+# Loose spec. Builds and CI install from requirements.lock.
 # Bharat Forensic Suite — unified Python requirements
 # Merged from the original Bharart Analyzer and bharat-pa-forensics requirement files.
 
