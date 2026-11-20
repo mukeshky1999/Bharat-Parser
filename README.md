@@ -17,7 +17,9 @@ Visual Studio and C++ build tools are not needed for the standard install.
 git clone https://github.com/mukeshky1999/Bharat-Parser.git
 cd Bharat-Parser
 py -3.12 -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+venv\Scripts\activate.bat
+python -m pip install -r requirements.txt
 npm ci
 npm run build
 npm run desktop:dev
