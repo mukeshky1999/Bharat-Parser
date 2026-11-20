@@ -42,6 +42,12 @@ npm run dev                # Vite UI dev server only (port 3000)
 npm run backend            # FastAPI backend only
 ```
 
+The desktop window needs the UI: either run `npm run build` once (creates `dist/`) or keep
+`npm run dev` running in another terminal before `npm run desktop:dev`. The backend is started with
+the interpreter in `.venv` (or the active virtualenv / conda env); set `BHARAT_PYTHON` to point at a
+different `python.exe` that has the requirements installed. If `electron` reports a missing binary,
+run `node node_modules/electron/install.js`.
+
 ## Test
 
 ```powershell

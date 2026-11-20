@@ -113,16 +113,23 @@ async function waitForBackend(maxAttempts = 40, intervalMs = 500) {
 // 2. Python Backend Lifecycle Management
 // -----------------------------------------------------------------------------
 function findPythonExecutable() {
-  const venvPython = path.join(PROJECT_ROOT, '.venv', 'Scripts', 'python.exe');
-  if (fs.existsSync(venvPython)) return venvPython;
+  // An explicitly chosen interpreter always wins (e.g. set BHARAT_PYTHON=C:\Python312\python.exe).
+  if (process.env.BHARAT_PYTHON && fs.existsSync(process.env.BHARAT_PYTHON)) return process.env.BHARAT_PYTHON;
 
-  const parentVenv = path.join(PROJECT_ROOT, '..', '.venv', 'Scripts', 'python.exe');
-  if (fs.existsSync(parentVenv)) return parentVenv;
+  const isWin = process.platform === 'win32';
+  const venvBin = (dir) => (isWin ? path.join(dir, 'Scripts', 'python.exe') : path.join(dir, 'bin', 'python'));
+  const candidates = [
+    path.join(PROJECT_ROOT, '.venv'),
+    path.join(PROJECT_ROOT, '..', '.venv'),
+    path.join(PROJECT_ROOT, 'venv'),
+    process.env.VIRTUAL_ENV, // the virtualenv active in the terminal that launched Electron
+  ].filter(Boolean).map(venvBin);
+  if (process.env.CONDA_PREFIX) {
+    candidates.push(isWin ? path.join(process.env.CONDA_PREFIX, 'python.exe') : path.join(process.env.CONDA_PREFIX, 'bin', 'python'));
+  }
+  for (const c of candidates) if (fs.existsSync(c)) return c;
 
-  const standardVenv = path.join(PROJECT_ROOT, 'venv', 'Scripts', 'python.exe');
-  if (fs.existsSync(standardVenv)) return standardVenv;
-
-  return process.platform === 'win32' ? 'python' : 'python3';
+  return isWin ? 'python' : 'python3';
 }
 
 function findProductionBackendExe() {
@@ -196,6 +203,15 @@ async function startBackend() {
       backendProcess.on('exit', (code) => {
         console.log(`[BharatAnalyzer DEV] Python server process exited with code ${code}`);
         backendProcess = null;
+        if (!isShuttingDown && code !== 0 && code !== null) {
+          try {
+            dialog.showErrorBox('Forensic engine stopped',
+              `The Python backend exited (code ${code}) using: ${pythonExe}\n\n` +
+              'Install the requirements into that interpreter (python -m pip install -r requirements.txt), ' +
+              'or create .venv in the project folder, or set BHARAT_PYTHON to the python.exe that has them. ' +
+              'The terminal that started the app shows the Python error.');
+          } catch { /* dialog not available yet */ }
+        }
       });
     } catch (err) {
       console.error('[BharatAnalyzer DEV] Failed to launch Python server:', err);
@@ -372,7 +388,14 @@ async function loadAppUrl() {
       if (foundDistPath) {
         mainWindow.loadFile(foundDistPath);
       } else {
-        mainWindow.loadURL(DEV_FRONTEND_URL);
+        // Neither the Vite dev server nor a built UI exists: say so instead of showing an empty window.
+        const msg = '<html><body style="background:#0b1120;color:#e2e8f0;font-family:sans-serif;padding:40px">' +
+          '<h2>The user interface has not been built yet</h2>' +
+          '<p>Run one of these in the project folder, then start the app again:</p>' +
+          '<pre style="background:#1e293b;padding:12px">npm install\nnpm run build        (then: npm run desktop:dev)</pre>' +
+          '<p>or, for development, run <code>npm run dev</code> in another terminal before <code>npm run desktop:dev</code>.</p>' +
+          '</body></html>';
+        mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(msg));
       }
     }
   } else {
