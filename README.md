@@ -18,7 +18,7 @@ git clone https://github.com/mukeshky1999/Bharat-Parser.git
 cd Bharat-Parser
 py -3.12 -m venv .venv
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.venv\Scripts\activate.bat
+.\venv\Scripts\Activate.bat
 python -m pip install -r requirements.txt
 npm ci
 npm run build
