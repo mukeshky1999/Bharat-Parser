@@ -4,6 +4,8 @@ Computes 5-column stage stratification, clamped hybrid power-law ribbon scaling 
 Split-UPI Smurfing Fans, P2P Triangulation Mismatch badges, and top-arched circular feedback arcs.
 """
 
+from typing import Any
+
 from src.financial_graph_and_storyboard.models import (
     SankeyFlowRibbon,
     SankeyLayoutResult,

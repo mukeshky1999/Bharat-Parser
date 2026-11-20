@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.social_voip.models import (
     BurnerBridgeRecord,

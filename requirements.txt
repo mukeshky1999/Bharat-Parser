@@ -12,8 +12,9 @@ protobuf>=4.25.0
 eth-hash>=0.7.0
 
 # --- Disk image / container access ---
-pyewf-wheels>=20130416
-pytsk3>=20210419
+# pyewf (libewf-python) and pytsk3 are native packages that may lack wheels on some
+# platform/Python combinations. Their imports are guarded, so they live in
+# requirements-optional.txt:  pip install -r requirements-optional.txt
 
 # --- REST backend used by the Electron UI (parsers/api_server.py) ---
 fastapi>=0.110.0

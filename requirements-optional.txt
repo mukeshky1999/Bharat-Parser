@@ -1,0 +1,6 @@
+# Optional native packages for EWF (.E01) / Sleuth Kit disk image support.
+# The app runs without them (imports are guarded); EWF/TSK features are disabled if absent.
+# Install with: pip install -r requirements-optional.txt
+# If pytsk3 has no wheel for your platform/Python it needs a C++ compiler and Sleuth Kit build deps.
+libewf-python>=20201129   # provides the `pyewf` module (the old name `pyewf-wheels` does not exist on PyPI)
+pytsk3>=20210419

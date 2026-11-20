@@ -10,7 +10,7 @@ import logging
 import os
 from pathlib import Path
 import sqlite3
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from src.core.enums import ForensicGroup
 from src.android_telemetry.models import (

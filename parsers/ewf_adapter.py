@@ -89,7 +89,7 @@ def open_ewf_image(image_path: str) -> EwfImgInfo:
     if pyewf is None:
         raise ImportError(
             "pyewf is required to open EWF (.E01/.Ex01/.L01) images. "
-            "Please install pyewf-wheels (Windows) or pyewf."
+            "Please install libewf-python (pip install -r requirements-optional.txt)."
         )
 
     if not os.path.exists(image_path):

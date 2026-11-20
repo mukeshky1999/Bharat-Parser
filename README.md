@@ -31,6 +31,9 @@ python -m venv .venv
 npm install
 ```
 
+Optional disk-image support (EWF/E01 via `libewf-python`, Sleuth Kit via `pytsk3`) is in `requirements-optional.txt`:
+`python -m pip install -r requirements-optional.txt`. The app runs without these packages.
+
 ## Run
 
 ```powershell
