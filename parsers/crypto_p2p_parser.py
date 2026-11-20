@@ -1,7 +1,6 @@
 """
 Phase 3: Cryptocurrency Exchange P2P & Wallet Artifact Parser.
 Reconstructs peer-to-peer orders, escrow dispute logs, and linked counterparty bank accounts/VPAs
-from src.core.sqlite_uri import ro_uri
 from Binance, Bybit, KuCoin, CoinDCX, WazirX, and Trust Wallet sandboxes.
 """
 
@@ -11,6 +10,7 @@ import sqlite3
 from typing import Any, Dict, List, Optional
 import pandas as pd
 
+from src.core.sqlite_uri import ro_uri
 from parsers import is_safe_sqlite_table_name, quote_sqlite_identifier
 from parsers.app_overrides import normalize_timestamp_value
 
