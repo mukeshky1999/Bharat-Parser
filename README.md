@@ -11,14 +11,14 @@ Windows desktop application for post-extraction forensic analysis of Android and
 
 Visual Studio and C++ build tools are not needed for the standard install.
 
-## Install and run
+## Install and run in Powershell
 
 ```powershell
 git clone https://github.com/mukeshky1999/Bharat-Parser.git
 cd Bharat-Parser
 py -3.12 -m venv .venv
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\venv\Scripts\Activate.bat
+.\venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 npm ci
 npm run build
