@@ -42,7 +42,8 @@ def main():
     backend_proc = subprocess.Popen(
         backend_cmd,
         cwd=PROJECT_ROOT,
-        env=os.environ.copy(),
+        # Browser dev mode has no token (only Electron injects one), so use the explicit dev opt-out.
+        env={**os.environ, "BHARAT_API_ALLOW_NO_TOKEN": os.environ.get("BHARAT_API_ALLOW_NO_TOKEN", "1")},
     )
 
     # Short grace period for backend initialization

@@ -178,3 +178,15 @@ class TestApiToken(unittest.TestCase):
         r = self.client.get("/api/health", headers={"Origin": "http://localhost:3000"})
         self.assertEqual(r.status_code, 401)
         self.assertEqual(r.headers.get("access-control-allow-origin"), "http://localhost:3000")
+
+
+def test_api_fails_closed_without_token_unless_opted_out(monkeypatch):
+    monkeypatch.delenv("BHARAT_API_TOKEN", raising=False)
+    monkeypatch.delenv("BHARAT_API_ALLOW_NO_TOKEN", raising=False)
+    client = TestClient(app)
+    r = client.get("/api/health")
+    assert r.status_code == 401
+    assert "not configured" in r.json()["detail"]
+    assert client.get("/").status_code == 401
+    monkeypatch.setenv("BHARAT_API_ALLOW_NO_TOKEN", "1")
+    assert client.get("/api/health").status_code != 401

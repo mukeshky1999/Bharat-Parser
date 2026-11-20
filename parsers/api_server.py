@@ -163,13 +163,22 @@ async def _require_audit_log(request, call_next):
     return await call_next(request)
 
 
+if os.environ.get("BHARAT_API_ALLOW_NO_TOKEN") == "1":
+    __import__("logging").getLogger("bharat.api").warning(
+        "BHARAT_API_ALLOW_NO_TOKEN=1: the API accepts requests without a token. Development use only.")
+
+
 @app.middleware("http")
 async def _require_api_token(request, call_next):
-    expected = os.environ.get("BHARAT_API_TOKEN", "")
-    if expected and request.method != "OPTIONS" and (request.url.path.startswith("/api/") or request.url.path == "/"):
-        supplied = request.headers.get("x-bharat-token", "")
-        if not hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8")):
-            return JSONResponse(status_code=401, content={"detail": "Missing or invalid API token."})
+    # Fails closed: with no token configured the API refuses requests unless the development opt-out is set.
+    if request.method != "OPTIONS" and (request.url.path.startswith("/api/") or request.url.path == "/"):
+        expected = os.environ.get("BHARAT_API_TOKEN", "")
+        if expected:
+            supplied = request.headers.get("x-bharat-token", "")
+            if not hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8")):
+                return JSONResponse(status_code=401, content={"detail": "Missing or invalid API token."})
+        elif os.environ.get("BHARAT_API_ALLOW_NO_TOKEN") != "1":
+            return JSONResponse(status_code=401, content={"detail": "API token not configured."})
     return await call_next(request)
 
 

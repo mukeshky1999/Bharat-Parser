@@ -49,3 +49,11 @@ zipfile.ZipFile._write_end_record = patched_zip_write_end
 def test_evidence_dir():
     """Returns path to authentic test evidence directory."""
     return ROOT_DIR / "test_evidence"
+
+
+@pytest.fixture(autouse=True)
+def _allow_api_without_token(monkeypatch):
+    """The API fails closed without BHARAT_API_TOKEN. Tests that do not exercise the token run with the explicit
+    development opt-out; tests that set a token themselves still get the token check."""
+    if not os.environ.get("BHARAT_API_TOKEN"):
+        monkeypatch.setenv("BHARAT_API_ALLOW_NO_TOKEN", "1")
