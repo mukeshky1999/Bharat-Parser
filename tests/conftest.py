@@ -47,8 +47,11 @@ zipfile.ZipFile._write_end_record = patched_zip_write_end
 
 @pytest.fixture(scope="session")
 def test_evidence_dir():
-    """Returns path to authentic test evidence directory."""
-    return ROOT_DIR / "test_evidence"
+    """Returns path to the test evidence directory; skips when it is absent (not tracked in git)."""
+    path = ROOT_DIR / "test_evidence"
+    if not path.is_dir():
+        pytest.skip("test_evidence/ not found; run scripts/generate_forensic_test_data.py")
+    return path
 
 
 @pytest.fixture(autouse=True)

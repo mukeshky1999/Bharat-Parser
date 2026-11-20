@@ -316,7 +316,7 @@ def search_case(
                     n += 1
                     if len(hits) + len(t_hits) < need:
                         t_hits.append(_hit(t, row, scan_fields, needles, pattern, None))
-                if time.monotonic() - started > time_budget_s:
+                if time.monotonic() - started >= time_budget_s:  # >=: Windows clock ticks ~15 ms, elapsed is often 0
                     complete = False
                     info["count_is_exact"] = False
                     break

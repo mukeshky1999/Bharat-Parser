@@ -1,70 +1,75 @@
 # Bharat Forensic Suite
 
-Post-extraction mobile forensic analysis (Android / iOS) for Indian investigative workflows:
-UPI and banking apps, NPCI artefacts, DLT SMS, messengers, crypto wallets, telemetry,
-geolocation, and examination reporting (facts, not legal forms).
+Windows desktop application for post-extraction forensic analysis of Android and iOS data in Indian investigations. It parses UPI and banking apps, NPCI artefacts, DLT SMS, messengers, crypto wallets, telemetry and geolocation, and produces examination reports. The backend is a Python FastAPI service (`parsers/`, `src/`); the UI is Electron with React.
 
+## Requirements
 
-## Layout
+- Windows 10 or 11
+- Python 3.11 to 3.13 (3.12 recommended; 3.14 and later are not yet supported)
+- Node.js 22 LTS
+- Git
 
-| Path | What it is |
-|---|---|
-| `src/` | Python forensic engines (VFS, SQLite/WAL recovery, UPI, banking, messengers, crypto, legal/BSA, …). Originated in Bharart Analyzer. |
-| `parsers/` | Python REST backend for the desktop UI (`parsers/api_server.py`, FastAPI), plugin registry, heuristic engine, carvers. Imports from `src/`. |
-| `tools/` | Benchmark recorder. |
-| `electron/` | Electron shell (`main.cjs`, `preload.cjs`). Spawns `python -m parsers.api_server`. |
-| `ui/renderer/` | React 19 + TypeScript desktop UI (built by Vite into `dist/`). |
-| `ui/shared/` | Shared TypeScript types used by the renderer. (The duplicate TypeScript parsers/carvers/VFS/report generators that used to live in `ui/main/` were deleted: the Python backend is the only engine.) |
-| `tests/` | Python tests (pytest) plus `tests/e2e/runner.py` and `tests/test_forensic_client.ts`. |
-| `ui/tests/` | TypeScript tests (run with `jiti`). |
-| `test_evidence/` | Test fixtures (synthetic extraction ZIP, WhatsApp DB with WAL, Paisa DB, 50 MB disk image). |
-| `scripts/` | `start_all.py`, `build_desktop_exe.ps1`, OCR model setup, fixture generators. |
-| `docs/` | Architecture/abilities/command docs, original specs (`docs/specs/`), merge history. |
+Visual Studio and C++ build tools are not needed for the standard install.
 
-
-
-## Setup
+## Install and run
 
 ```powershell
-python -m venv .venv
+git clone https://github.com/mukeshky1999/Bharat-Parser.git
+cd Bharat-Parser
+py -3.12 -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
-npm install
-```
-
-Optional disk-image support (EWF/E01 via `libewf-python`, Sleuth Kit via `pytsk3`) is in `requirements-optional.txt`:
-`python -m pip install -r requirements-optional.txt`. The app runs without these packages.
-
-## Quick start (Windows)
-
-Run these in the project folder, then the desktop app opens with the full UI:
-
-```powershell
-python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
-npm install
+npm ci
 npm run build
 npm run desktop:dev
 ```
 
-## Run
+## Optional: E01 and Sleuth Kit disk images
 
-```powershell
-npm run desktop:dev        # Electron desktop app (spawns the Python backend)
-npm run dev                # Vite UI dev server only (port 3000)
-npm run backend            # FastAPI backend only
-```
+    .venv\Scripts\python -m pip install -r requirements-optional.txt
 
-The desktop window needs the UI: either run `npm run build` once (creates `dist/`) or keep
-`npm run dev` running in another terminal before `npm run desktop:dev`. The backend is started with
-the interpreter in `.venv` (or the active virtualenv / conda env); set `BHARAT_PYTHON` to point at a
-different `python.exe` that has the requirements installed. If `electron` reports a missing binary,
-run `node node_modules/electron/install.js`.
+pytsk3 may have no prebuilt wheel for your Python version. If so, the install needs Microsoft C++ Build Tools. The app works without these packages.
 
-## Test
+## Development
 
-```powershell
-.venv\Scripts\python -m pytest tests --ignore=tests/e2e
-.venv\Scripts\python tests\e2e\runner.py --tier all
-npx tsc --noEmit
-npm run test:ts
-```
+    .venv\Scripts\python -m pip install -r requirements-dev.txt
+
+Run modes:
+
+- `npm run dev`: Vite UI dev server on port 3000
+- `npm run backend`: API server only
+- `npm run desktop:dev`: Electron app, which starts the backend
+
+Tests:
+
+    .venv\Scripts\python -m pytest tests --ignore=tests/e2e
+    npx tsc --noEmit
+    npm run test:ts
+
+Some tests need fixtures in `test_evidence/`. Generate them with `python scripts/generate_forensic_test_data.py`. Tests that need them are skipped if the folder is absent.
+
+Build the Windows executable: `npm run desktop:build`.
+
+## Project layout
+
+| Path | Contents |
+|---|---|
+| `src/` | Python forensic engines |
+| `parsers/` | FastAPI backend, plugin registry, heuristic engine, carvers |
+| `electron/` | Electron shell; starts the Python backend |
+| `ui/renderer/` | React and TypeScript UI, built by Vite into `dist/` |
+| `ui/shared/` | TypeScript types shared by the UI |
+| `ui/tests/` | TypeScript tests |
+| `tests/` | Python tests |
+| `scripts/` | Build, setup and fixture-generation scripts |
+| `tools/` | Benchmark recorder |
+
+## Troubleshooting
+
+- "Microsoft Visual C++ 14.0 is required": you are on an unsupported Python version, or you installed `requirements-optional.txt`. Use Python 3.12.
+- "Python backend exited": install the requirements into `.venv`, or set `BHARAT_PYTHON` to a `python.exe` that has them.
+- Electron binary missing: run `node node_modules/electron/install.js`.
+- Blank window: run `npm run build` first.
+
+## License
+
+See LICENSE.

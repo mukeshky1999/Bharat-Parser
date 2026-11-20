@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Run from the project root (scripts/build_desktop_exe.ps1 does): `pathex` and the submodule collection below are what
+# Run from the project root (the build_desktop_exe.ps1 script does): `pathex` and the submodule collection below are what
 # make PyInstaller find the src.* engines that parsers/api_server.py imports. After a build, read
 # build_backend/**/warn-bharat_backend.txt for "missing module" lines naming src.* or parsers.* before shipping.
 import os
