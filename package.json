@@ -27,7 +27,7 @@
     "gpay"
   ],
   "author": "Bharat-PA Forensics Team",
-  "license": "ISC",
+  "license": "SEE LICENSE IN LICENSE",
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.6",
